@@ -1,0 +1,151 @@
+---
+source: crates/inkgen-core/src/ir/tests.rs
+expression: json1
+---
+{
+  "version": "0.1.0",
+  "resource": {
+    "metadata": {
+      "name": "Patient",
+      "description": "Demographics and other administrative information about an individual",
+      "kind": "Resource",
+      "base_definition": "http://hl7.org/fhir/StructureDefinition/DomainResource",
+      "derivation": "Specialization"
+    },
+    "elements": {
+      "root": {
+        "path": "Patient",
+        "definition": {
+          "min": 0,
+          "max": "1",
+          "types": [
+            {
+              "code": "Patient",
+              "profile": null,
+              "target_profile": null
+            }
+          ],
+          "must_support": false,
+          "short": "Information about an individual or animal receiving health care services",
+          "definition": "Demographics and other administrative information about an individual or animal receiving care or other health-related services.",
+          "comment": null
+        },
+        "children": [],
+        "slicing": null
+      },
+      "elements": {
+        "Patient": {
+          "path": "Patient",
+          "definition": {
+            "min": 0,
+            "max": "1",
+            "types": [
+              {
+                "code": "Patient",
+                "profile": null,
+                "target_profile": null
+              }
+            ],
+            "must_support": false,
+            "short": "Information about an individual or animal receiving health care services",
+            "definition": "Demographics and other administrative information about an individual or animal receiving care or other health-related services.",
+            "comment": null
+          },
+          "children": [
+            "Patient.id",
+            "Patient.name",
+            "Patient.gender"
+          ],
+          "slicing": null
+        },
+        "Patient.id": {
+          "path": "Patient.id",
+          "definition": {
+            "min": 0,
+            "max": "1",
+            "types": [
+              {
+                "code": "id",
+                "profile": null,
+                "target_profile": null
+              }
+            ],
+            "must_support": false,
+            "short": "Logical id of this artifact",
+            "definition": "The logical id of the resource, as used in the URL for the resource.",
+            "comment": null
+          },
+          "children": [],
+          "slicing": null
+        },
+        "Patient.name": {
+          "path": "Patient.name",
+          "definition": {
+            "min": 0,
+            "max": "*",
+            "types": [
+              {
+                "code": "HumanName",
+                "profile": null,
+                "target_profile": null
+              }
+            ],
+            "must_support": true,
+            "short": "A name associated with the individual",
+            "definition": "A name associated with the patient.",
+            "comment": "A patient may have multiple names with different uses or applicable periods."
+          },
+          "children": [],
+          "slicing": {
+            "discriminator": [
+              {
+                "type_": "Value",
+                "path": "use"
+              }
+            ],
+            "description": "Slice based on the name use",
+            "ordered": false,
+            "rules": "Open"
+          }
+        },
+        "Patient.gender": {
+          "path": "Patient.gender",
+          "definition": {
+            "min": 0,
+            "max": "1",
+            "types": [
+              {
+                "code": "code",
+                "profile": null,
+                "target_profile": null
+              }
+            ],
+            "must_support": false,
+            "short": "male | female | other | unknown",
+            "definition": "Administrative Gender - the gender that the patient is considered to have for administration and record keeping purposes.",
+            "comment": null
+          },
+          "children": [],
+          "slicing": null
+        }
+      }
+    },
+    "bindings": [
+      {
+        "path": "Patient.gender",
+        "value_set": "http://hl7.org/fhir/ValueSet/administrative-gender",
+        "strength": "Required",
+        "description": null
+      }
+    ],
+    "invariants": [
+      {
+        "key": "pat-1",
+        "severity": "Error",
+        "human": "SHALL have a contact's details or a reference to an organization",
+        "expression": "contact.name.exists() or contact.telecom.exists() or contact.address.exists() or contact.organization.exists()",
+        "xpath": null
+      }
+    ]
+  }
+}

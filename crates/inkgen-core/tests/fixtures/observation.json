@@ -1,0 +1,127 @@
+{
+  "resourceType": "StructureDefinition",
+  "id": "Observation",
+  "url": "http://hl7.org/fhir/StructureDefinition/Observation",
+  "version": "4.0.1",
+  "name": "Observation",
+  "title": "Observation",
+  "status": "active",
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "HL7 FHIR Standard",
+  "description": "Measurements and simple assertions made about a patient, device or other subject.",
+  "fhirVersion": "4.0.1",
+  "kind": "resource",
+  "abstract": false,
+  "type": "Observation",
+  "baseDefinition": "http://hl7.org/fhir/StructureDefinition/DomainResource",
+  "derivation": "specialization",
+  "differential": {
+    "element": [
+      {
+        "id": "Observation",
+        "path": "Observation",
+        "definition": "Measurements and simple assertions made about a patient, device or other subject.",
+        "min": 0,
+        "max": "*"
+      },
+      {
+        "id": "Observation.status",
+        "path": "Observation.status",
+        "short": "registered | preliminary | final | amended +",
+        "definition": "The status of the result value.",
+        "min": 1,
+        "max": "1",
+        "type": [
+          {
+            "code": "code"
+          }
+        ],
+        "mustSupport": true,
+        "binding": {
+          "strength": "required",
+          "valueSet": "http://hl7.org/fhir/ValueSet/observation-status"
+        }
+      },
+      {
+        "id": "Observation.code",
+        "path": "Observation.code",
+        "short": "Type of observation (code / type)",
+        "definition": "Describes what was observed. Sometimes this is called the observation \"name\".",
+        "min": 1,
+        "max": "1",
+        "type": [
+          {
+            "code": "CodeableConcept"
+          }
+        ],
+        "mustSupport": true,
+        "binding": {
+          "strength": "example",
+          "valueSet": "http://hl7.org/fhir/ValueSet/observation-codes"
+        }
+      },
+      {
+        "id": "Observation.subject",
+        "path": "Observation.subject",
+        "short": "Who and/or what the observation is about",
+        "definition": "The patient, or group of patients, location, or device this observation is about.",
+        "min": 0,
+        "max": "1",
+        "type": [
+          {
+            "code": "Reference",
+            "targetProfile": [
+              "http://hl7.org/fhir/StructureDefinition/Patient",
+              "http://hl7.org/fhir/StructureDefinition/Group",
+              "http://hl7.org/fhir/StructureDefinition/Device",
+              "http://hl7.org/fhir/StructureDefinition/Location"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "Observation.value[x]",
+        "path": "Observation.value[x]",
+        "short": "Actual result",
+        "definition": "The information determined as a result of making the observation, if the information has a simple value.",
+        "min": 0,
+        "max": "1",
+        "type": [
+          {
+            "code": "Quantity"
+          },
+          {
+            "code": "CodeableConcept"
+          },
+          {
+            "code": "string"
+          },
+          {
+            "code": "boolean"
+          },
+          {
+            "code": "integer"
+          },
+          {
+            "code": "Range"
+          },
+          {
+            "code": "Ratio"
+          },
+          {
+            "code": "SampledData"
+          },
+          {
+            "code": "time"
+          },
+          {
+            "code": "dateTime"
+          },
+          {
+            "code": "Period"
+          }
+        ]
+      }
+    ]
+  }
+}
