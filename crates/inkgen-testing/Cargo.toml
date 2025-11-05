@@ -1,0 +1,15 @@
+[package]
+name = "inkgen-testing"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
+description = "Testing utilities for Inkgen"
+publish = false
+
+[dependencies]
+insta.workspace = true
+tempfile.workspace = true
+serde_json.workspace = true
+inkgen-core = { path = "../inkgen-core" }
