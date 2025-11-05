@@ -1,0 +1,5 @@
+---
+source: crates/inkgen-testing/src/lib.rs
+expression: code
+---
+Current configuration:

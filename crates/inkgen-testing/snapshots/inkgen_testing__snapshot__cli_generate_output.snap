@@ -1,0 +1,6 @@
+---
+source: crates/inkgen-testing/src/lib.rs
+expression: code
+---
+Generating typescript code from: snap_input
+Output directory: snap_output

@@ -1,0 +1,6 @@
+---
+source: crates/inkgen-testing/src/lib.rs
+expression: code
+---
+Fetching package: hl7.fhir.r4.core
+Version: 4.0.1

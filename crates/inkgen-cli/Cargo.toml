@@ -1,0 +1,25 @@
+[package]
+name = "inkgen-cli"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
+description = "CLI for the Inkgen FHIR code generator"
+
+[[bin]]
+name = "inkgen"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+inkgen-core = { path = "../inkgen-core" }
+inkgen-typescript = { path = "../inkgen-typescript" }
+inkgen-testing = { path = "../inkgen-testing" }
+
+[dev-dependencies]
+inkgen-testing = { path = "../inkgen-testing" }
+tempfile.workspace = true
+insta.workspace = true
