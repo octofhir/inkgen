@@ -1,0 +1,23 @@
+---
+source: crates/inkgen-testing/src/lib.rs
+assertion_line: 67
+expression: code
+---
+[2m[TIMESTAMP].485337Z[0m [32m INFO[0m Starting inkgen CLI
+[2m[TIMESTAMP].485400Z[0m [32m INFO[0m Starting command execution [3mcommand[0m[2m=[0m"fetch" [3margs[0m[2m=[0m["fetch", "--package", "r4.core", "--version", "4.0.1"]
+[2m[TIMESTAMP].486917Z[0m [32m INFO[0m Executing fetch command for package: r4.core
+[2m[TIMESTAMP].488586Z[0m [32m INFO[0m [1mexecute_fetch[0m[1m{[0m[3mpackage[0m[2m=[0mr4.core [3mversion[0m[2m=[0mSome("4.0.1") [3mforce[0m[2m=[0mfalse[1m}[0m[2m:[0m Starting package fetch operation
+[2m[TIMESTAMP].515981Z[0m [32m INFO[0m [1mexecute_fetch[0m[1m{[0m[3mpackage[0m[2m=[0mr4.core [3mversion[0m[2m=[0mSome("4.0.1") [3mforce[0m[2m=[0mfalse[1m}[0m[2m:[0m[1mresolve_package[0m[1m{[0m[3mname[0m[2m=[0m"hl7.fhir.r4.core" [3mversion[0m[2m=[0mSome("4.0.1") [3mpackage[0m[2m=[0mhl7.fhir.r4.core[1m}[0m[2m:[0m[1mpackage_resolution[0m[1m{[0m[3mpackage[0m[2m=[0mhl7.fhir.r4.core [3mversion[0m[2m=[0mSome("4.0.1") [3moperation_id[0m[2m=[0m8455dcf0-377b-493a-acc2-dd9c5af9832f[1m}[0m[2m:[0m Starting package resolution [3mpackage[0m[2m=[0mhl7.fhir.r4.core [3mversion[0m[2m=[0mSome("4.0.1") [3moperation_id[0m[2m=[0m8455dcf0-377b-493a-acc2-dd9c5af9832f
+[2m[TIMESTAMP].516051Z[0m [32m INFO[0m [1mexecute_fetch[0m[1m{[0m[3mpackage[0m[2m=[0mr4.core [3mversion[0m[2m=[0mSome("4.0.1") [3mforce[0m[2m=[0mfalse[1m}[0m[2m:[0m[1mresolve_package[0m[1m{[0m[3mname[0m[2m=[0m"hl7.fhir.r4.core" [3mversion[0m[2m=[0mSome("4.0.1") [3mpackage[0m[2m=[0mhl7.fhir.r4.core[1m}[0m[2m:[0m[1mpackage_resolution[0m[1m{[0m[3mpackage[0m[2m=[0mhl7.fhir.r4.core [3mversion[0m[2m=[0mSome("4.0.1") [3moperation_id[0m[2m=[0m8455dcf0-377b-493a-acc2-dd9c5af9832f[1m}[0m[2m:[0m Package resolution completed successfully [3mpackage[0m[2m=[0mhl7.fhir.r4.core [3mversion[0m[2m=[0mSome("4.0.1") [3moperation_id[0m[2m=[0m8455dcf0-377b-493a-acc2-dd9c5af9832f [3mresource_count[0m[2m=[0m4 [3mcache_hit[0m[2m=[0mfalse
+[2m[TIMESTAMP].516117Z[0m [32m INFO[0m [1mexecute_fetch[0m[1m{[0m[3mpackage[0m[2m=[0mr4.core [3mversion[0m[2m=[0mSome("4.0.1") [3mforce[0m[2m=[0mfalse[1m}[0m[2m:[0m[1mresolve_package[0m[1m{[0m[3mname[0m[2m=[0m"hl7.fhir.r4.core" [3mversion[0m[2m=[0mSome("4.0.1") [3mpackage[0m[2m=[0mhl7.fhir.r4.core[1m}[0m[2m:[0m[1mpackage_resolution[0m[1m{[0m[3mpackage[0m[2m=[0mhl7.fhir.r4.core [3mversion[0m[2m=[0mSome("4.0.1") [3moperation_id[0m[2m=[0m8455dcf0-377b-493a-acc2-dd9c5af9832f[1m}[0m[2m:[0m Operation completed [3moperation[0m[2m=[0mpackage_resolution [3mtotal_duration_ms[0m[2m=[0m0
+
+✅ Package fetched successfully!
+📦 Name: hl7.fhir.r4.core
+🏷️  Version: 4.0.1
+📝 Description: FHIR package: hl7.fhir.r4.core
+🔢 Resources: 4
+🩺 FHIR Versions: 4.0.1
+💾 Cached for future use
+[2m[TIMESTAMP].516160Z[0m [32m INFO[0m [1mexecute_fetch[0m[1m{[0m[3mpackage[0m[2m=[0mr4.core [3mversion[0m[2m=[0mSome("4.0.1") [3mforce[0m[2m=[0mfalse[1m}[0m[2m:[0m Successfully fetched hl7.fhir.r4.core v4.0.1 (4 resources)
+[2m[TIMESTAMP].516325Z[0m [32m INFO[0m Command completed successfully [3mcommand[0m[2m=[0m"fetch" [3mduration_ms[0m[2m=[0m29
+[2m[TIMESTAMP].516336Z[0m [32m INFO[0m Command completed successfully in [DURATION]

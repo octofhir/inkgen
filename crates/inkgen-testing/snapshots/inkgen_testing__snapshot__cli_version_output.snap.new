@@ -1,0 +1,6 @@
+---
+source: crates/inkgen-testing/src/lib.rs
+assertion_line: 67
+expression: code
+---
+inkgen 0.1.0

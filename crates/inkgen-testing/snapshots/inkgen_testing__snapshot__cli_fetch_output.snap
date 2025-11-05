@@ -1,6 +1,10 @@
 ---
 source: crates/inkgen-testing/src/lib.rs
+assertion_line: 67
 expression: code
 ---
-Fetching package: hl7.fhir.r4.core
+[2m2025-11-05T17:42:36.780761Z[0m [32m INFO[0m Starting inkgen CLI
+[2m2025-11-05T17:42:36.780818Z[0m [32m INFO[0m Executing fetch command for package: hl7.fhir.r4.core
+[2m2025-11-05T17:42:36.780826Z[0m [32m INFO[0m Fetching package: hl7.fhir.r4.core (version: Some("4.0.1"), force: false)
+Fetch command - Package: hl7.fhir.r4.core
 Version: 4.0.1

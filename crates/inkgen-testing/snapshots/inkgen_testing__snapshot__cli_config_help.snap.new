@@ -1,0 +1,18 @@
+---
+source: crates/inkgen-testing/src/lib.rs
+assertion_line: 67
+expression: code
+---
+Configuration management
+
+Usage: inkgen config [OPTIONS]
+
+Options:
+      --show                   Show current configuration
+      --set <SET>              Set configuration value (key=value format)
+      --init                   Initialize a new configuration file
+  -o, --output <OUTPUT>        Output path for configuration file (used with --init) [default: inkgen.toml]
+      --verbose                Enable verbose logging
+      --force                  Overwrite existing file (used with --init)
+      --log-level <LOG_LEVEL>  Set log level (trace, debug, info, warn, error)
+  -h, --help                   Print help
