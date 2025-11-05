@@ -1,6 +1,10 @@
 ---
 source: crates/inkgen-testing/src/lib.rs
+assertion_line: 67
 expression: code
 ---
+[2m2025-11-05T17:42:36.797151Z[0m [32m INFO[0m Starting inkgen CLI
+[2m2025-11-05T17:42:36.797258Z[0m [32m INFO[0m Executing generate command
+[2m2025-11-05T17:42:36.797267Z[0m [32m INFO[0m Generating typescript code (input: "snap_input", output: "snap_output")
 Generating typescript code from: snap_input
 Output directory: snap_output

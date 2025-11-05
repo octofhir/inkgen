@@ -138,20 +138,37 @@ pub mod cli {
         
         /// Run a CLI command with arguments
         pub fn run_command(&self, args: &[&str]) -> std::io::Result<Output> {
-            // Find the workspace root by looking for Cargo.toml
+            // Find the workspace root by looking for Cargo.toml with workspace members
             let current_dir = std::env::current_dir()?;
             let workspace_root = current_dir
                 .ancestors()
-                .find(|path| path.join("Cargo.toml").exists())
+                .find(|path| {
+                    let cargo_toml = path.join("Cargo.toml");
+                    if cargo_toml.exists() {
+                        // Check if this is the workspace root by looking for members
+                        if let Ok(content) = std::fs::read_to_string(&cargo_toml) {
+                            return content.contains("[workspace]") || content.contains("members");
+                        }
+                    }
+                    false
+                })
+                .or_else(|| {
+                    // Fallback: find any Cargo.toml
+                    current_dir
+                        .ancestors()
+                        .find(|path| path.join("Cargo.toml").exists())
+                })
                 .ok_or_else(|| std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     "Could not find workspace root with Cargo.toml"
                 ))?;
             
+            // Use cargo run from the workspace root, but set the working directory for the binary
             let mut cmd = Command::new("cargo");
             cmd.args(&["run", "--bin", "inkgen", "--"])
                 .args(args)
-                .current_dir(workspace_root);
+                .current_dir(workspace_root) // Run cargo from workspace root
+                .env("INKGEN_TEST_WORKING_DIR", self.fixture.path()); // Pass fixture path to binary
             
             cmd.output()
         }

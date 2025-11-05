@@ -1,0 +1,181 @@
+---
+source: crates/inkgen-testing/src/lib.rs
+assertion_line: 67
+expression: code
+---
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+warning: unused import: `super::*`
+   --> crates[PATH]/tracing.rs:227:9
+    |
+227 |     use super::*;
+    |         ^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` on by default
+
+warning: unused variable: `package_name`
+    --> crates[PATH]/service.rs:1000:13
+     |
+1000 |         let package_name = self.determine_package_for_url(value_set_url);
+     |             ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_package_name`
+     |
+     = note: `#[warn(unused_variables)]` on by default
+
+warning: field `manager` is never read
+  --> crates[PATH]/resolver.rs:11:5
+   |
+10 | pub struct PackageResolver {
+   |            --------------- field in this struct
+11 |     manager: CanonicalManager,
+   |     ^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: methods `parse_package_manifest` and `enumerate_package_resources` are never used
+   --> crates[PATH]/resolver.rs:437:8
+    |
+ 41 | impl PackageResolver {
+    | -------------------- methods in this implementation
+...
+437 |     fn parse_package_manifest(&self, package_data: &serde_json::Value) -> Result<PackageManifest> {
+    |        ^^^^^^^^^^^^^^^^^^^^^^
+...
+485 |     fn enumerate_package_resources(&self, package_data: &serde_json::Value) -> Result<Vec<String>> {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `resolve_value_set_from_packages` is never used
+   --> crates[PATH]/service.rs:996:14
+    |
+ 59 | impl ProfileService {
+    | ------------------- method in this implementation
+...
+996 |     async fn resolve_value_set_from_packages(&self, value_set_url: &str) -> Result<ValueSetExpansion> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `propagate_must_support` is never used
+   --> crates[PATH]/merger.rs:276:8
+    |
+ 12 | impl ProfileMerger {
+    | ------------------ method in this implementation
+...
+276 |     fn propagate_must_support(&self, element: &mut ElementNode, is_must_support: bool) {
+    |        ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `resolve_inheritance` and `flatten_choice_types` are never used
+  --> crates[PATH]/flattener.rs:28:8
+   |
+11 | impl ProfileFlattener {
+   | --------------------- methods in this implementation
+...
+28 |     fn resolve_inheritance(&self, _profile: &ResourceIR) -> Result<ResourceIR> {
+   |        ^^^^^^^^^^^^^^^^^^^
+...
+38 |     fn flatten_choice_types(&self, _profile: &ResourceIR) -> Result<ResourceIR> {
+   |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: `inkgen-core` (lib) generated 7 warnings (run `cargo fix --lib -p inkgen-core` to apply 1 suggestion)
+warning: method `generate_interface` is never used
+  --> crates[PATH]/generator.rs:39:8
+   |
+25 | impl TypeScriptGenerator {
+   | ------------------------ method in this implementation
+...
+39 |     fn generate_interface(&self, resource_type: &str) -> Result<String> {
+   |        ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `inkgen-typescript` (lib) generated 1 warning
+warning: unused imports: `LanguageConfigs`, `PackageSpec`, `TreeShakingConfig`, and `TypeScriptConfig`
+ --> crates[PATH]/mod.rs:4:32
+  |
+4 | pub use schema::{InkgenConfig, PackageSpec, TreeShakingConfig, LanguageConfigs, TypeScriptConfig};
+  |                                ^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `parser::*`
+ --> crates[PATH]/mod.rs:5:9
+  |
+5 | pub use parser::*;
+  |         ^^^^^^^^^
+
+warning: function `normalize_package_name` is never used
+   --> crates[PATH]/parser.rs:105:8
+    |
+105 | pub fn normalize_package_name(name: &str) -> String {
+    |        ^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: variants `NetworkError` and `PermissionDenied` are never constructed
+  --> crates[PATH]/error.rs:37:5
+   |
+ 4 | pub enum CliError {
+   |          -------- variants in this enum
+...
+37 |     NetworkError {
+   |     ^^^^^^^^^^^^
+...
+50 |     PermissionDenied {
+   |     ^^^^^^^^^^^^^^^^
+   |
+   = note: `CliError` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: associated functions `generation_failed`, `network_error`, `file_not_found`, `permission_denied`, and `permission_denied_with_path` are never used
+   --> crates[PATH]/error.rs:203:12
+    |
+ 70 | impl CliError {
+    | ------------- associated functions in this implementation
+...
+203 |     pub fn generation_failed<S: Into<String>>(reason: S) -> Self {
+    |            ^^^^^^^^^^^^^^^^^
+...
+222 |     pub fn network_error<S: Into<String>, E: std::error::Error + Send + Sync + 'static>(
+    |            ^^^^^^^^^^^^^
+...
+233 |     pub fn file_not_found<S: Into<String>>(path: S) -> Self {
+    |            ^^^^^^^^^^^^^^
+...
+249 |     pub fn permission_denied<S: Into<String>>(operation: S) -> Self {
+    |            ^^^^^^^^^^^^^^^^^
+...
+257 |     pub fn permission_denied_with_path<S: Into<String>, P: Into<String>>(operation: S, path: P) -> Self {
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated items `new_progress`, `inc`, `set_position`, and `finish_and_clear` are never used
+   --> crates[PATH]/logging.rs:95:12
+    |
+ 78 | impl ProgressReporter {
+    | --------------------- associated items in this implementation
+...
+ 95 |     pub fn new_progress(total: u64, message: &str) -> Self {
+    |            ^^^^^^^^^^^^
+...
+114 |     pub fn inc(&self, delta: u64) {
+    |            ^^^
+...
+119 |     pub fn set_position(&self, pos: u64) {
+    |            ^^^^^^^^^^^^
+...
+129 |     pub fn finish_and_clear(&self) {
+    |            ^^^^^^^^^^^^^^^^
+
+warning: function `log_operation_progress` is never used
+   --> crates[PATH]/logging.rs:197:8
+    |
+197 | pub fn log_operation_progress(operation: &str, current: u64, total: u64, message: &str) {
+    |        ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `inkgen-cli` (bin "inkgen") generated 7 warnings (run `cargo fix --bin "inkgen"` to apply 2 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in [DURATION]
+     Running `[PATH]/inkgen fetch`
+error: the following required arguments were not provided:
+  --package <PACKAGE>
+
+Usage: inkgen fetch --package <PACKAGE>
+
+For more information, try '--help'.

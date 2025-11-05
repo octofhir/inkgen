@@ -1,0 +1,15 @@
+---
+source: crates/inkgen-testing/src/lib.rs
+assertion_line: 67
+expression: code
+---
+[TIMESTAMP]Z[0m [32m INFO[0m Starting inkgen CLI
+[TIMESTAMP]Z[0m [32m INFO[0m Starting command execution [3mcommand[0m[2m=[0m"config-init" [3margs[0m[2m=[0m["config", "--init", "--output", "snapshot-config.toml"]
+[TIMESTAMP]Z[0m [32m INFO[0m Executing config command
+[TIMESTAMP]Z[0m [32m INFO[0m Initializing configuration file at: snapshot-config.toml
+[TIMESTAMP]Z[0m [32m INFO[0m Configuration written to: snapshot-config.toml
+✓ Created configuration file: snapshot-config.toml
+Edit this file to customize your FHIR package selection and generation options.
+[TIMESTAMP]Z[0m [32m INFO[0m Configuration file created successfully
+[TIMESTAMP]Z[0m [32m INFO[0m Command completed successfully [3mcommand[0m[2m=[0m"config-init" [3mduration_ms[0m[2m=[0m1
+[TIMESTAMP]Z[0m [32m INFO[0m Command completed successfully in [DURATION]
