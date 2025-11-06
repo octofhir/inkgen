@@ -12,8 +12,8 @@ InkGen is designed to bridge the gap between FHIR specifications and practical S
 
 > ✅ Workspace bootstrap baseline is complete (see [`docs/tasks/TASK-0001-workspace-bootstrap.md`](docs/tasks/TASK-0001-workspace-bootstrap.md)).
 
-- CLI, generators, and fetch flows are still stubs; upcoming tasks will wire real behaviour.
-- `just` automation currently focuses on toolchain bootstrap, validation, and test execution.
+- CLI now provides fetch/generate/config commands powered by the core services.
+- TypeScript generation remains a stub until TASK-0004; other languages are future work.
 - Follow the architecture roadmap in [`docs/adr`](docs/adr) and the work queue in [`docs/tasks`](docs/tasks) for upcoming milestones.
 
 ## Workspace Layout
@@ -55,16 +55,16 @@ cargo install just
    ```bash
    just review
    ```
-4. Explore the placeholder CLI (verbosity flag only for now):
+4. Explore the CLI:
    ```bash
-   cargo run -p inkgen-cli -- --help
+   cargo run -p inkgen-cli -- help
    ```
 
 ## Available `just` Commands
 
 - `just bootstrap` — Ensure required Rust components (`rustfmt`, `clippy`) are installed.
-- `just fetch PACKAGE=<name>` — Stub hook for future package fetching.
-- `just generate lang=<backend> config=inkgen.toml` — Stub hook for future codegen.
+- `just fetch PACKAGE=<name>` — Run the CLI fetch command (respects `--dry-run`/`--offline` via variables).
+- `just generate lang=<backend> config=inkgen.toml` — Delegate to the CLI generator.
 - `just test` — Run `cargo test --all`.
 - `just snap` — Execute snapshot tests when `cargo-insta` is installed.
 - `just review` — Run fmt, clippy (warnings as errors), and tests.
@@ -74,14 +74,13 @@ Use `just --list` to see recipe parameters and defaults.
 
 ## CLI Placeholder
 
-`inkgen-cli` currently exposes only verbosity controls to validate the logging stack:
+`inkgen-cli` drives the workspace automation pipeline:
 
-```bash
-cargo run -p inkgen-cli -- -v     # debug logs
-cargo run -p inkgen-cli -- -vv    # trace logs
-```
-
-Future tasks (see `docs/tasks`) will introduce real subcommands for `fetch`, `generate`, and configuration management.
+- `inkgen config init` — create (or overwrite via `--force`) a starter `inkgen.toml`.
+- `inkgen fetch [--package ...] [--offline] [--dry-run]` — download and cache FHIR packages declared in the manifest.
+- `inkgen generate typescript [--output <dir>] [--dry-run]` — invoke the TypeScript generator (stub) after ensuring packages are available.
+- `inkgen config validate` — verify manifest structure before running other commands.
+- `inkgen config completions <shell> --output <path>` — emit shell completion scripts.
 
 ## Roadmap References
 

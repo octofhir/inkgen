@@ -10,16 +10,36 @@ bootstrap:
     @rustup component add rustfmt clippy
     @echo "Bootstrap complete."
 
-fetch PACKAGE='':
-    @if [ -z "{{PACKAGE}}" ]; then \
-        echo "Usage: just fetch PACKAGE=<package>"; \
-        exit 1; \
-    fi
-    @echo "Fetching package {{PACKAGE}} (stub command; real implementation arrives in TASK-0003)"
+fetch PACKAGE='' config='inkgen.toml' offline='false' dry_run='false':
+    @cmd="cargo run -p inkgen-cli -- fetch --config {{config}}"
+    @if [ -n "{{PACKAGE}}" ]; then \
+        cmd="$cmd --package {{PACKAGE}}"; \
+    fi; \
+    if [ "{{offline}}" = "true" ]; then \
+        cmd="$cmd --offline"; \
+    fi; \
+    if [ "{{dry_run}}" = "true" ]; then \
+        cmd="$cmd --dry-run"; \
+    fi; \
+    echo "$cmd"; \
+    eval "$cmd"
 
-generate lang='typescript' config='inkgen.toml':
-    @echo "Generating SDK for language {{lang}} using config {{config}}"
-    @echo "Stub generation command executed (real implementation arrives in TASK-0004)"
+generate lang='typescript' config='inkgen.toml' offline='false' dry_run='false' output='' PACKAGE='':
+    @cmd="cargo run -p inkgen-cli -- generate {{lang}} --config {{config}}"
+    @if [ "{{offline}}" = "true" ]; then \
+        cmd="$cmd --offline"; \
+    fi; \
+    if [ "{{dry_run}}" = "true" ]; then \
+        cmd="$cmd --dry-run"; \
+    fi; \
+    if [ -n "{{output}}" ]; then \
+        cmd="$cmd --output {{output}}"; \
+    fi; \
+    if [ -n "{{PACKAGE}}" ]; then \
+        cmd="$cmd --package {{PACKAGE}}"; \
+    fi; \
+    echo "$cmd"; \
+    eval "$cmd"
 
 test:
     @cargo test --all

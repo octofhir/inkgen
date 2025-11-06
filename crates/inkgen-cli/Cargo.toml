@@ -9,7 +9,12 @@ anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+tokio = { workspace = true }
+inkgen-core = { path = "../inkgen-core" }
+inkgen-typescript = { path = "../inkgen-typescript" }
+clap_complete = "4"
 
 [dev-dependencies]
 assert_cmd = "2.0"
 predicates = "3.1"
+tempfile = { workspace = true }
