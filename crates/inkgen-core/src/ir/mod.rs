@@ -210,11 +210,44 @@ pub struct SlicingInfo {
     pub rules: String,
 }
 
+/// Kind of discriminator used in slicing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum DiscriminatorType {
+    /// Discriminate by element type (type.code)
+    Type,
+    /// Discriminate by fixed value
+    Value,
+    /// Discriminate by pattern match
+    Pattern,
+    /// Discriminate by profile URL
+    Profile,
+    /// Discriminate by exists (has value or not)
+    Exists,
+}
+
+impl DiscriminatorType {
+    pub fn from_fhir(value: &str) -> Option<Self> {
+        match value {
+            "type" => Some(Self::Type),
+            "value" => Some(Self::Value),
+            "pattern" => Some(Self::Pattern),
+            "profile" => Some(Self::Profile),
+            "exists" => Some(Self::Exists),
+            _ => None,
+        }
+    }
+}
+
 /// Discriminator used in slicing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SliceDiscriminator {
     pub discriminator_type: String,
     pub path: String,
+    /// Parsed discriminator type for type-safe operations
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<DiscriminatorType>,
 }
 
 /// Extension instance attached to an element definition.
@@ -233,6 +266,15 @@ pub struct ExtensionDefinition {
     pub description: Option<String>,
     pub context: Vec<ExtensionContext>,
     pub elements: Vec<ElementDefinition>,
+    /// Cardinality constraints for the extension value
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cardinality: Option<ElementCardinality>,
+    /// Element containing the actual extension value
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value_element: Option<String>,
+    /// Whether this extension uses a complex type (has children) or simple value
+    #[serde(default)]
+    pub is_complex: bool,
 }
 
 impl ExtensionDefinition {
@@ -251,6 +293,22 @@ impl ExtensionDefinition {
 pub struct ExtensionContext {
     pub context: String,
     pub context_type: String,
+    /// Whether this context is invariant (required for all versions)
+    #[serde(default)]
+    pub invariant: bool,
+}
+
+/// FHIRPath expression used in invariants and other constraints.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FHIRPathExpression {
+    /// The FHIRPath expression string
+    pub expression: String,
+    /// True if this expression is evaluable at runtime
+    #[serde(default)]
+    pub is_evaluable: bool,
+    /// Complexity level: "simple" (single property check), "moderate" (basic operators), "complex" (functions/recursion)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub complexity: Option<String>,
 }
 
 /// Invariant definition.
@@ -261,5 +319,8 @@ pub struct InvariantDefinition {
     pub human: Option<String>,
     pub expression: Option<String>,
     pub xpath: Option<String>,
+    /// Parsed FHIRPath expression metadata
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fhirpath: Option<FHIRPathExpression>,
     pub additional: IndexMap<String, serde_json::Value>,
 }

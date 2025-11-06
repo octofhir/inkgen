@@ -3,9 +3,9 @@ use serde_json::{Map, Value};
 
 use crate::error::{CoreError, CoreResult};
 use crate::ir::{
-    BindingDefinition, BindingStrength, Derivation, ElementCardinality, ElementDefinition,
-    ElementMax, ElementType, ExtensionInstance, InvariantDefinition, ProfileLineage,
-    ResourceDefinition, ResourceKind, SliceDiscriminator, SlicingInfo,
+    BindingDefinition, BindingStrength, Derivation, DiscriminatorType, ElementCardinality,
+    ElementDefinition, ElementMax, ElementType, ExtensionInstance, InvariantDefinition,
+    ProfileLineage, ResourceDefinition, ResourceKind, SliceDiscriminator, SlicingInfo,
 };
 
 /// Pipeline for resolving StructureDefinitions into the InkGen IR.
@@ -292,6 +292,7 @@ fn parse_constraint(value: &Value) -> Option<InvariantDefinition> {
             .get("xpath")
             .and_then(Value::as_str)
             .map(|s| s.to_string()),
+        fhirpath: None,
         additional,
     })
 }
@@ -338,9 +339,12 @@ fn parse_slicing(value: &Value) -> Option<SlicingInfo> {
                 .iter()
                 .filter_map(|item| item.as_object())
                 .filter_map(|entry| {
+                    let discriminator_type = entry.get("type")?.as_str()?.to_string();
+                    let kind = DiscriminatorType::from_fhir(&discriminator_type);
                     Some(SliceDiscriminator {
-                        discriminator_type: entry.get("type")?.as_str()?.to_string(),
+                        discriminator_type,
                         path: entry.get("path")?.as_str()?.to_string(),
+                        kind,
                     })
                 })
                 .collect()

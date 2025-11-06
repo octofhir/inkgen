@@ -81,7 +81,7 @@ enum GenerateSubcommand {
 struct GenerateTypescriptArgs {
     #[command(flatten)]
     shared: SharedCacheArgs,
-    /// Output directory (defaults to `target/inkgen/out/typescript`).
+    /// Output directory (defaults to `generated/`).
     #[arg(long)]
     output: Option<PathBuf>,
 }
