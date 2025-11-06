@@ -1,9 +1,9 @@
 [workspace]
 members = [
-  "crates/inkgen-cli",
-  "crates/inkgen-core",
-  "crates/inkgen-typescript",
-  "crates/inkgen-testing",
+    "crates/inkgen-cli",
+    "crates/inkgen-core",
+    "crates/inkgen-typescript",
+    "crates/inkgen-testing",
 ]
 resolver = "3"
 
@@ -17,7 +17,6 @@ documentation = "https://docs.rs/inkgen-cli"
 keywords = ["fhir", "codegen", "healthcare", "typescript", "sdk"]
 categories = ["command-line-utilities", "development-tools"]
 edition = "2024"
-rust-version = "1.70"
 
 [workspace.dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -34,3 +33,4 @@ insta = "1.34"
 tempfile = "3.8"
 indicatif = "0.17"
 regex = "1.10"
+indexmap = { version = "2.0", features = ["serde"] }
