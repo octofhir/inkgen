@@ -5,8 +5,8 @@ use std::sync::{Arc, OnceLock};
 
 use anyhow::Result;
 use inkgen_core::{
-    BaseStructureService, CoreResult, InkgenConfig, InstallMode, PackageCache, PackageCacheConfig,
-    PackageEntry, TreeShakingSection,
+    BaseStructureService, CoreResult, InkgenConfig, InstallMode, LanguagesSection, PackageCache,
+    PackageCacheConfig, PackageEntry, TreeShakingSection,
 };
 use tempfile::TempDir;
 use tokio::sync::Mutex;
@@ -90,6 +90,7 @@ impl CoreTestWorkspace {
                 version: CORE_VERSION.to_string(),
             }],
             tree_shaking: TreeShakingSection::default(),
+            languages: LanguagesSection::default(),
         }
     }
 
@@ -107,6 +108,7 @@ impl CoreTestWorkspace {
                 allowed_resources: resources.into_iter().map(Into::into).collect(),
                 allowed_profiles: Vec::new(),
             },
+            languages: LanguagesSection::default(),
         }
     }
 }

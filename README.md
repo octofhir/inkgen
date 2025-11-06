@@ -56,9 +56,25 @@ cargo install just
    just review
    ```
 4. Explore the CLI:
-   ```bash
-   cargo run -p inkgen-cli -- help
-   ```
+```bash
+cargo run -p inkgen-cli -- help
+```
+
+### Generate TypeScript SDK (MVP)
+
+```bash
+inkgen config init --force                  # create/overwrite inkgen.toml
+inkgen fetch                                # download configured packages
+inkgen generate typescript                  # emit TypeScript stubs into target/inkgen/out/typescript
+```
+
+Use `--dry-run` to preview work, `--offline` to require cached packages, and `--output <dir>` to redirect generation.
+
+### Shell Completions
+
+```bash
+inkgen config completions bash --output completions/inkgen.bash
+```
 
 ## Available `just` Commands
 

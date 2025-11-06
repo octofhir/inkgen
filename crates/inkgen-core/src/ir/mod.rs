@@ -107,6 +107,20 @@ pub struct ElementDefinition {
     pub slicing: Option<SlicingInfo>,
     pub extension: Vec<ExtensionInstance>,
     pub additional_fields: IndexMap<String, serde_json::Value>,
+
+    // Hierarchical structure fields
+    /// Child elements in the element tree
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<ElementDefinition>,
+    /// Path to parent element (e.g., "Patient.contact" has parent "Patient")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_path: Option<String>,
+    /// Nesting depth (0 for root-level elements like "Patient", 1 for "Patient.name", etc.)
+    #[serde(default)]
+    pub depth: usize,
+    /// True if this is a BackboneElement (complex type with no type.code but has children)
+    #[serde(default)]
+    pub is_backbone: bool,
 }
 
 impl ElementDefinition {
@@ -116,6 +130,12 @@ impl ElementDefinition {
         self.extension.sort_by(|a, b| a.url.cmp(&b.url));
         if let Some(binding) = &mut self.binding {
             binding.sort();
+        }
+        // Sort children recursively
+        self.children
+            .sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.path.cmp(&b.path)));
+        for child in &mut self.children {
+            child.sort();
         }
     }
 }

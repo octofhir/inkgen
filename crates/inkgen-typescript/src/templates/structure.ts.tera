@@ -1,0 +1,56 @@
+{%- if structure.imports | length > 0 %}
+{% for import in structure.imports -%}
+import type { {{ import.type_name }} } from "./{{ import.path }}";
+{% endfor -%}
+
+{%- endif %}
+{%- if structure.nested_types | length > 0 %}
+{%- for nested in structure.nested_types %}
+{%- if nested.description %}
+/**
+ * {{ nested.description }}
+ */
+{%- endif %}
+export interface {{ nested.type_name }} {
+{%- for field in nested.fields %}
+{%- if field.doc %}
+  /** {{ field.doc }} */
+{%- endif %}
+  {{ field.name }}{% if field.optional %}?{% endif %}: {{ field.type_expr }};
+{%- endfor %}
+}
+
+{% endfor -%}
+{%- endif %}
+{%- if structure.emit_interface %}
+export interface {{ structure.type_name }} {
+{%- for field in structure.fields %}
+{%- if field.doc %}
+  /** {{ field.doc }} */
+{%- endif %}
+  {{ field.name }}{% if field.optional %}?{% endif %}: {{ field.type_expr }};
+{%- endfor %}
+}
+{%- endif %}
+
+{%- if structure.emit_class %}
+export class {{ structure.class_name }} {
+{%- for field in structure.fields %}
+  {{ field.name }}{% if field.optional %}?{% endif %}: {{ field.type_expr }};
+{%- endfor %}
+
+  constructor(init: Partial<{{ structure.type_name }}> = {}) {
+    Object.assign(this, init);
+  }
+
+  static create(init: Partial<{{ structure.type_name }}> = {}): {{ structure.class_name }} {
+    return new {{ structure.class_name }}(init);
+  }
+}
+{%- endif %}
+
+{%- if structure.structural_guards %}
+export function is{{ structure.type_name }}(input: unknown): input is {{ structure.type_name }} {
+  return typeof input === "object" && input !== null;
+}
+{%- endif %}
