@@ -10,5 +10,6 @@ insta = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 tracing = { workspace = true }
+tokio = { workspace = true }
 
 inkgen-core = { path = "../inkgen-core" }

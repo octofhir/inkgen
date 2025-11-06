@@ -11,3 +11,14 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+tokio = { workspace = true }
+octofhir-canonical-manager = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+url = { workspace = true }
+toml = { workspace = true }
+
+[dev-dependencies]
+inkgen-testing = { path = "../inkgen-testing" }
+tokio = { workspace = true, features = ["macros"] }
+insta = { workspace = true, features = ["json"] }
