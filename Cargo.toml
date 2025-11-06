@@ -34,3 +34,7 @@ tempfile = "3.8"
 indicatif = "0.17"
 regex = "1.10"
 indexmap = { version = "2.0", features = ["serde"] }
+octofhir-canonical-manager = "0.1.13"
+async-trait = "0.1"
+futures = "0.3"
+url = "2.5"
