@@ -50,11 +50,7 @@ impl ProjectContext {
     }
 
     pub fn default_output_dir(&self) -> PathBuf {
-        self.root
-            .join("target")
-            .join("inkgen")
-            .join("out")
-            .join("typescript")
+        self.root.join("generated")
     }
 
     pub fn package_requests(&self) -> Vec<PackageRequest> {

@@ -307,7 +307,7 @@ fn escape_string(s: &str) -> String {
 /// # use inkgen_typescript::profiles::profile_url_to_type_name;
 /// assert_eq!(
 ///     profile_url_to_type_name("http://hl7.org/fhir/StructureDefinition/us-core-patient"),
-///     "UsCore Patient"
+///     "UsCorePatient"
 /// );
 /// ```
 pub fn profile_url_to_type_name(url: &str) -> String {
