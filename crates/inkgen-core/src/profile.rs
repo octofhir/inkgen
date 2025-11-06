@@ -30,6 +30,9 @@ impl ProfilePipeline {
             elements.push(parse_element(element_value, &mut element_invariants)?);
         }
 
+        // Build hierarchical element tree from flat snapshot
+        elements = build_element_tree(elements);
+
         let mut invariants: Vec<InvariantDefinition> = element_invariants.into_values().collect();
         invariants.sort_by(|a, b| a.key.cmp(&b.key));
 
@@ -142,6 +145,12 @@ fn parse_element(
         slicing: obj.get("slicing").and_then(parse_slicing),
         extension: parse_extensions(obj),
         additional_fields: IndexMap::new(),
+
+        // Hierarchical structure fields (initialized with defaults; will be built later)
+        children: Vec::new(),
+        parent_path: None,
+        depth: 0,
+        is_backbone: false,
     };
 
     if let Some(constraints) = obj.get("constraint").and_then(Value::as_array) {
@@ -391,4 +400,225 @@ fn extract_first_value(obj: &Map<String, Value>, prefix: &str) -> Option<Value> 
         }
     }
     None
+}
+
+/// Builds a hierarchical element tree from a flat list of elements.
+///
+/// This function:
+/// 1. Calculates depth for each element based on path segments
+/// 2. Groups elements by parent-child relationships
+/// 3. Detects BackboneElements (elements with children but no concrete type)
+/// 4. Returns only root-level elements with children nested
+fn build_element_tree(mut flat_elements: Vec<ElementDefinition>) -> Vec<ElementDefinition> {
+    if flat_elements.is_empty() {
+        return Vec::new();
+    }
+
+    // Calculate depth and parent_path for each element
+    for element in &mut flat_elements {
+        element.depth = count_path_segments(&element.path);
+        element.parent_path = get_parent_path(&element.path);
+    }
+
+    // Build a map of all elements by path
+    let mut element_map: IndexMap<String, ElementDefinition> = flat_elements
+        .into_iter()
+        .map(|elem| (elem.path.clone(), elem))
+        .collect();
+
+    // Sort paths by depth (deepest first), then by path for determinism
+    let mut paths_by_depth: Vec<(String, usize)> = element_map
+        .iter()
+        .map(|(path, elem)| (path.clone(), elem.depth))
+        .collect();
+    paths_by_depth.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+
+    // Move children to their parents (from deepest to shallowest)
+    for (path, _depth) in paths_by_depth {
+        if let Some(element) = element_map.get(&path) {
+            if let Some(parent_path) = element.parent_path.clone() {
+                // Remove child from map (shift_remove maintains order)
+                if let Some(child) = element_map.shift_remove(&path) {
+                    // Add to parent's children
+                    if let Some(parent) = element_map.get_mut(&parent_path) {
+                        parent.children.push(child);
+                    } else {
+                        // Parent not in map (shouldn't happen), put child back
+                        element_map.insert(path, child);
+                    }
+                }
+            }
+        }
+    }
+
+    // Detect BackboneElements: elements with children but no explicit type
+    let mut elements: Vec<ElementDefinition> = element_map.into_values().collect();
+    mark_backbone_elements(&mut elements);
+
+    // Sort for deterministic output
+    elements.sort_by(|a, b| a.path.cmp(&b.path));
+
+    elements
+}
+
+/// Recursively marks elements as BackboneElements if they have children
+/// but no concrete type (or type is BackboneElement/Element).
+fn mark_backbone_elements(elements: &mut [ElementDefinition]) {
+    for element in elements {
+        if !element.children.is_empty() {
+            // Has children - check if it's a BackboneElement
+            let has_concrete_type = element.types.iter().any(|t| {
+                !matches!(
+                    t.code.as_str(),
+                    "BackboneElement" | "Element" | "Base" | ""
+                )
+            });
+
+            if !has_concrete_type {
+                element.is_backbone = true;
+            }
+        }
+
+        // Recursively process children
+        mark_backbone_elements(&mut element.children);
+    }
+}
+
+/// Counts the number of segments in an element path.
+/// Examples:
+/// - "Patient" -> 0 (root element)
+/// - "Patient.name" -> 1
+/// - "Patient.name.family" -> 2
+fn count_path_segments(path: &str) -> usize {
+    if path.is_empty() {
+        return 0;
+    }
+    path.matches('.').count()
+}
+
+/// Extracts the parent path from an element path.
+/// Examples:
+/// - "Patient.name" -> Some("Patient")
+/// - "Patient.name.family" -> Some("Patient.name")
+/// - "Patient" -> None
+fn get_parent_path(path: &str) -> Option<String> {
+    path.rfind('.').map(|idx| path[..idx].to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_count_path_segments() {
+        assert_eq!(count_path_segments("Patient"), 0);
+        assert_eq!(count_path_segments("Patient.name"), 1);
+        assert_eq!(count_path_segments("Patient.name.family"), 2);
+        assert_eq!(count_path_segments("Patient.contact.name.given"), 3);
+    }
+
+    #[test]
+    fn test_get_parent_path() {
+        assert_eq!(get_parent_path("Patient"), None);
+        assert_eq!(
+            get_parent_path("Patient.name"),
+            Some("Patient".to_string())
+        );
+        assert_eq!(
+            get_parent_path("Patient.name.family"),
+            Some("Patient.name".to_string())
+        );
+        assert_eq!(
+            get_parent_path("Patient.contact.name.given"),
+            Some("Patient.contact.name".to_string())
+        );
+    }
+
+    #[test]
+    fn test_build_element_tree() {
+        // Create flat elements
+        let elements = vec![
+            create_test_element("Patient", vec!["DomainResource"]),
+            create_test_element("Patient.id", vec!["id"]),
+            create_test_element("Patient.name", vec!["HumanName"]),
+            create_test_element("Patient.contact", vec![]), // BackboneElement
+            create_test_element("Patient.contact.name", vec!["HumanName"]),
+            create_test_element("Patient.contact.telecom", vec!["ContactPoint"]),
+        ];
+
+        let tree = build_element_tree(elements);
+
+        // Should have only 1 root element (Patient)
+        assert_eq!(tree.len(), 1);
+
+        let patient = &tree[0];
+        assert_eq!(patient.path, "Patient");
+        assert_eq!(patient.depth, 0);
+        assert_eq!(patient.children.len(), 3); // id, name, contact
+
+        // Find contact element
+        let contact = patient
+            .children
+            .iter()
+            .find(|e| e.path == "Patient.contact")
+            .unwrap();
+        assert_eq!(contact.depth, 1);
+        assert!(contact.is_backbone); // Should be marked as BackboneElement
+        assert_eq!(contact.children.len(), 2); // name, telecom
+        assert_eq!(
+            contact.parent_path,
+            Some("Patient".to_string())
+        );
+
+        // Check nested child
+        let contact_name = &contact.children[0];
+        assert_eq!(contact_name.path, "Patient.contact.name");
+        assert_eq!(contact_name.depth, 2);
+        assert_eq!(
+            contact_name.parent_path,
+            Some("Patient.contact".to_string())
+        );
+    }
+
+    fn create_test_element(path: &str, type_codes: Vec<&str>) -> ElementDefinition {
+        ElementDefinition {
+            id: path.to_string(),
+            path: path.to_string(),
+            slice_name: None,
+            short: None,
+            definition: None,
+            comment: None,
+            requirements: None,
+            cardinality: ElementCardinality {
+                min: 0,
+                max: ElementMax::Unbounded,
+            },
+            types: type_codes
+                .into_iter()
+                .map(|code| ElementType {
+                    code: code.to_string(),
+                    profiles: Vec::new(),
+                    target_profiles: Vec::new(),
+                    aggregation: Vec::new(),
+                    versioning: None,
+                })
+                .collect(),
+            content_reference: None,
+            binding: None,
+            invariants: Vec::new(),
+            fixed: None,
+            pattern: None,
+            default_value: None,
+            example_values: Vec::new(),
+            must_support: false,
+            is_summary: false,
+            slicing: None,
+            extension: Vec::new(),
+            additional_fields: IndexMap::new(),
+            children: Vec::new(),
+            parent_path: None,
+            depth: 0,
+            is_backbone: false,
+        }
+    }
 }

@@ -184,6 +184,7 @@ fn init_tracing(verbosity: u8) -> Result<()> {
 
 async fn fetch_command(args: FetchArgs) -> Result<()> {
     let context = ProjectContext::load(args.shared.config.clone())?;
+    context.validate()?;
     let cache_config = context.build_cache_config(
         args.shared.packages_dir.clone(),
         args.shared.cache_dir.clone(),
@@ -229,6 +230,7 @@ async fn fetch_command(args: FetchArgs) -> Result<()> {
 
 async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
     let context = ProjectContext::load(args.shared.config.clone())?;
+    context.validate()?;
     let cache_config = context.build_cache_config(
         args.shared.packages_dir.clone(),
         args.shared.cache_dir.clone(),
@@ -258,28 +260,33 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
         InstallMode::OnlinePreferred
     };
 
-    resolver.ensure_packages(&packages, mode).await?;
+    let descriptors = resolver.ensure_packages(&packages, mode).await?;
 
     let service = Arc::new(BaseStructureService::from_project_config(
         cache,
         context.manifest(),
     ));
 
-    let output_dir = args.output.unwrap_or_else(|| context.default_output_dir());
-    fs::create_dir_all(&output_dir)
-        .with_context(|| format!("failed to create output directory {}", output_dir.display()))?;
+    let provider_config = context.manifest().structure_config();
+    let default_output = context.default_output_dir();
+    let generator_config = TypescriptGeneratorConfig::from_manifest(
+        context.typescript_section(),
+        default_output,
+        args.output.clone(),
+    );
+    let generator = TypescriptGenerator::new(generator_config);
 
-    let generator = TypescriptGenerator::new(TypescriptGeneratorConfig {
-        output_dir: output_dir.to_string_lossy().into_owned(),
-    });
-
-    for request in packages {
+    for descriptor in descriptors {
         generator
-            .generate(&service, &request.id)
-            .with_context(|| format!("failed to generate for {}", request.id))?;
+            .generate(&*service, &descriptor, &provider_config)
+            .await
+            .with_context(|| format!("failed to generate for {}", descriptor.id))?;
     }
 
-    info!("TypeScript generation complete in {}", output_dir.display());
+    info!(
+        "TypeScript generation complete in {}",
+        generator.config().output_dir.display()
+    );
     Ok(())
 }
 

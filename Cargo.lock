@@ -1558,9 +1558,17 @@ name = "inkgen-typescript"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "indexmap",
  "inkgen-core",
+ "inkgen-testing",
+ "insta",
+ "once_cell",
+ "serde",
+ "serde_json",
+ "tempfile",
  "tera",
+ "tokio",
  "tracing",
 ]
 

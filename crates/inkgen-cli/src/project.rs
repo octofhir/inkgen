@@ -81,6 +81,10 @@ impl ProjectContext {
         Ok(())
     }
 
+    pub fn typescript_section(&self) -> Option<&inkgen_core::TypescriptLanguageConfig> {
+        self.manifest.typescript_config()
+    }
+
     pub fn build_cache_config(
         &self,
         packages_dir: Option<PathBuf>,
