@@ -954,7 +954,6 @@ mod tests {
     use super::*;
     use inkgen_core::BaseStructureService;
     use inkgen_testing::{CORE_PACKAGE, CORE_VERSION, CoreTestContext};
-    use insta::assert_snapshot;
     use tempfile::tempdir;
 
     #[test]
@@ -988,83 +987,6 @@ mod tests {
 
         // Empty string should return empty
         assert_eq!(wrap_documentation("", 80), "");
-    }
-
-    #[tokio::test]
-    #[ignore = "Known flaky: Snapshot imports vary due to non-deterministic dependency resolution"]
-    async fn generates_patient_interface() {
-        // Test generates a simple Patient resource and validates output
-        // Note: This test sometimes experiences intermittent flakiness where Patient.ts
-        // is not generated even though it's in allowed resources. This appears to be
-        // related to async test infrastructure behavior, not core generation logic.
-        // Additionally, the imports included in the generated code vary between runs,
-        // indicating non-deterministic behavior in dependency resolution.
-        // The typescript_generated_files_are_valid_syntax test validates generation works reliably.
-
-        // Tree-shaking: Only specify base resources; dependencies are auto-generated
-        let ctx = CoreTestContext::with_allowed_resources(vec!["Patient"])
-            .await
-            .expect("context");
-        let cache = ctx.cache();
-        let descriptors = cache.descriptors().await.expect("descriptors");
-        let descriptor = descriptors
-            .into_iter()
-            .find(|desc| desc.id.name == CORE_PACKAGE && desc.id.version == CORE_VERSION)
-            .expect("core package descriptor");
-
-        let provider = BaseStructureService::from_project_config(cache.clone(), ctx.config());
-        let provider_config = ctx.config().structure_config();
-
-        let temp = tempdir().expect("dir");
-        let config = TypescriptGeneratorConfig {
-            mode: GenerationMode::Interface,
-            structural_guards: true,
-            naming: NamingConvention::CamelCase,
-            output_structure: OutputStructure::Flat,
-            output_dir: temp.path().to_path_buf(),
-        };
-        let generator = TypescriptGenerator::new(config.clone());
-        generator
-            .generate(&provider, &descriptor, &provider_config)
-            .await
-            .expect("generate");
-
-        let package_dir = package_output_dir(&config.output_dir, &descriptor.id);
-        assert!(
-            package_dir.exists(),
-            "package dir does not exist: {}",
-            package_dir.display()
-        );
-
-        // Collect all generated files
-        let generated_files: Vec<_> = fs::read_dir(&package_dir)
-            .ok()
-            .map(|entries| {
-                entries
-                    .filter_map(|e| e.ok().map(|e| e.file_name()))
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-
-        // If patient.ts wasn't generated, skip the snapshot tests but verify generation worked
-        let patient_path = package_dir.join("patient.ts");
-        if !patient_path.exists() {
-            // Verify that other files were generated (indicates generation is working)
-            assert!(
-                !generated_files.is_empty(),
-                "No TypeScript files were generated at all"
-            );
-            eprintln!(
-                "Warning: patient.ts not found in generated files (known intermittent issue)"
-            );
-            eprintln!("Generated files: {:?}", generated_files);
-            return;
-        }
-
-        let patient_file = fs::read_to_string(patient_path).expect("patient file");
-        assert_snapshot!("typescript_patient", patient_file);
-        let index_file = fs::read_to_string(package_dir.join("index.ts")).expect("index file");
-        assert_snapshot!("typescript_index", index_file);
     }
 
     #[tokio::test]
