@@ -6,12 +6,14 @@ name = "hl7.fhir.r4.core"
 version = "4.0.1"
 
 # Optional: Use tree-shaking to limit generation to specific resources
-[tree_shaking]
-allowed_resources = ["Patient", "Observation", "Practitioner", "Organization"]
+# Disabled for now to ensure all referenced types are generated
+# [tree_shaking]
+# allowed_resources = ["Patient", "Observation", "Practitioner", "Organization"]
 # allowed_profiles = ["us-core-patient", "us-core-observation"]
 
 [languages.typescript]
-mode = "class_with_builder"
+mode = "interface"  # Use interface mode for idiomatic TypeScript (not class_with_builder)
 structural_guards = true
-naming_convention = "PascalCase"
+naming_convention = "PascalCase"  # Only affects type names, field names are always camelCase
 output_structure = "flat"
+# output_dir = "src/generated/fhir"  # Optional: custom output directory (relative or absolute)

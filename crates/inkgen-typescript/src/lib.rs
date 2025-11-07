@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -218,6 +218,11 @@ mod templates {
 
         // Register built-in templates
         tera.add_raw_template(
+            "primitives.ts.tera",
+            include_str!("templates/primitives.ts.tera"),
+        )
+        .expect("primitives template");
+        tera.add_raw_template(
             "structure.ts.tera",
             include_str!("templates/structure.ts.tera"),
         )
@@ -435,9 +440,13 @@ struct RenderStructure {
     emit_interface: bool,
     emit_class: bool,
     structural_guards: bool,
+    has_primitives: bool,
+    primitive_imports: Vec<String>,
     fields: Vec<RenderField>,
     imports: Vec<RenderImport>,
     nested_types: Vec<RenderNestedType>,
+    /// Generic type parameters for the interface (e.g., "T extends string = string" for Reference<T>)
+    type_parameters: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -518,6 +527,7 @@ where
 
         let mut entries = Vec::new();
         for summary in relevant {
+            // Only generate BaseResource, ComplexType, and PrimitiveType structures
             if summary.kind != StructureKind::BaseResource
                 && summary.kind != StructureKind::ComplexType
                 && summary.kind != StructureKind::PrimitiveType
@@ -637,6 +647,11 @@ where
 }
 
 fn write_package(package: &PackageOutput) -> Result<()> {
+    // Write FHIR primitives with branded types first (needed by all other files)
+    let primitives_content = templates::render("primitives.ts.tera", &TeraContext::new())?;
+    fs::write(package.path.join("primitives.ts"), primitives_content)
+        .with_context(|| "failed to write primitives.ts")?;
+
     // Write main structures
     for structure in &package.structures {
         let mut context = TeraContext::new();
@@ -667,6 +682,26 @@ fn write_package(package: &PackageOutput) -> Result<()> {
     let index_content = templates::render("index.ts.tera", &context)?;
     fs::write(package.path.join("index.ts"), index_content)?;
     Ok(())
+}
+
+/// Extract all FHIR primitive type names from a type expression
+/// Handles simple types (FhirString), optional types (FhirBoolean | undefined),
+/// arrays (Array<FhirInteger>), and union types (FhirBoolean | FhirDateTime)
+fn extract_primitives_from_type(type_expr: &str, primitives: &mut HashSet<String>) {
+    // List of all FHIR primitive type names
+    const FHIR_PRIMITIVES: &[&str] = &[
+        "FhirString", "FhirCode", "FhirId", "FhirMarkdown", "FhirOid", "FhirUri",
+        "FhirCanonical", "FhirUrl", "FhirUuid", "FhirBase64Binary", "FhirDate",
+        "FhirDateTime", "FhirTime", "FhirInstant", "FhirXhtml",
+        "FhirInteger", "FhirDecimal", "FhirPositiveInt", "FhirUnsignedInt",
+        "FhirInteger64", "FhirBoolean"
+    ];
+
+    for primitive in FHIR_PRIMITIVES {
+        if type_expr.contains(primitive) {
+            primitives.insert(primitive.to_string());
+        }
+    }
 }
 
 fn build_render_structure(
@@ -750,6 +785,27 @@ fn build_render_structure(
     // Sort imports alphabetically by type_name for deterministic output
     imports.sort_by(|a, b| a.type_name.cmp(&b.type_name));
 
+    // Collect all FHIR primitive types used in fields
+    let mut primitive_set = std::collections::HashSet::new();
+    for field in &fields {
+        extract_primitives_from_type(&field.type_expr, &mut primitive_set);
+    }
+    for nested in &nested_types {
+        for field in &nested.fields {
+            extract_primitives_from_type(&field.type_expr, &mut primitive_set);
+        }
+    }
+    let mut primitive_imports: Vec<String> = primitive_set.into_iter().collect();
+    primitive_imports.sort();
+    let has_primitives = !primitive_imports.is_empty();
+
+    // Special case: Make Reference generic to support type-safe references
+    let type_parameters = if type_name == "Reference" {
+        Some("T extends string = string".to_string())
+    } else {
+        None
+    };
+
     RenderStructure {
         type_name: type_name.to_string(),
         class_name,
@@ -762,9 +818,12 @@ fn build_render_structure(
         emit_interface,
         emit_class,
         structural_guards: config.structural_guards,
+        has_primitives,
+        primitive_imports,
         fields,
         imports,
         nested_types,
+        type_parameters,
     }
 }
 
@@ -799,7 +858,7 @@ fn top_level_elements(definition: &ResourceDefinition) -> Vec<&ElementDefinition
 
 fn map_field_with_nested_context(
     element: &ElementDefinition,
-    config: &TypescriptGeneratorConfig,
+    _config: &TypescriptGeneratorConfig,
     current_type: &str,
     name_to_stem: &IndexMap<String, String>,
     imports: &mut IndexMap<String, String>,
@@ -812,11 +871,9 @@ fn map_field_with_nested_context(
         .unwrap_or(&element.path)
         .replace("[x]", "");
 
-    let name = match config.naming {
-        NamingConvention::PascalCase => naming::pascal_case(&raw_name),
-        NamingConvention::CamelCase => naming::camel_case(&raw_name),
-        NamingConvention::SnakeCase => naming::snake_case(&raw_name),
-    };
+    // For TypeScript, field names are ALWAYS camelCase (idiomatic JavaScript/TypeScript)
+    // The config.naming setting only affects type names, not field names
+    let name = naming::camel_case(&raw_name);
 
     let optional = element.cardinality.min == 0;
     let is_array = match element.cardinality.max {
@@ -842,6 +899,16 @@ fn map_field_with_nested_context(
                         && type_name != current_type
                     {
                         imports.entry(type_name.clone()).or_insert(stem.clone());
+                    }
+                }
+                TypeRef::Generic { base, type_arg } => {
+                    // For generic types like Reference<"Patient">, we need to import the base type
+                    let base_type = naming::pascal_case(base);
+                    type_exprs.push(format!("{}<{}>", base_type, type_arg));
+                    if let Some(stem) = name_to_stem.get(&base_type)
+                        && base_type != current_type
+                    {
+                        imports.entry(base_type.clone()).or_insert(stem.clone());
                     }
                 }
             }
@@ -904,7 +971,8 @@ fn resolve_element_type(element_type: &ElementType) -> Vec<TypeRef> {
     if element_type.code.eq_ignore_ascii_case("Reference")
         && !element_type.target_profiles.is_empty()
     {
-        return element_type
+        // Build type argument as union of resource type names (e.g., "Patient" | "Organization")
+        let type_args: Vec<String> = element_type
             .target_profiles
             .iter()
             .map(|profile| {
@@ -913,20 +981,62 @@ fn resolve_element_type(element_type: &ElementType) -> Vec<TypeRef> {
                     .next_back()
                     .map(str::to_string)
                     .unwrap_or_else(|| profile.to_string());
-                TypeRef::Named(name)
+                format!("\"{}\"", name)
             })
             .collect();
+
+        let type_arg = type_args.join(" | ");
+
+        return vec![TypeRef::Generic {
+            base: "Reference".to_string(),
+            type_arg,
+        }];
     }
 
     vec![TypeRef::Named(element_type.code.clone())]
 }
 
 fn map_primitive(code: &str) -> Option<&'static str> {
+    // Handle URL-based FHIR type codes (e.g., http://hl7.org/fhirpath/System.String)
+    if code.starts_with("http://") || code.starts_with("https://") {
+        // Extract the last component after the last slash or dot
+        let type_name = code
+            .rsplit(&['/', '.'][..])
+            .next()
+            .unwrap_or(code)
+            .to_lowercase();
+
+        return match type_name.as_str() {
+            "string" => Some("FhirString"),
+            "boolean" => Some("FhirBoolean"),
+            "integer" | "decimal" => Some("FhirDecimal"),
+            _ => None,
+        };
+    }
+
+    // Handle standard FHIR primitive types - use branded types for type safety
     match code {
-        "boolean" => Some("boolean"),
-        "integer" | "decimal" | "positiveInt" | "unsignedInt" => Some("number"),
-        "string" | "code" | "id" | "markdown" | "oid" | "uri" | "canonical" | "url" | "uuid"
-        | "base64Binary" | "date" | "dateTime" | "time" | "instant" | "xhtml" => Some("string"),
+        "boolean" => Some("FhirBoolean"),
+        "integer" => Some("FhirInteger"),
+        "decimal" => Some("FhirDecimal"),
+        "positiveInt" => Some("FhirPositiveInt"),
+        "unsignedInt" => Some("FhirUnsignedInt"),
+        "integer64" => Some("FhirInteger64"),
+        "string" => Some("FhirString"),
+        "code" => Some("FhirCode"),
+        "id" => Some("FhirId"),
+        "markdown" => Some("FhirMarkdown"),
+        "oid" => Some("FhirOid"),
+        "uri" => Some("FhirUri"),
+        "canonical" => Some("FhirCanonical"),
+        "url" => Some("FhirUrl"),
+        "uuid" => Some("FhirUuid"),
+        "base64Binary" => Some("FhirBase64Binary"),
+        "date" => Some("FhirDate"),
+        "dateTime" => Some("FhirDateTime"),
+        "time" => Some("FhirTime"),
+        "instant" => Some("FhirInstant"),
+        "xhtml" => Some("FhirXhtml"),
         _ => None,
     }
 }
@@ -947,6 +1057,11 @@ fn file_stem(identifier: &str) -> String {
 enum TypeRef {
     Primitive(&'static str),
     Named(String),
+    /// Generic type with type parameter (e.g., Reference<"Patient">)
+    Generic {
+        base: String,
+        type_arg: String,
+    },
 }
 
 #[cfg(test)]

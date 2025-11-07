@@ -1,3 +1,6 @@
+{%- if structure.has_primitives %}
+import type { {{ structure.primitive_imports | join(sep=", ") }} } from "./primitives";
+{% endif -%}
 {%- if structure.imports | length > 0 %}
 {% for import in structure.imports -%}
 import type { {{ import.type_name }} } from "./{{ import.path }}";
@@ -23,7 +26,7 @@ export interface {{ nested.type_name }} {
 {% endfor -%}
 {%- endif %}
 {%- if structure.emit_interface %}
-export interface {{ structure.type_name }} {
+export interface {{ structure.type_name }}{% if structure.type_parameters %}<{{ structure.type_parameters }}>{% endif %} {
 {%- for field in structure.fields %}
 {%- if field.doc %}
   /** {{ field.doc }} */
