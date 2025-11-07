@@ -195,13 +195,40 @@ fn init_tracing(verbosity: u8) -> Result<()> {
         _ => "trace",
     };
 
+    // Configure logging with reduced verbosity for canonical manager
+    // Filter out verbose logs from octofhir-canonical-manager crate:
+    // - "Resolving canonical URL" messages
+    // - "search.execute" span logs
+    use tracing_subscriber::layer::{Layer, SubscriberExt};
+    use tracing_subscriber::util::SubscriberInitExt;
+
     let filter = EnvFilter::builder()
         .with_default_directive(level.parse()?)
         .from_env_lossy();
 
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(false)
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_target(false)
+                // Filter out verbose canonical manager logs
+                .with_filter(tracing_subscriber::filter::filter_fn(|metadata| {
+                    let target = metadata.target();
+                    let name = metadata.name();
+
+                    // Exclude canonical resolution logs
+                    if target.contains("canonical") && name.contains("resolve") {
+                        return false;
+                    }
+
+                    // Exclude search execution logs (both span and event)
+                    if name.contains("search") || target.contains("search") {
+                        return false;
+                    }
+
+                    true
+                }))
+        )
         .init();
 
     Ok(())

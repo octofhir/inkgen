@@ -24,21 +24,26 @@ fetch PACKAGE='' config='inkgen.toml' offline='false' dry_run='false':
     echo "$cmd"; \
     eval "$cmd"
 
-generate lang='typescript' config='inkgen.toml' offline='false' dry_run='false' output='' PACKAGE='':
-    @cmd="cargo run -p inkgen-cli -- generate {{lang}} --config {{config}}"
-    @if [ "{{offline}}" = "true" ]; then \
-        cmd="$cmd --offline"; \
-    fi; \
-    if [ "{{dry_run}}" = "true" ]; then \
-        cmd="$cmd --dry-run"; \
-    fi; \
-    if [ -n "{{output}}" ]; then \
-        cmd="$cmd --output {{output}}"; \
-    fi; \
-    if [ -n "{{PACKAGE}}" ]; then \
-        cmd="$cmd --package {{PACKAGE}}"; \
-    fi; \
-    echo "$cmd"; \
+generate lang='typescript' config='inkgen.toml' offline='false' dry_run='false' output='' package='':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cmd="cargo run -p inkgen-cli -- generate {{lang}}"
+    if [ -n "{{config}}" ]; then
+        cmd="$cmd --config {{config}}"
+    fi
+    if [ "{{offline}}" = "true" ]; then
+        cmd="$cmd --offline"
+    fi
+    if [ "{{dry_run}}" = "true" ]; then
+        cmd="$cmd --dry-run"
+    fi
+    if [ -n "{{output}}" ]; then
+        cmd="$cmd --output {{output}}"
+    fi
+    if [ -n "{{package}}" ]; then
+        cmd="$cmd --package {{package}}"
+    fi
+    echo "$cmd"
     eval "$cmd"
 
 test:

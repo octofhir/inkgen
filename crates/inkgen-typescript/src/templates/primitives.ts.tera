@@ -1,0 +1,93 @@
+// FHIR Primitive Types with Branding for Type Safety
+// These branded types prevent accidental mixing of different FHIR primitive types
+
+/**
+ * Branded type helper - creates a nominal type from a base type
+ * @internal
+ */
+declare const brand: unique symbol;
+type Brand<T, TBrand extends string> = T & { readonly [brand]: TBrand };
+
+// String-based FHIR primitives
+export type FhirString = Brand<string, 'FhirString'>;
+export type FhirCode = Brand<string, 'FhirCode'>;
+export type FhirId = Brand<string, 'FhirId'>;
+export type FhirMarkdown = Brand<string, 'FhirMarkdown'>;
+export type FhirOid = Brand<string, 'FhirOid'>;
+export type FhirUri = Brand<string, 'FhirUri'>;
+export type FhirCanonical = Brand<string, 'FhirCanonical'>;
+export type FhirUrl = Brand<string, 'FhirUrl'>;
+export type FhirUuid = Brand<string, 'FhirUuid'>;
+export type FhirBase64Binary = Brand<string, 'FhirBase64Binary'>;
+export type FhirDate = Brand<string, 'FhirDate'>;
+export type FhirDateTime = Brand<string, 'FhirDateTime'>;
+export type FhirTime = Brand<string, 'FhirTime'>;
+export type FhirInstant = Brand<string, 'FhirInstant'>;
+export type FhirXhtml = Brand<string, 'FhirXhtml'>;
+
+// Number-based FHIR primitives
+export type FhirInteger = Brand<number, 'FhirInteger'>;
+export type FhirDecimal = Brand<number, 'FhirDecimal'>;
+export type FhirPositiveInt = Brand<number, 'FhirPositiveInt'>;
+export type FhirUnsignedInt = Brand<number, 'FhirUnsignedInt'>;
+export type FhirInteger64 = Brand<string, 'FhirInteger64'>; // int64 is serialized as string in JSON
+
+// Boolean FHIR primitive
+export type FhirBoolean = Brand<boolean, 'FhirBoolean'>;
+
+// Type guards for runtime validation
+export function isFhirString(value: unknown): value is FhirString {
+  return typeof value === 'string';
+}
+
+export function isFhirInteger(value: unknown): value is FhirInteger {
+  return typeof value === 'number' && Number.isInteger(value);
+}
+
+export function isFhirDecimal(value: unknown): value is FhirDecimal {
+  return typeof value === 'number';
+}
+
+export function isFhirBoolean(value: unknown): value is FhirBoolean {
+  return typeof value === 'boolean';
+}
+
+// Constructor functions for creating branded values
+export function fhirString(value: string): FhirString {
+  return value as FhirString;
+}
+
+export function fhirId(value: string): FhirId {
+  return value as FhirId;
+}
+
+export function fhirUri(value: string): FhirUri {
+  return value as FhirUri;
+}
+
+export function fhirCode(value: string): FhirCode {
+  return value as FhirCode;
+}
+
+export function fhirInteger(value: number): FhirInteger {
+  if (!Number.isInteger(value)) {
+    throw new Error('FhirInteger must be an integer');
+  }
+  return value as FhirInteger;
+}
+
+export function fhirDecimal(value: number): FhirDecimal {
+  return value as FhirDecimal;
+}
+
+export function fhirBoolean(value: boolean): FhirBoolean {
+  return value as FhirBoolean;
+}
+
+export function fhirDateTime(value: string): FhirDateTime {
+  return value as FhirDateTime;
+}
+
+export function fhirDate(value: string): FhirDate {
+  return value as FhirDate;
+}
