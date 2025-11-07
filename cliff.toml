@@ -1,0 +1,85 @@
+# git-cliff configuration for InkGen
+# Generates structured changelogs from conventional commits
+# Reference: https://github.com/orhun/git-cliff
+
+[changelog]
+# Changelog header
+header = """
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+"""
+
+# Changelog body template
+body = """
+{% if version %}\
+    ## [{{ version }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+    ## [Unreleased]
+{% endif %}\
+{% if previous %}\
+    [{{ version }}]: https://github.com/octofhir/inkgen/compare/{{ previous.tag }}...{{ version }}
+{% endif %}
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group | upper }}
+    {% for commit in commits %}
+        - {% if commit.scope %}({{ commit.scope }}) {% endif %}{{ commit.message }} ([`{{ commit.hash | truncate(length=7, end="") }}`](https://github.com/octofhir/inkgen/commit/{{ commit.hash }}))
+    {%- endfor %}
+{% endfor %}
+"""
+
+# Trailer section (for breaking changes, etc.)
+footer = """
+"""
+
+# Trim whitespace from the output
+trim = true
+
+[git]
+# Conventional commits parsing
+conventional_commits = true
+
+# Commit filters
+filter_unconventional = true
+
+# Tag pattern for detecting releases
+tag_pattern = "v[0-9]*"
+
+# Skip tags matching this pattern (e.g., pre-releases)
+skip_tags = ".*-rc.*|.*-beta.*|.*-alpha.*"
+
+# Configure which groups to include and their display order
+[[git.conventional_commits_config.commit_parsers]]
+message = "^feat"
+group = "Features"
+
+[[git.conventional_commits_config.commit_parsers]]
+message = "^fix"
+group = "Bug Fixes"
+
+[[git.conventional_commits_config.commit_parsers]]
+message = "^perf"
+group = "Performance"
+
+[[git.conventional_commits_config.commit_parsers]]
+message = "^refactor"
+group = "Refactoring"
+
+[[git.conventional_commits_config.commit_parsers]]
+message = "^docs"
+group = "Documentation"
+
+[[git.conventional_commits_config.commit_parsers]]
+message = "^test"
+group = "Testing"
+
+[[git.conventional_commits_config.commit_parsers]]
+message = "^chore"
+skip = true
+
+[[git.conventional_commits_config.commit_parsers]]
+message = "^ci"
+skip = true

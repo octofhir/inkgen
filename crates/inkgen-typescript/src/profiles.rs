@@ -61,10 +61,7 @@ impl ProfileInfo {
     /// Returns None if the resource is not a profile (constraint derivation).
     pub fn from_resource_definition(definition: &ResourceDefinition) -> Option<Self> {
         // Only process profiles (derivation = constraint)
-        if !matches!(
-            definition.lineage.derivation,
-            Some(Derivation::Constraint)
-        ) {
+        if !matches!(definition.lineage.derivation, Some(Derivation::Constraint)) {
             return None;
         }
 
@@ -140,14 +137,8 @@ impl ProfileInfo {
 
         // Add fixed value fields (override with specific literals)
         for fixed in &self.fixed_elements {
-            output.push_str(&format!(
-                "  /** Fixed value: {} */\n",
-                fixed.fixed_value
-            ));
-            output.push_str(&format!(
-                "  {}: {};\n",
-                fixed.field_name, fixed.fixed_value
-            ));
+            output.push_str(&format!("  /** Fixed value: {} */\n", fixed.fixed_value));
+            output.push_str(&format!("  {}: {};\n", fixed.field_name, fixed.fixed_value));
         }
 
         // Add constrained fields (override cardinality)
@@ -333,8 +324,8 @@ pub fn profile_url_to_type_name(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use inkgen_core::ir::{ElementCardinality, ElementMax, ProfileLineage, ResourceKind};
     use indexmap::IndexMap;
+    use inkgen_core::ir::{ElementCardinality, ElementMax, ProfileLineage, ResourceKind};
     use serde_json::json;
 
     #[test]
@@ -440,7 +431,11 @@ mod tests {
         assert_eq!(profile.type_name, "USCorePatientProfile");
         assert_eq!(profile.base_type, "Patient");
         assert_eq!(profile.title, Some("US Core Patient Profile".to_string()));
-        assert!(profile.must_support_elements.contains(&"Patient.identifier".to_string()));
+        assert!(
+            profile
+                .must_support_elements
+                .contains(&"Patient.identifier".to_string())
+        );
         assert_eq!(profile.fixed_elements.len(), 1);
         assert_eq!(profile.fixed_elements[0].field_name, "active");
         assert_eq!(profile.fixed_elements[0].fixed_value, "true");

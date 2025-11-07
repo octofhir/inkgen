@@ -1,0 +1,19 @@
+[package]
+name = "inkgen-rust"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Example FHIR code generator backend for Rust - demonstrates extensible backend architecture"
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+
+inkgen-core = { path = "../inkgen-core" }
+
+[dev-dependencies]
+insta = { workspace = true }
+tokio = { workspace = true, features = ["macros"] }
+tempfile = { workspace = true }

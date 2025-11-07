@@ -1,3 +1,4 @@
+mod diff;
 mod project;
 
 use std::fs;
@@ -7,8 +8,10 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::{ArgAction, Args, CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
-use inkgen_core::{BaseStructureService, InstallMode, PackageCache, PackageCacheConfig};
-use inkgen_typescript::{LanguageGenerator, TypescriptGenerator, TypescriptGeneratorConfig};
+use inkgen_core::{
+    BaseStructureService, InstallMode, LanguageGenerator, PackageCache, PackageCacheConfig,
+};
+use inkgen_typescript::{TypescriptGenerator, TypescriptGeneratorConfig};
 use project::{ProjectContext, describe_source, select_requests};
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
@@ -32,6 +35,10 @@ enum Commands {
     Generate(GenerateArgs),
     /// Manage configuration files.
     Config(ConfigArgs),
+    /// Compare two generated output directories.
+    Diff(DiffArgs),
+    /// Verify environment and dependencies are properly configured.
+    Doctor,
 }
 
 #[derive(Args, Debug)]
@@ -128,6 +135,22 @@ struct ConfigCompletionArgs {
     #[arg(long)]
     output: Option<PathBuf>,
 }
+
+#[derive(Args, Debug)]
+struct DiffArgs {
+    /// Directory containing the original/baseline files.
+    #[arg(long)]
+    old: PathBuf,
+    /// Directory containing the new/generated files.
+    #[arg(long)]
+    new: PathBuf,
+    /// Optional file extension filter (e.g., ".ts").
+    #[arg(long)]
+    extension: Option<String>,
+    /// Number of context lines to show around differences.
+    #[arg(long, default_value = "3")]
+    context: usize,
+}
 const DEFAULT_CONFIG_TEMPLATE: &str = r#"# InkGen Configuration File
 # By default, all resources from packages are generated
 
@@ -160,6 +183,8 @@ async fn main() -> Result<()> {
             ConfigSubcommand::Validate(validate_args) => config_validate(validate_args),
             ConfigSubcommand::Completions(completion_args) => config_completions(completion_args),
         },
+        Commands::Diff(args) => diff_command(args),
+        Commands::Doctor => doctor_command(),
     }
 }
 
@@ -356,4 +381,157 @@ fn config_completions(args: ConfigCompletionArgs) -> Result<()> {
 async fn build_cache(config: PackageCacheConfig) -> Result<PackageCache> {
     let cache = PackageCache::builder().config(config).build().await?;
     Ok(cache)
+}
+
+fn diff_command(args: DiffArgs) -> Result<()> {
+    let config = diff::DiffConfig::new(args.old, args.new).with_context_lines(args.context);
+
+    let config = match args.extension {
+        Some(ext) => config.with_extension_filter(ext),
+        None => config,
+    };
+
+    let result = diff::diff_directories(&config)?;
+
+    info!(
+        "Diff complete: {} added, {} removed, {} changed, {} identical, {} total changes",
+        result.files_added,
+        result.files_removed,
+        result.files_changed,
+        result.files_identical,
+        result.total_changes
+    );
+
+    Ok(())
+}
+
+fn doctor_command() -> Result<()> {
+    println!("InkGen Doctor - Environment Health Check\n");
+
+    let mut all_passed = true;
+
+    // Check 1: Rust version
+    print!("✓ Checking Rust toolchain...");
+    match std::process::Command::new("rustc")
+        .arg("--version")
+        .output()
+    {
+        Ok(output) => {
+            if output.status.success() {
+                let version = String::from_utf8_lossy(&output.stdout);
+                println!(" {}", version.trim());
+            } else {
+                println!(" FAILED");
+                all_passed = false;
+            }
+        }
+        Err(_) => {
+            println!(" FAILED - rustc not found");
+            println!("  → Install Rust from https://rustup.rs");
+            all_passed = false;
+        }
+    }
+
+    // Check 2: Cargo version
+    print!("✓ Checking Cargo...");
+    match std::process::Command::new("cargo")
+        .arg("--version")
+        .output()
+    {
+        Ok(output) => {
+            if output.status.success() {
+                let version = String::from_utf8_lossy(&output.stdout);
+                println!(" {}", version.trim());
+            } else {
+                println!(" FAILED");
+                all_passed = false;
+            }
+        }
+        Err(_) => {
+            println!(" FAILED - cargo not found");
+            all_passed = false;
+        }
+    }
+
+    // Check 3: just command
+    print!("✓ Checking 'just' command runner...");
+    match std::process::Command::new("just").arg("--version").output() {
+        Ok(output) => {
+            if output.status.success() {
+                let version = String::from_utf8_lossy(&output.stdout);
+                println!(" {}", version.trim());
+            } else {
+                println!(" FAILED");
+            }
+        }
+        Err(_) => {
+            println!(" NOT INSTALLED (optional)");
+            println!("  → Install from https://github.com/casey/just");
+        }
+    }
+
+    // Check 4: git
+    print!("✓ Checking Git...");
+    match std::process::Command::new("git").arg("--version").output() {
+        Ok(output) => {
+            if output.status.success() {
+                let version = String::from_utf8_lossy(&output.stdout);
+                println!(" {}", version.trim());
+            } else {
+                println!(" FAILED");
+                all_passed = false;
+            }
+        }
+        Err(_) => {
+            println!(" FAILED - git not found");
+            all_passed = false;
+        }
+    }
+
+    // Check 5: Cache directory
+    print!("✓ Checking cache directory...");
+    match ProjectContext::load(None) {
+        Ok(ctx) => {
+            let cache_dir = ctx.default_cache_dir();
+            println!(" {}", cache_dir.display());
+            match std::fs::metadata(&cache_dir) {
+                Ok(_) => println!("  → Readable"),
+                Err(_) => {
+                    println!("  → WARNING: Cache directory not accessible");
+                    // This is not fatal, we can create it
+                }
+            }
+        }
+        Err(_) => {
+            println!(" ERROR - Could not determine cache directory");
+            all_passed = false;
+        }
+    }
+
+    // Check 6: Workspace config
+    print!("✓ Checking for inkgen.toml...");
+    if std::path::Path::new("inkgen.toml").exists() {
+        println!(" Found");
+        match ProjectContext::load(None) {
+            Ok(ctx) => {
+                println!("  → {} packages configured", ctx.package_requests().len());
+            }
+            Err(e) => {
+                println!("  → WARNING: Config file invalid: {}", e);
+            }
+        }
+    } else {
+        println!(" Not found (create with 'inkgen config init')");
+    }
+
+    println!("\n{}", "=".repeat(50));
+    if all_passed {
+        println!("✓ All critical checks passed!");
+        println!("\nYour environment is ready for InkGen development.");
+        Ok(())
+    } else {
+        println!("✗ Some checks failed. Please review the messages above.");
+        println!("\nFor help, visit: https://github.com/octofhir/inkgen");
+        Err(anyhow::anyhow!("Environment validation failed"))
+    }
 }

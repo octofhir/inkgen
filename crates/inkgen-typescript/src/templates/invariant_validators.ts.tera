@@ -1,0 +1,45 @@
+/**
+ * Invariant validation functions
+ * Validates FHIRPath invariants on resources at runtime
+ */
+
+export interface InvariantValidationError {
+  invariantKey: string;
+  severity: 'error' | 'warning';
+  message: string;
+  expression: string;
+}
+
+{%- if invariant_validator %}
+{%- for func in invariant_validator.validation_functions %}
+
+/**
+ * Invariant {{ func.invariant_key }}
+{%- if func.human_description %}: {{ func.human_description }}{% endif %}
+ * Expression: {{ func.expression.expression }}
+ * Complexity: {{ func.expression.complexity }}
+ */
+export function {{ func.function_name }}({{ func.parameter_name }}: {{ func.parameter_type }}): InvariantValidationError | undefined {
+  // TODO: Implement FHIRPath evaluation for: {{ func.expression.expression }}
+  // This requires a full FHIRPath engine implementation
+  // Severity: {{ func.severity }}
+  return undefined;
+}
+{%- endfor %}
+
+/**
+ * Collect all invariant validation errors for a resource
+ */
+export function validateResourceInvariants(resource: any): InvariantValidationError[] {
+  const errors: InvariantValidationError[] = [];
+
+{%- for func in invariant_validator.validation_functions %}
+  const {{ func.invariant_key | sanitize_id }}_error = {{ func.function_name }}(resource);
+  if ({{ func.invariant_key | sanitize_id }}_error) {
+    errors.push({{ func.invariant_key | sanitize_id }}_error);
+  }
+{%- endfor %}
+
+  return errors;
+}
+{%- endif %}

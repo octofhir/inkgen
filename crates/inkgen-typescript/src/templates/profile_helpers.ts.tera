@@ -1,0 +1,86 @@
+{%- if profile_helpers %}
+/**
+ * Profile helper functions for {{ profile_helpers.profile_name }}
+ * Generated from: {{ profile_helpers.attach_function.profile_url }}
+ */
+
+{%- if profile_helpers.attach_function.description %}
+/**
+ * {{ profile_helpers.attach_function.description }}
+ */
+{%- endif %}
+export function {{ profile_helpers.attach_function.function_name }}<T extends {{ profile_helpers.attach_function.resource_type }}>(
+  resource: T,
+  {{ profile_helpers.attach_function.parameter_name }}: {{ profile_helpers.attach_function.profile_name }}
+): T & { meta?: { profile?: string[] } } {
+  if (!resource.meta) {
+    resource.meta = {};
+  }
+  if (!resource.meta.profile) {
+    resource.meta.profile = [];
+  }
+  if (!resource.meta.profile.includes('{{ profile_helpers.attach_function.profile_url }}')) {
+    resource.meta.profile.push('{{ profile_helpers.attach_function.profile_url }}');
+  }
+  return resource as T & { meta?: { profile?: string[] } };
+}
+
+{%- if profile_helpers.extract_function.description %}
+/**
+ * {{ profile_helpers.extract_function.description }}
+ */
+{%- endif %}
+export function {{ profile_helpers.extract_function.function_name }}<T extends {{ profile_helpers.extract_function.resource_type }}>(
+  resource: T
+): {{ profile_helpers.extract_function.return_type }} | undefined {
+  if (resource.meta?.profile?.includes('{{ profile_helpers.extract_function.profile_url }}')) {
+    return resource as unknown as {{ profile_helpers.extract_function.return_type }};
+  }
+  return undefined;
+}
+
+{%- if profile_helpers.guard_function.description %}
+/**
+ * {{ profile_helpers.guard_function.description }}
+ */
+{%- endif %}
+export function {{ profile_helpers.guard_function.function_name }}<T extends {{ profile_helpers.guard_function.input_type }}>(
+  resource: T
+): resource is T & {{ profile_helpers.guard_function.narrowed_type }} {
+  return resource.meta?.profile?.includes('{{ profile_helpers.guard_function.profile_url }}') ?? false;
+}
+
+{%- if profile_helpers.validation_function.description %}
+/**
+ * {{ profile_helpers.validation_function.description }}
+ */
+{%- endif %}
+export interface ProfileValidationError {
+  key: string;
+  message: string;
+  elementPath: string;
+  severity: 'error' | 'warning';
+}
+
+export function {{ profile_helpers.validation_function.function_name }}(
+  resource: {{ profile_helpers.validation_function.parameter_type }}
+): ProfileValidationError[] {
+  const errors: ProfileValidationError[] = [];
+
+{%- for constraint in profile_helpers.validation_function.constraints %}
+  // Constraint: {{ constraint.key }} - {{ constraint.description | default(value="") }}
+{%- if constraint.is_must_support %}
+  if (resource === undefined || resource === null) {
+    errors.push({
+      key: '{{ constraint.key }}',
+      message: '{{ constraint.description | default(value="") }}',
+      elementPath: '{{ constraint.element_path }}',
+      severity: 'warning',
+    });
+  }
+{%- endif %}
+{%- endfor %}
+
+  return errors;
+}
+{%- endif %}

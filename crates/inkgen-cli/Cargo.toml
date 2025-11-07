@@ -13,8 +13,14 @@ tokio = { workspace = true }
 inkgen-core = { path = "../inkgen-core" }
 inkgen-typescript = { path = "../inkgen-typescript" }
 clap_complete = "4"
+similar = "2.3"
 
 [dev-dependencies]
 assert_cmd = "2.0"
 predicates = "3.1"
 tempfile = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "codegen"
+harness = false

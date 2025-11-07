@@ -1,0 +1,44 @@
+# Release configuration for InkGen workspace
+# This file controls how crates are released to crates.io
+# See: https://github.com/MarcoIeni/release-plz
+
+[changelog]
+# Use git-cliff for changelog generation
+enable = true
+changelog_file = "CHANGELOG.md"
+
+[git]
+# Configure git-based release behavior
+enable-sign = false  # Optional: set to true to require signed commits
+
+# Workspace-level release settings
+# Each crate can be individually configured below
+
+[[packages]]
+name = "inkgen-cli"
+publish = true
+changelog = true
+
+[[packages]]
+name = "inkgen-core"
+publish = false
+changelog = true
+git-tag = "core-{version}"
+
+[[packages]]
+name = "inkgen-typescript"
+publish = false
+changelog = true
+git-tag = "typescript-{version}"
+
+[[packages]]
+name = "inkgen-rust"
+publish = false
+changelog = true
+git-tag = "rust-{version}"
+
+[[packages]]
+name = "inkgen-testing"
+publish = false
+changelog = true
+git-tag = "testing-{version}"
