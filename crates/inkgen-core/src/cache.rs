@@ -250,7 +250,14 @@ impl PackageCache {
                     guard.insert(id.clone(), descriptor);
                 }
             }
-            Ok(guard.values().cloned().collect())
+            let mut descriptors: Vec<_> = guard.values().cloned().collect();
+            // Sort by package ID for deterministic ordering
+            descriptors.sort_by(|a, b| {
+                a.id.name
+                    .cmp(&b.id.name)
+                    .then(a.id.version.cmp(&b.id.version))
+            });
+            Ok(descriptors)
         }
     }
 

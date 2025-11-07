@@ -7,7 +7,6 @@ src = "src"
 [output.html]
 default-theme = "light"
 preferred-dark-theme = "coal"
-theme = "InkGen"
 mathjax-support = false
 edit-url-template = "https://github.com/octofhir/inkgen/edit/main/docs/book/{path}"
 

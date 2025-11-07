@@ -129,7 +129,7 @@ fn analyze_extension_structure(ext_def: &ExtensionDefinition) -> (bool, Option<S
 
     // For simple extensions, find the value element type
     if let Some(value_elem) = find_value_element(ext_def) {
-        let type_name = element_type_to_typescript(&value_elem);
+        let type_name = element_type_to_typescript(value_elem);
         return (false, Some(type_name));
     }
 
@@ -200,11 +200,11 @@ fn element_type_to_typescript(element: &ElementDefinition) -> String {
 /// Convert an extension URL to a TypeScript type name.
 pub fn extension_url_to_type_name(url: &str) -> String {
     // Extract the last component of the URL path
-    let last_component = url.split('/').last().unwrap_or("Extension");
+    let last_component = url.split('/').next_back().unwrap_or("Extension");
 
     // Convert kebab-case or snake_case to PascalCase
     last_component
-        .split(|c: char| c == '-' || c == '_')
+        .split(['-', '_'])
         .map(|word| {
             let mut chars = word.chars();
             match chars.next() {

@@ -226,7 +226,7 @@ pub fn collect_invariant_validators(resource: &ResourceDefinition) -> InvariantV
                     if matches!(complexity, ExpressionComplexity::Complex) {
                         format!("Expression too complex: {}", complexity.to_string())
                     } else {
-                        format!("Expression not evaluable at runtime")
+                        "Expression not evaluable at runtime".to_string()
                     }
                 };
                 unevaluable_invariants.push((invariant.key.clone(), reason));
@@ -275,7 +275,7 @@ pub fn generate_validation_condition(expr: &InvariantExpression) -> Option<Strin
 /// Convert a string to PascalCase for function/type names.
 fn to_pascal_case(input: &str) -> String {
     input
-        .split(|c: char| c == '_' || c == '-' || c == '.')
+        .split(['_', '-', '.'])
         .map(|word| {
             let mut chars = word.chars();
             match chars.next() {

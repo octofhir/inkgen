@@ -121,7 +121,7 @@ pub fn generate_profile_helpers(profile: &ResourceDefinition) -> Option<ProfileH
     let base_definition = profile.lineage.base_definition.as_ref()?;
     let base_resource_type = base_definition
         .split('/')
-        .last()
+        .next_back()
         .unwrap_or("Resource")
         .to_string();
 
@@ -221,11 +221,11 @@ fn collect_constraints(profile: &ResourceDefinition) -> Vec<ProfileConstraint> {
 ///   -> `CustomProfile`
 pub fn profile_url_to_name(url: &str) -> String {
     // Extract the last component (after the last /)
-    let last_component = url.split('/').last().unwrap_or("Profile");
+    let last_component = url.split('/').next_back().unwrap_or("Profile");
 
     // Convert kebab-case or snake_case to PascalCase
     let pascal_parts: Vec<String> = last_component
-        .split(|c: char| c == '-' || c == '_')
+        .split(['-', '_'])
         .map(|word| {
             if word.is_empty() {
                 String::new()

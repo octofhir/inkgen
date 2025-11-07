@@ -9,6 +9,7 @@ use inkgen_core::ir::ResourceDefinition;
 use crate::config::RustGeneratorConfig;
 
 /// Generate a Rust struct for a FHIR structure definition
+#[allow(dead_code)]
 pub fn generate_structure(
     config: &RustGeneratorConfig,
     definition: &ResourceDefinition,
@@ -66,6 +67,7 @@ pub fn generate_module_index(config: &RustGeneratorConfig, structure_count: usiz
 }
 
 /// Generate a basic Rust struct definition from a FHIR structure
+#[allow(dead_code)]
 fn generate_struct_definition(definition: &ResourceDefinition) -> String {
     let mut code = String::new();
 

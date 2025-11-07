@@ -98,40 +98,39 @@ pub fn extract_terminology_helpers(resource: &ResourceDefinition) -> Terminology
 
     // Scan all elements for bindings
     for element in &resource.elements {
-        if let Some(binding) = &element.binding {
-            if let Some(vs_url) = &binding.value_set {
-                let is_extensible = matches!(binding.strength, BindingStrength::Extensible);
+        if let Some(binding) = &element.binding
+            && let Some(vs_url) = &binding.value_set
+        {
+            let is_extensible = matches!(binding.strength, BindingStrength::Extensible);
 
-                let type_name = valueset_url_to_type_name(vs_url);
+            let type_name = valueset_url_to_type_name(vs_url);
 
-                value_set_bindings.insert(
-                    vs_url.clone(),
-                    ValueSetBindingInfo {
-                        value_set_url: vs_url.clone(),
-                        type_name,
-                        strength: binding.strength.clone(),
-                        extensible: is_extensible,
-                        description: binding.description.clone(),
+            value_set_bindings.insert(
+                vs_url.clone(),
+                ValueSetBindingInfo {
+                    value_set_url: vs_url.clone(),
+                    type_name,
+                    strength: binding.strength,
+                    extensible: is_extensible,
+                    description: binding.description.clone(),
+                },
+            );
+
+            // Extract code system from additional field if available
+            if let Some(cs_value) = binding.additional.get("codesystem")
+                && let Some(cs_url) = cs_value.as_str()
+                && !code_systems.contains_key(cs_url)
+            {
+                let cs_type_name = code_system_url_to_type_name(cs_url);
+                code_systems.insert(
+                    cs_url.to_string(),
+                    CodeSystemDefinition {
+                        url: cs_url.to_string(),
+                        type_name: cs_type_name,
+                        constants: Vec::new(), // Will be populated from codes
+                        description: None,
                     },
                 );
-
-                // Extract code system from additional field if available
-                if let Some(cs_value) = binding.additional.get("codesystem") {
-                    if let Some(cs_url) = cs_value.as_str() {
-                        if !code_systems.contains_key(cs_url) {
-                            let cs_type_name = code_system_url_to_type_name(cs_url);
-                            code_systems.insert(
-                                cs_url.to_string(),
-                                CodeSystemDefinition {
-                                    url: cs_url.to_string(),
-                                    type_name: cs_type_name,
-                                    constants: Vec::new(), // Will be populated from codes
-                                    description: None,
-                                },
-                            );
-                        }
-                    }
-                }
             }
         }
     }
@@ -170,7 +169,7 @@ pub fn extract_terminology_helpers(resource: &ResourceDefinition) -> Terminology
 ///   -> `MyCodes`
 pub fn valueset_url_to_type_name(url: &str) -> String {
     // Extract the last component after ValueSet/ or final /
-    let last_component = url.split('/').last().unwrap_or("ValueSet");
+    let last_component = url.split('/').next_back().unwrap_or("ValueSet");
 
     // Convert kebab-case to PascalCase
     last_component
@@ -197,7 +196,7 @@ pub fn valueset_url_to_type_name(url: &str) -> String {
 /// - `http://example.org/codes/status`
 ///   -> `Status`
 pub fn code_system_url_to_type_name(url: &str) -> String {
-    let last_component = url.split('/').last().unwrap_or("CodeSystem");
+    let last_component = url.split('/').next_back().unwrap_or("CodeSystem");
 
     // Convert kebab-case to PascalCase, handling common prefixes
     last_component
@@ -226,7 +225,7 @@ fn extract_code_system_from_valueset(valueset_url: &str) -> Option<String> {
     }
 
     // Try replacing valueset name with common code system naming patterns
-    let last_part = valueset_url.split('/').last()?;
+    let last_part = valueset_url.split('/').next_back()?;
     if last_part.starts_with("valueset-") {
         let code_part = last_part.strip_prefix("valueset-")?;
         let base = valueset_url.rsplit_once('/')?;
