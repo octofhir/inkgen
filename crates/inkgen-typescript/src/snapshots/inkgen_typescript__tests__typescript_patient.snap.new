@@ -3,12 +3,12 @@ source: crates/inkgen-typescript/src/lib.rs
 assertion_line: 1062
 expression: patient_file
 ---
-import type { Address } from "./address";
 import type { Attachment } from "./attachment";
 import type { CodeableConcept } from "./codeableconcept";
-import type { Extension } from "./extension";
+import type { ContactPoint } from "./contactpoint";
 import type { HumanName } from "./humanname";
 import type { Identifier } from "./identifier";
+import type { Narrative } from "./narrative";
 import type { Period } from "./period";
 
 /**
