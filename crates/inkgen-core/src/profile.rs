@@ -439,17 +439,17 @@ fn build_element_tree(mut flat_elements: Vec<ElementDefinition>) -> Vec<ElementD
 
     // Move children to their parents (from deepest to shallowest)
     for (path, _depth) in paths_by_depth {
-        if let Some(element) = element_map.get(&path) {
-            if let Some(parent_path) = element.parent_path.clone() {
-                // Remove child from map (shift_remove maintains order)
-                if let Some(child) = element_map.shift_remove(&path) {
-                    // Add to parent's children
-                    if let Some(parent) = element_map.get_mut(&parent_path) {
-                        parent.children.push(child);
-                    } else {
-                        // Parent not in map (shouldn't happen), put child back
-                        element_map.insert(path, child);
-                    }
+        if let Some(element) = element_map.get(&path)
+            && let Some(parent_path) = element.parent_path.clone()
+        {
+            // Remove child from map (shift_remove maintains order)
+            if let Some(child) = element_map.shift_remove(&path) {
+                // Add to parent's children
+                if let Some(parent) = element_map.get_mut(&parent_path) {
+                    parent.children.push(child);
+                } else {
+                    // Parent not in map (shouldn't happen), put child back
+                    element_map.insert(path, child);
                 }
             }
         }

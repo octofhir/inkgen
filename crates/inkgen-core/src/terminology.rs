@@ -118,10 +118,10 @@ pub fn extract_codes_from_valueset(
     }
 
     // If no codes from expansion, try compose
-    if codes.is_empty() {
-        if let Some(compose) = value_set_json.get("compose") {
-            extract_from_compose(compose, &mut codes, &mut displays, max_codes)?;
-        }
+    if codes.is_empty()
+        && let Some(compose) = value_set_json.get("compose")
+    {
+        extract_from_compose(compose, &mut codes, &mut displays, max_codes)?;
     }
 
     Ok(ResolvedValueSet {
@@ -142,10 +142,10 @@ fn extract_from_expansion(
 ) -> CoreResult<()> {
     if let Some(contains) = expansion.get("contains").and_then(Value::as_array) {
         for item in contains {
-            if let Some(max) = max_codes {
-                if codes.len() >= max {
-                    break;
-                }
+            if let Some(max) = max_codes
+                && codes.len() >= max
+            {
+                break;
             }
 
             if let Some(code) = item.get("code").and_then(Value::as_str) {
@@ -171,19 +171,19 @@ fn extract_from_compose(
 ) -> CoreResult<()> {
     if let Some(include) = compose.get("include").and_then(Value::as_array) {
         for include_item in include {
-            if let Some(max) = max_codes {
-                if codes.len() >= max {
-                    break;
-                }
+            if let Some(max) = max_codes
+                && codes.len() >= max
+            {
+                break;
             }
 
             // Try to get concepts from include item
             if let Some(concepts) = include_item.get("concept").and_then(Value::as_array) {
                 for concept in concepts {
-                    if let Some(max) = max_codes {
-                        if codes.len() >= max {
-                            break;
-                        }
+                    if let Some(max) = max_codes
+                        && codes.len() >= max
+                    {
+                        break;
                     }
 
                     if let Some(code) = concept.get("code").and_then(Value::as_str) {

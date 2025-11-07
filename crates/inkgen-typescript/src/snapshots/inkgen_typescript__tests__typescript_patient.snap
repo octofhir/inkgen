@@ -1,14 +1,17 @@
 ---
 source: crates/inkgen-typescript/src/lib.rs
-assertion_line: 1009
 expression: patient_file
 ---
-import type { CodeableConcept } from "./codeableconcept";
 import type { Address } from "./address";
-import type { HumanName } from "./humanname";
-import type { Period } from "./period";
 import type { Attachment } from "./attachment";
+import type { CodeableConcept } from "./codeableconcept";
+import type { ContactPoint } from "./contactpoint";
+import type { Extension } from "./extension";
+import type { HumanName } from "./humanname";
+import type { Identifier } from "./identifier";
+import type { Meta } from "./meta";
 import type { Narrative } from "./narrative";
+import type { Period } from "./period";
 
 /**
  * A language which may be used to communicate with the patient about his or her health

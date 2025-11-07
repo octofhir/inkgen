@@ -38,6 +38,7 @@ mod config {
     }
 
     impl GenerationMode {
+        #[allow(clippy::should_implement_trait)]
         pub fn from_str(value: &str) -> Self {
             match value.to_lowercase().as_str() {
                 "class" => Self::Class,
@@ -55,6 +56,7 @@ mod config {
     }
 
     impl NamingConvention {
+        #[allow(clippy::should_implement_trait)]
         pub fn from_str(value: &str) -> Self {
             match value.to_lowercase().as_str() {
                 "camel" | "camelcase" => Self::CamelCase,
@@ -71,6 +73,7 @@ mod config {
     }
 
     impl OutputStructure {
+        #[allow(clippy::should_implement_trait)]
         pub fn from_str(value: &str) -> Self {
             match value.to_lowercase().as_str() {
                 "by_package" | "package" | "packages" | "by-package" => Self::ByPackage,
@@ -490,10 +493,12 @@ where
         let filter = StructureFilter::from_config(provider_config);
         let summaries = service.list_structures(&filter).await?;
 
-        let relevant: Vec<_> = summaries
+        let mut relevant: Vec<_> = summaries
             .into_iter()
             .filter(|summary| summary.package == descriptor.id)
             .collect();
+        // Sort by canonical URL for deterministic processing order
+        relevant.sort_by(|a, b| a.canonical_url.cmp(&b.canonical_url));
 
         if relevant.is_empty() {
             warn!(
@@ -583,20 +588,19 @@ where
                 // Generate profile
                 if let Some(profile_info) =
                     profiles::ProfileInfo::from_resource_definition(&definition)
+                    && profile_info.has_constraints()
                 {
-                    if profile_info.has_constraints() {
-                        let ts_code = profile_info.generate_typescript();
-                        let profile_file_stem = format!("profile-{}", file_stem);
-                        let profile_file_name = format!("{}.ts", profile_file_stem);
-                        let profile_type_name = profile_info.type_name.clone();
-                        profiles.push(ProfileOutput {
-                            type_name: profile_info.type_name,
-                            file_name: profile_file_name,
-                            file_stem: profile_file_stem,
-                            typescript_code: ts_code,
-                        });
-                        info!("Generated profile: {}", profile_type_name);
-                    }
+                    let ts_code = profile_info.generate_typescript();
+                    let profile_file_stem = format!("profile-{}", file_stem);
+                    let profile_file_name = format!("{}.ts", profile_file_stem);
+                    let profile_type_name = profile_info.type_name.clone();
+                    profiles.push(ProfileOutput {
+                        type_name: profile_info.type_name,
+                        file_name: profile_file_name,
+                        file_stem: profile_file_stem,
+                        typescript_code: ts_code,
+                    });
+                    info!("Generated profile: {}", profile_type_name);
                 }
             } else {
                 // Regular structure
@@ -736,13 +740,15 @@ fn build_render_structure(
         fields.push(field);
     }
 
-    let imports = imports_map
+    let mut imports: Vec<RenderImport> = imports_map
         .into_iter()
         .map(|(type_name, stem)| RenderImport {
             type_name,
             path: stem,
         })
         .collect();
+    // Sort imports alphabetically by type_name for deterministic output
+    imports.sort_by(|a, b| a.type_name.cmp(&b.type_name));
 
     RenderStructure {
         type_name: type_name.to_string(),
@@ -770,13 +776,13 @@ fn top_level_elements(definition: &ResourceDefinition) -> Vec<&ElementDefinition
         .find(|elem| elem.path == definition.id);
 
     // If we have a tree structure with children, return the root's children (sorted for determinism)
-    if let Some(root) = root {
-        if !root.children.is_empty() {
-            let mut children: Vec<_> = root.children.iter().collect();
-            // Sort by path for deterministic ordering
-            children.sort_by(|a, b| a.path.cmp(&b.path));
-            return children;
-        }
+    if let Some(root) = root
+        && !root.children.is_empty()
+    {
+        let mut children: Vec<_> = root.children.iter().collect();
+        // Sort by path for deterministic ordering
+        children.sort_by(|a, b| a.path.cmp(&b.path));
+        return children;
     }
 
     // Fallback to flat structure: find elements at depth 1 (sorted for determinism)
@@ -802,7 +808,7 @@ fn map_field_with_nested_context(
     let raw_name = element
         .path
         .split('.')
-        .last()
+        .next_back()
         .unwrap_or(&element.path)
         .replace("[x]", "");
 
@@ -832,10 +838,10 @@ fn map_field_with_nested_context(
                 TypeRef::Named(value) => {
                     let type_name = naming::pascal_case(value);
                     type_exprs.push(type_name.clone());
-                    if let Some(stem) = name_to_stem.get(&type_name) {
-                        if type_name != current_type {
-                            imports.entry(type_name.clone()).or_insert(stem.clone());
-                        }
+                    if let Some(stem) = name_to_stem.get(&type_name)
+                        && type_name != current_type
+                    {
+                        imports.entry(type_name.clone()).or_insert(stem.clone());
                     }
                 }
             }
@@ -895,21 +901,21 @@ fn resolve_element_type(element_type: &ElementType) -> Vec<TypeRef> {
         return vec![TypeRef::Primitive(mapped)];
     }
 
-    if element_type.code.eq_ignore_ascii_case("Reference") {
-        if !element_type.target_profiles.is_empty() {
-            return element_type
-                .target_profiles
-                .iter()
-                .map(|profile| {
-                    let name = profile
-                        .split('/')
-                        .last()
-                        .map(str::to_string)
-                        .unwrap_or_else(|| profile.to_string());
-                    TypeRef::Named(name)
-                })
-                .collect();
-        }
+    if element_type.code.eq_ignore_ascii_case("Reference")
+        && !element_type.target_profiles.is_empty()
+    {
+        return element_type
+            .target_profiles
+            .iter()
+            .map(|profile| {
+                let name = profile
+                    .split('/')
+                    .next_back()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| profile.to_string());
+                TypeRef::Named(name)
+            })
+            .collect();
     }
 
     vec![TypeRef::Named(element_type.code.clone())]

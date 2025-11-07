@@ -201,22 +201,22 @@ fn extract_constraints(
         }
 
         // Extract fixed values
-        if let Some(fixed_value) = &element.fixed {
-            if let Some(ts_value) = json_to_typescript_literal(fixed_value) {
-                let field_name = element
-                    .path
-                    .split('.')
-                    .last()
-                    .unwrap_or(&element.path)
-                    .to_string();
+        if let Some(fixed_value) = &element.fixed
+            && let Some(ts_value) = json_to_typescript_literal(fixed_value)
+        {
+            let field_name = element
+                .path
+                .split('.')
+                .next_back()
+                .unwrap_or(&element.path)
+                .to_string();
 
-                fixed.push(FixedElement {
-                    path: element.path.clone(),
-                    field_name,
-                    fixed_value: ts_value.clone(),
-                    value_type: infer_type_from_value(&ts_value),
-                });
-            }
+            fixed.push(FixedElement {
+                path: element.path.clone(),
+                field_name,
+                fixed_value: ts_value.clone(),
+                value_type: infer_type_from_value(&ts_value),
+            });
         }
 
         // Extract tightened cardinality (min > 0 makes optional required)
@@ -224,7 +224,7 @@ fn extract_constraints(
             let field_name = element
                 .path
                 .split('.')
-                .last()
+                .next_back()
                 .unwrap_or(&element.path)
                 .to_string();
 
@@ -305,7 +305,7 @@ pub fn profile_url_to_type_name(url: &str) -> String {
     let segment = url
         .trim_end_matches('/')
         .split('/')
-        .last()
+        .next_back()
         .unwrap_or("Profile");
 
     // Convert kebab-case or snake_case to PascalCase

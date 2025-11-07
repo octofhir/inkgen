@@ -169,7 +169,7 @@ pub fn generate_union_type(
     let discriminator_field = pattern
         .discriminator
         .as_ref()
-        .and_then(|d| d.path.split('.').last())
+        .and_then(|d| d.path.split('.').next_back())
         .unwrap_or("value")
         .to_string();
 
@@ -249,7 +249,7 @@ pub fn generate_slice_type_guard(
 /// Convert a slice name to PascalCase for type names.
 fn to_pascal_case(input: &str) -> String {
     input
-        .split(|c: char| c == '_' || c == '-')
+        .split(&['_', '-'][..])
         .map(|word| {
             let mut chars = word.chars();
             match chars.next() {

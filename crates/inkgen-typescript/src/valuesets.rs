@@ -191,7 +191,7 @@ pub fn url_to_type_name(url: &str) -> String {
     let segment = url
         .trim_end_matches('/')
         .split('/')
-        .last()
+        .next_back()
         .unwrap_or("ValueSet");
 
     // Convert kebab-case or snake_case to PascalCase
