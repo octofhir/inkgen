@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use indexmap::IndexMap;
 use inkgen_core::ir::{Derivation, ElementDefinition, ElementMax, ElementType, ResourceDefinition};
 use inkgen_core::{
-    PackageDescriptor, PackageId, StructureDefinitionProvider, StructureFilter, StructureKind,
-    StructureProviderConfig, StructureSummary, TypescriptLanguageConfig,
+    LanguageGenerator, PackageDescriptor, PackageId, StructureDefinitionProvider, StructureFilter,
+    StructureKind, StructureProviderConfig, StructureSummary, TypescriptLanguageConfig,
 };
 use once_cell::sync::Lazy;
 use serde::Serialize;
@@ -20,9 +20,11 @@ pub use config::{GenerationMode, NamingConvention, OutputStructure, TypescriptGe
 pub mod extensions;
 pub mod invariants;
 pub mod nested;
+pub mod overlays;
 pub mod profile_helpers;
 pub mod profiles;
 pub mod slices;
+pub mod terminology_helpers;
 pub mod valuesets;
 
 mod config {
@@ -139,9 +141,7 @@ mod naming {
             .map(|token| {
                 let mut chars = token.chars();
                 match chars.next() {
-                    Some(first) => {
-                        first.to_ascii_uppercase().to_string() + chars.as_str()
-                    }
+                    Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
                     None => String::new(),
                 }
             })
@@ -162,9 +162,7 @@ mod naming {
                 } else {
                     let mut chars = token.chars();
                     match chars.next() {
-                        Some(first) => {
-                            first.to_ascii_uppercase().to_string() + chars.as_str()
-                        }
+                        Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
                         None => String::new(),
                     }
                 }
@@ -203,13 +201,19 @@ mod naming {
 
 mod templates {
     use super::*;
-    use tera::Value;
     use std::collections::HashMap;
+    use std::sync::Mutex;
+    use tera::Value;
 
-    static TERA: Lazy<Tera> = Lazy::new(|| {
+    /// Global Tera instance used for rendering templates.
+    /// This is initialized with built-in templates and can optionally be customized with overlays.
+    static TERA: Lazy<Mutex<Tera>> = Lazy::new(|| Mutex::new(create_default_tera()));
+
+    /// Create a Tera instance with all built-in templates and filters
+    fn create_default_tera() -> Tera {
         let mut tera = Tera::default();
 
-        // Register templates
+        // Register built-in templates
         tera.add_raw_template(
             "structure.ts.tera",
             include_str!("templates/structure.ts.tera"),
@@ -217,6 +221,31 @@ mod templates {
         .expect("structure template");
         tera.add_raw_template("index.ts.tera", include_str!("templates/index.ts.tera"))
             .expect("index template");
+        tera.add_raw_template(
+            "extensions.ts.tera",
+            include_str!("templates/extensions.ts.tera"),
+        )
+        .expect("extensions template");
+        tera.add_raw_template(
+            "profile_helpers.ts.tera",
+            include_str!("templates/profile_helpers.ts.tera"),
+        )
+        .expect("profile_helpers template");
+        tera.add_raw_template(
+            "terminology_helpers.ts.tera",
+            include_str!("templates/terminology_helpers.ts.tera"),
+        )
+        .expect("terminology_helpers template");
+        tera.add_raw_template(
+            "invariant_validators.ts.tera",
+            include_str!("templates/invariant_validators.ts.tera"),
+        )
+        .expect("invariant_validators template");
+        tera.add_raw_template(
+            "discriminator_unions.ts.tera",
+            include_str!("templates/discriminator_unions.ts.tera"),
+        )
+        .expect("discriminator_unions template");
 
         // Register custom filters
         tera.register_filter("pascal_case", filter_pascal_case);
@@ -225,10 +254,21 @@ mod templates {
         tera.register_filter("wrap_doc", filter_wrap_doc);
 
         tera
-    });
+    }
 
+    /// Initialize template system with optional overlays
+    /// This should be called once during generator initialization if overlays are configured
+    #[allow(dead_code)]
+    pub(crate) fn initialize_with_overlays(config: &overlays::OverlayConfig) -> Result<()> {
+        let mut tera = TERA.lock().unwrap();
+        overlays::apply_overlays(&mut tera, config)?;
+        Ok(())
+    }
+
+    /// Render a template with the given context
     pub fn render(template: &str, context: &TeraContext) -> Result<String> {
-        TERA.render(template, context)
+        let tera = TERA.lock().unwrap();
+        tera.render(template, context)
             .map_err(|err| anyhow::anyhow!("failed to render template {template}: {err:#?}"))
     }
 
@@ -256,10 +296,7 @@ mod templates {
     fn filter_wrap_doc(value: &Value, args: &HashMap<String, Value>) -> tera::Result<Value> {
         match value.as_str() {
             Some(s) => {
-                let width = args
-                    .get("width")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(80) as usize;
+                let width = args.get("width").and_then(|v| v.as_u64()).unwrap_or(80) as usize;
                 Ok(Value::String(wrap_documentation(s, width)))
             }
             None => Err(tera::Error::msg("wrap_doc filter requires a string")),
@@ -269,13 +306,66 @@ mod templates {
     /// Sanitize TypeScript identifiers by escaping reserved keywords
     pub(crate) fn sanitize_typescript_identifier(s: &str) -> String {
         const RESERVED: &[&str] = &[
-            "break", "case", "catch", "class", "const", "continue", "debugger", "default",
-            "delete", "do", "else", "enum", "export", "extends", "false", "finally", "for",
-            "function", "if", "import", "in", "instanceof", "new", "null", "return", "super",
-            "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with",
-            "as", "implements", "interface", "let", "package", "private", "protected", "public",
-            "static", "yield", "any", "boolean", "constructor", "declare", "get", "module",
-            "require", "number", "set", "string", "symbol", "type", "from", "of",
+            "break",
+            "case",
+            "catch",
+            "class",
+            "const",
+            "continue",
+            "debugger",
+            "default",
+            "delete",
+            "do",
+            "else",
+            "enum",
+            "export",
+            "extends",
+            "false",
+            "finally",
+            "for",
+            "function",
+            "if",
+            "import",
+            "in",
+            "instanceof",
+            "new",
+            "null",
+            "return",
+            "super",
+            "switch",
+            "this",
+            "throw",
+            "true",
+            "try",
+            "typeof",
+            "var",
+            "void",
+            "while",
+            "with",
+            "as",
+            "implements",
+            "interface",
+            "let",
+            "package",
+            "private",
+            "protected",
+            "public",
+            "static",
+            "yield",
+            "any",
+            "boolean",
+            "constructor",
+            "declare",
+            "get",
+            "module",
+            "require",
+            "number",
+            "set",
+            "string",
+            "symbol",
+            "type",
+            "from",
+            "of",
         ];
 
         if RESERVED.contains(&s) {
@@ -369,19 +459,6 @@ struct PackageOutput {
     structures: Vec<RenderStructure>,
     valuesets: Vec<ValueSetOutput>,
     profiles: Vec<ProfileOutput>,
-}
-
-#[async_trait]
-pub trait LanguageGenerator<S>
-where
-    S: StructureDefinitionProvider + Sync + Send,
-{
-    async fn generate(
-        &self,
-        service: &S,
-        descriptor: &PackageDescriptor,
-        provider_config: &StructureProviderConfig,
-    ) -> Result<()>;
 }
 
 #[derive(Debug, Clone)]
@@ -495,18 +572,18 @@ where
                 .unwrap_or_else(|| file_stem(&definition.id));
 
             // Check if this is a profile (constraint derivation with a different base)
-            let is_profile = matches!(
-                definition.lineage.derivation,
-                Some(Derivation::Constraint)
-            ) && definition
-                .lineage
-                .base_id
-                .as_ref()
-                .is_some_and(|base_id| base_id != &definition.id);
+            let is_profile = matches!(definition.lineage.derivation, Some(Derivation::Constraint))
+                && definition
+                    .lineage
+                    .base_id
+                    .as_ref()
+                    .is_some_and(|base_id| base_id != &definition.id);
 
             if is_profile {
                 // Generate profile
-                if let Some(profile_info) = profiles::ProfileInfo::from_resource_definition(&definition) {
+                if let Some(profile_info) =
+                    profiles::ProfileInfo::from_resource_definition(&definition)
+                {
                     if profile_info.has_constraints() {
                         let ts_code = profile_info.generate_typescript();
                         let profile_file_stem = format!("profile-{}", file_stem);
@@ -953,9 +1030,11 @@ mod tests {
         // Collect all generated files
         let generated_files: Vec<_> = fs::read_dir(&package_dir)
             .ok()
-            .map(|entries| entries
-                .filter_map(|e| e.ok().map(|e| e.file_name()))
-                .collect::<Vec<_>>())
+            .map(|entries| {
+                entries
+                    .filter_map(|e| e.ok().map(|e| e.file_name()))
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default();
 
         // If patient.ts wasn't generated, skip the snapshot tests but verify generation worked
@@ -966,7 +1045,9 @@ mod tests {
                 !generated_files.is_empty(),
                 "No TypeScript files were generated at all"
             );
-            eprintln!("Warning: patient.ts not found in generated files (known intermittent issue)");
+            eprintln!(
+                "Warning: patient.ts not found in generated files (known intermittent issue)"
+            );
             eprintln!("Generated files: {:?}", generated_files);
             return;
         }
@@ -1023,8 +1104,7 @@ mod tests {
         );
 
         // Verify index.ts exists
-        let index_file = fs::read_to_string(package_dir.join("index.ts"))
-            .expect("read index.ts");
+        let index_file = fs::read_to_string(package_dir.join("index.ts")).expect("read index.ts");
 
         assert!(
             index_file.contains("export * from"),
@@ -1037,8 +1117,8 @@ mod tests {
             .find(|f| f.to_string_lossy().ends_with(".ts"))
             .expect("at least one .ts file generated");
 
-        let file_content = fs::read_to_string(package_dir.join(any_ts_file))
-            .expect("read generated file");
+        let file_content =
+            fs::read_to_string(package_dir.join(any_ts_file)).expect("read generated file");
 
         // Verify basic TypeScript structure: should have either interface or type declaration
         assert!(
@@ -1047,6 +1127,76 @@ mod tests {
                 || file_content.contains("type ")
                 || file_content.contains("function "),
             "Generated file should contain TypeScript exports or declarations"
+        );
+    }
+
+    #[test]
+    fn test_extensions_template_renders() {
+        use templates::*;
+        use tera::Context as TeraContext;
+
+        let mut context = TeraContext::new();
+        // Empty extensions should render without error
+        context.insert(
+            "extensions",
+            &std::collections::HashMap::<String, String>::new(),
+        );
+
+        let result = render("extensions.ts.tera", &context);
+        assert!(result.is_ok(), "extensions template should render");
+    }
+
+    #[test]
+    fn test_profile_helpers_template_renders() {
+        use templates::*;
+        use tera::Context as TeraContext;
+
+        let mut context = TeraContext::new();
+        context.insert("profile_helpers", &serde_json::json!(null));
+
+        let result = render("profile_helpers.ts.tera", &context);
+        assert!(result.is_ok(), "profile_helpers template should render");
+    }
+
+    #[test]
+    fn test_terminology_helpers_template_renders() {
+        use templates::*;
+        use tera::Context as TeraContext;
+
+        let mut context = TeraContext::new();
+        context.insert("terminology_helpers", &serde_json::json!(null));
+
+        let result = render("terminology_helpers.ts.tera", &context);
+        assert!(result.is_ok(), "terminology_helpers template should render");
+    }
+
+    #[test]
+    fn test_invariant_validators_template_renders() {
+        use templates::*;
+        use tera::Context as TeraContext;
+
+        let mut context = TeraContext::new();
+        context.insert("invariant_validator", &serde_json::json!(null));
+
+        let result = render("invariant_validators.ts.tera", &context);
+        assert!(
+            result.is_ok(),
+            "invariant_validators template should render"
+        );
+    }
+
+    #[test]
+    fn test_discriminator_unions_template_renders() {
+        use templates::*;
+        use tera::Context as TeraContext;
+
+        let mut context = TeraContext::new();
+        context.insert("slices", &serde_json::json!([]));
+
+        let result = render("discriminator_unions.ts.tera", &context);
+        assert!(
+            result.is_ok(),
+            "discriminator_unions template should render"
         );
     }
 }

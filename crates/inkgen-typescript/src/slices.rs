@@ -6,7 +6,9 @@
 //! - Generating TypeScript discriminated union types
 //! - Creating type guard functions for slice discrimination
 
-use inkgen_core::ir::{DiscriminatorType, ElementDefinition, ResourceDefinition, SliceDiscriminator};
+use inkgen_core::ir::{
+    DiscriminatorType, ElementDefinition, ResourceDefinition, SliceDiscriminator,
+};
 use serde_json::Value;
 
 /// Information about a single slice within a sliced element.
@@ -113,9 +115,7 @@ pub fn detect_slices(resource: &ResourceDefinition) -> Vec<SlicePattern> {
 fn find_slices_for_parent(elements: &[ElementDefinition], parent_path: &str) -> Vec<SliceInfo> {
     elements
         .iter()
-        .filter(|elem| {
-            elem.path == parent_path && elem.slice_name.is_some()
-        })
+        .filter(|elem| elem.path == parent_path && elem.slice_name.is_some())
         .map(|elem| SliceInfo {
             name: elem.slice_name.as_ref().unwrap().clone(),
             discriminator_value: extract_discriminator_value(elem),
@@ -223,8 +223,11 @@ pub fn generate_slice_type_guard(
 ) -> SliceTypeGuard {
     let function_name = format!("is{}", to_pascal_case(&slice.name));
     let input_type = union_type_name.to_string();
-    let narrowed_type = format!("{{ {}: {} }}", discriminator_field,
-        discriminator_value.as_ref()
+    let narrowed_type = format!(
+        "{{ {}: {} }}",
+        discriminator_field,
+        discriminator_value
+            .as_ref()
             .map(|v| format!("'{}'", v))
             .unwrap_or_else(|| "unknown".to_string())
     );

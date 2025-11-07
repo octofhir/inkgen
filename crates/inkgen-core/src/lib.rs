@@ -9,6 +9,7 @@
 mod cache;
 mod config;
 mod error;
+pub mod generator;
 pub mod ir;
 mod lineage;
 mod package;
@@ -21,7 +22,8 @@ pub use config::{
     InkgenConfig, LanguagesSection, PackageEntry, TreeShakingSection, TypescriptLanguageConfig,
 };
 pub use error::{CoreError, CoreResult};
-pub use lineage::{merge_element_snapshots, resolve_full_chain, ProfileAncestor, ProfileChain};
+pub use generator::LanguageGenerator;
+pub use lineage::{ProfileAncestor, ProfileChain, merge_element_snapshots, resolve_full_chain};
 pub use package::{
     ArtifactDescriptor, ArtifactKind, PackageDescriptor, PackageId, PackageInventory,
     PackageRequest, PackageSource, StructureKind, StructureSummary,
@@ -31,5 +33,5 @@ pub use services::{
     StructureProviderConfig,
 };
 pub use terminology::{
-    extract_codes_from_valueset, should_generate_valueset, ResolvedValueSet, ValueSetCache,
+    ResolvedValueSet, ValueSetCache, extract_codes_from_valueset, should_generate_valueset,
 };

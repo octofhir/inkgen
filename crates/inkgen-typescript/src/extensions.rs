@@ -57,9 +57,7 @@ pub struct ExtensionAccessorFunction {
 }
 
 /// Extract all extensions from a resource definition.
-pub fn extract_extensions(
-    resource: &ResourceDefinition,
-) -> IndexMap<String, RenderExtension> {
+pub fn extract_extensions(resource: &ResourceDefinition) -> IndexMap<String, RenderExtension> {
     let mut extensions = IndexMap::new();
 
     // Process each extension definition in the resource
@@ -211,9 +209,7 @@ pub fn extension_url_to_type_name(url: &str) -> String {
             let mut chars = word.chars();
             match chars.next() {
                 None => String::new(),
-                Some(first) => {
-                    first.to_uppercase().collect::<String>() + chars.as_str()
-                }
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
             }
         })
         .collect::<String>()
@@ -254,8 +250,7 @@ pub fn generate_accessor_functions(
 fn should_generate_accessor(resource_name: &str, extension: &RenderExtension) -> bool {
     extension.contexts.iter().any(|ctx| {
         // Match resource-level contexts or element paths within this resource
-        ctx.context == resource_name
-            || ctx.context.starts_with(&format!("{}.", resource_name))
+        ctx.context == resource_name || ctx.context.starts_with(&format!("{}.", resource_name))
     })
 }
 
@@ -274,7 +269,9 @@ mod tests {
     #[test]
     fn test_extension_url_to_type_name_kebab_case() {
         assert_eq!(
-            extension_url_to_type_name("http://hl7.org/fhir/us/core/StructureDefinition/us-core-race"),
+            extension_url_to_type_name(
+                "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race"
+            ),
             "UsCoreRaceExtension"
         );
     }

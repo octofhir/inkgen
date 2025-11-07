@@ -471,12 +471,10 @@ fn mark_backbone_elements(elements: &mut [ElementDefinition]) {
     for element in elements {
         if !element.children.is_empty() {
             // Has children - check if it's a BackboneElement
-            let has_concrete_type = element.types.iter().any(|t| {
-                !matches!(
-                    t.code.as_str(),
-                    "BackboneElement" | "Element" | "Base" | ""
-                )
-            });
+            let has_concrete_type = element
+                .types
+                .iter()
+                .any(|t| !matches!(t.code.as_str(), "BackboneElement" | "Element" | "Base" | ""));
 
             if !has_concrete_type {
                 element.is_backbone = true;
@@ -524,10 +522,7 @@ mod tests {
     #[test]
     fn test_get_parent_path() {
         assert_eq!(get_parent_path("Patient"), None);
-        assert_eq!(
-            get_parent_path("Patient.name"),
-            Some("Patient".to_string())
-        );
+        assert_eq!(get_parent_path("Patient.name"), Some("Patient".to_string()));
         assert_eq!(
             get_parent_path("Patient.name.family"),
             Some("Patient.name".to_string())
@@ -569,10 +564,7 @@ mod tests {
         assert_eq!(contact.depth, 1);
         assert!(contact.is_backbone); // Should be marked as BackboneElement
         assert_eq!(contact.children.len(), 2); // name, telecom
-        assert_eq!(
-            contact.parent_path,
-            Some("Patient".to_string())
-        );
+        assert_eq!(contact.parent_path, Some("Patient".to_string()));
 
         // Check nested child
         let contact_name = &contact.children[0];

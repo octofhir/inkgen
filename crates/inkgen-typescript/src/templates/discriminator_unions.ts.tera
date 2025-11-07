@@ -1,0 +1,37 @@
+{%- if slices %}
+/**
+ * Discriminated union types for sliced elements
+ * These types provide type-safe access to polymorphic elements with discriminators
+ */
+
+{%- for slice in slices %}
+
+{%- if slice.discriminator %}
+/**
+ * Union type for sliced element: {{ slice.element_path }}
+ * Discriminator: {{ slice.discriminator.kind }} on {{ slice.discriminator.path }}
+ */
+export type {{ slice.type_name }} = {%- for variant in slice.variants %} {{ variant.type_name }} {%- if not loop.last %} |{% endif %} {%- endfor %};
+
+/**
+ * Type guards for discriminated union
+ */
+export function is{{ slice.type_name }}(value: unknown): value is {{ slice.type_name }} {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    '{{ slice.discriminator.path }}' in value
+  );
+}
+
+{%- else %}
+
+/**
+ * Sliced element: {{ slice.element_path }}
+ * No discriminator found - slice variants defined by context
+ */
+export type {{ slice.type_name }} = {%- for variant in slice.variants %} {{ variant.type_name }} {%- if not loop.last %} |{% endif %} {%- endfor %};
+{%- endif %}
+
+{%- endfor %}
+{%- endif %}

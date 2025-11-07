@@ -200,9 +200,7 @@ pub fn url_to_type_name(url: &str) -> String {
         .map(|word| {
             let mut chars = word.chars();
             match chars.next() {
-                Some(first) => {
-                    first.to_uppercase().collect::<String>() + chars.as_str()
-                }
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
                 None => String::new(),
             }
         })
@@ -291,8 +289,7 @@ mod tests {
         assert!(result.is_none());
 
         // With max_codes=10, should return Some
-        let result =
-            ValueSetInfo::from_valueset(&valueset, "Large".to_string(), Some(10)).unwrap();
+        let result = ValueSetInfo::from_valueset(&valueset, "Large".to_string(), Some(10)).unwrap();
         assert!(result.is_some());
     }
 

@@ -74,6 +74,14 @@ pub struct TypescriptLanguageConfig {
     /// Generate value sets in separate files (default: false)
     #[serde(default)]
     pub valueset_separate_files: bool,
+
+    /// Template overlay directories for customization (default: empty)
+    /// Paths are relative to the manifest file location.
+    /// Overlays allow customization of built-in templates by providing files
+    /// with the same name in the overlay directories. Overlay templates override
+    /// the built-in templates with matching names.
+    #[serde(default)]
+    pub overlays: Vec<String>,
 }
 
 fn default_mode() -> String {

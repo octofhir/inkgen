@@ -119,7 +119,11 @@ pub struct ProfileHelpers {
 pub fn generate_profile_helpers(profile: &ResourceDefinition) -> Option<ProfileHelpers> {
     // Extract base resource type from lineage
     let base_definition = profile.lineage.base_definition.as_ref()?;
-    let base_resource_type = base_definition.split('/').last().unwrap_or("Resource").to_string();
+    let base_resource_type = base_definition
+        .split('/')
+        .last()
+        .unwrap_or("Resource")
+        .to_string();
 
     let profile_name = profile_url_to_name(&profile.url);
 
@@ -149,7 +153,10 @@ pub fn generate_profile_helpers(profile: &ResourceDefinition) -> Option<ProfileH
         profile_name: profile_name.clone(),
         profile_url: profile.url.clone(),
         input_type: base_resource_type.clone(),
-        narrowed_type: format!("{} & {{ meta?: {{ profile?: string[] }} }}", base_resource_type),
+        narrowed_type: format!(
+            "{} & {{ meta?: {{ profile?: string[] }} }}",
+            base_resource_type
+        ),
         description: profile.description.clone(),
     };
 
@@ -299,45 +306,40 @@ mod tests {
 
     #[test]
     fn test_attach_function_name_generation() {
-        let profile_name = profile_url_to_name(
-            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient",
-        );
+        let profile_name =
+            profile_url_to_name("http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient");
         let function_name = format!("attach{}To", profile_name);
         assert_eq!(function_name, "attachUSCorePatientTo");
     }
 
     #[test]
     fn test_extract_function_name_generation() {
-        let profile_name = profile_url_to_name(
-            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient",
-        );
+        let profile_name =
+            profile_url_to_name("http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient");
         let function_name = format!("extract{}From", profile_name);
         assert_eq!(function_name, "extractUSCorePatientFrom");
     }
 
     #[test]
     fn test_guard_function_name_generation() {
-        let profile_name = profile_url_to_name(
-            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient",
-        );
+        let profile_name =
+            profile_url_to_name("http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient");
         let function_name = format!("is{}", profile_name);
         assert_eq!(function_name, "isUSCorePatient");
     }
 
     #[test]
     fn test_validation_function_name_generation() {
-        let profile_name = profile_url_to_name(
-            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient",
-        );
+        let profile_name =
+            profile_url_to_name("http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient");
         let function_name = format!("validate{}", profile_name);
         assert_eq!(function_name, "validateUSCorePatient");
     }
 
     #[test]
     fn test_parameter_name_generation() {
-        let profile_name = profile_url_to_name(
-            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient",
-        );
+        let profile_name =
+            profile_url_to_name("http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient");
         let parameter_name = to_camel_case(&profile_name);
         assert_eq!(parameter_name, "uSCorePatient");
     }

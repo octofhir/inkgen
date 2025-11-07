@@ -138,10 +138,7 @@ pub fn resolve_full_chain(resource: &ResourceDefinition) -> CoreResult<ProfileCh
 ///
 /// The ID extracted from the URL (e.g., "Patient")
 fn extract_id_from_url(url: &str) -> String {
-    url.rsplit('/')
-        .next()
-        .unwrap_or(url)
-        .to_string()
+    url.rsplit('/').next().unwrap_or(url).to_string()
 }
 
 #[cfg(test)]
@@ -199,7 +196,9 @@ mod tests {
             fhir_type: Some("Patient".to_string()),
             date: None,
             lineage: ProfileLineage {
-                base_definition: Some("http://hl7.org/fhir/StructureDefinition/Patient".to_string()),
+                base_definition: Some(
+                    "http://hl7.org/fhir/StructureDefinition/Patient".to_string(),
+                ),
                 base_id: Some("Patient".to_string()),
                 derivation: Some(Derivation::Constraint),
                 type_name: Some("Patient".to_string()),
@@ -211,9 +210,15 @@ mod tests {
 
         let chain = ProfileChain::from_resource(&resource);
 
-        assert_eq!(chain.canonical_url, "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient");
+        assert_eq!(
+            chain.canonical_url,
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+        );
         assert!(chain.has_base());
-        assert_eq!(chain.immediate_parent(), Some("http://hl7.org/fhir/StructureDefinition/Patient"));
+        assert_eq!(
+            chain.immediate_parent(),
+            Some("http://hl7.org/fhir/StructureDefinition/Patient")
+        );
     }
 
     #[test]
@@ -247,7 +252,10 @@ mod tests {
         assert_eq!(name_elem.short.as_deref(), Some("Base name"));
 
         // Patient.identifier should be present (new element)
-        let identifier_elem = merged.iter().find(|e| e.path == "Patient.identifier").unwrap();
+        let identifier_elem = merged
+            .iter()
+            .find(|e| e.path == "Patient.identifier")
+            .unwrap();
         assert_eq!(identifier_elem.short.as_deref(), Some("New element"));
     }
 

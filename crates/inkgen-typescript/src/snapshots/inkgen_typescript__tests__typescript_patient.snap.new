@@ -3,9 +3,9 @@ source: crates/inkgen-typescript/src/lib.rs
 assertion_line: 1009
 expression: patient_file
 ---
+import type { Extension } from "./extension";
 import type { CodeableConcept } from "./codeableconcept";
 import type { Address } from "./address";
-import type { HumanName } from "./humanname";
 import type { Period } from "./period";
 import type { Attachment } from "./attachment";
 import type { Narrative } from "./narrative";

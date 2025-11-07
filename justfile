@@ -56,5 +56,45 @@ review:
     @cargo clippy --all-targets -- -D warnings
     @cargo test --all
 
+bench:
+    @echo "Running performance benchmarks..."
+    @cargo bench --bench codegen
+    @echo ""
+    @echo "Benchmark results available above. Key metrics:"
+    @echo "  - IR Construction: Time to parse FHIR structure definitions"
+    @echo "  - Profile Resolution: Time to resolve inheritance chains"
+    @echo "  - Template Rendering: Time to render Tera templates"
+    @echo "  - Code Generation: End-to-end generation time"
+    @echo ""
+    @echo "For regression detection, compare against baseline:"
+    @echo "  cargo bench --bench codegen -- --baseline main"
+
+# Release automation commands
+release-dry-run:
+    @echo "Running release dry-run..."
+    @cargo install cargo-release --locked 2>/dev/null || true
+    @cargo release --workspace --dry-run --no-tag --no-push
+
+release-check:
+    @echo "Checking release readiness..."
+    @echo "1. Validating Rust code quality..."
+    @just review
+    @echo "2. Checking workspace integrity..."
+    @cargo check --all
+    @echo "3. Verifying publish configuration..."
+    @cargo metadata --format-version 1 | jq '.packages[] | select(.name | startswith("inkgen")) | {name, publish}'
+    @echo "✓ Release check complete"
+
+docs-build:
+    @echo "Building documentation site..."
+    @echo "Note: Documentation site setup (mdBook) is planned"
+    @echo "See: docs/tasks/TASK-0007-hardening-and-release-prep.md"
+
+docs-serve:
+    @echo "Serving documentation locally..."
+    @echo "Note: Documentation site setup (mdBook) is planned"
+    @echo "See: docs/tasks/TASK-0007-hardening-and-release-prep.md"
+
+# Utility commands
 clean:
     @cargo clean

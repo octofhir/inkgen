@@ -3,6 +3,7 @@ members = [
     "crates/inkgen-cli",
     "crates/inkgen-core",
     "crates/inkgen-typescript",
+    "crates/inkgen-rust",
     "crates/inkgen-testing",
 ]
 resolver = "3"
@@ -38,3 +39,6 @@ octofhir-canonical-manager = "0.1.13"
 async-trait = "0.1"
 futures = "0.3"
 url = "2.5"
+criterion = { version = "0.5", features = ["async_tokio"] }
+similar = "2.3"
+

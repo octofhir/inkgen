@@ -62,8 +62,7 @@ impl<'a> NestedTypeCollector<'a> {
     /// Recursively collects nested types from an element and its children.
     fn collect_from_element(&self, element: &ElementDefinition, acc: &mut Vec<NestedTypeInfo>) {
         // Skip the root element - it's the main structure, not a nested type
-        let is_root = element.path == self.resource_name
-            || element.path.split('.').count() == 1;
+        let is_root = element.path == self.resource_name || element.path.split('.').count() == 1;
 
         // If this element is a BackboneElement with children, it needs a dedicated type
         if !is_root && element.is_backbone && !element.children.is_empty() {
@@ -74,10 +73,7 @@ impl<'a> NestedTypeCollector<'a> {
                 .map(|t| t.code.clone())
                 .unwrap_or_else(|| "BackboneElement".to_string());
 
-            let doc_comment = element
-                .short
-                .clone()
-                .or_else(|| element.definition.clone());
+            let doc_comment = element.short.clone().or_else(|| element.definition.clone());
 
             acc.push(NestedTypeInfo {
                 type_name,
@@ -190,7 +186,10 @@ mod tests {
     #[test]
     fn test_build_composite_name_with_choice() {
         assert_eq!(
-            build_composite_name("MedicationRequest", "MedicationRequest.dosageInstruction[x]"),
+            build_composite_name(
+                "MedicationRequest",
+                "MedicationRequest.dosageInstruction[x]"
+            ),
             "MedicationRequestDosageInstruction"
         );
     }
@@ -198,7 +197,10 @@ mod tests {
     #[test]
     fn test_build_composite_name_snake_case() {
         assert_eq!(
-            build_composite_name("StructureDefinition", "StructureDefinition.snapshot_element"),
+            build_composite_name(
+                "StructureDefinition",
+                "StructureDefinition.snapshot_element"
+            ),
             "StructureDefinitionSnapshotElement"
         );
     }
@@ -464,7 +466,10 @@ mod tests {
 
         // Second should be referenceRange (depth 2)
         assert_eq!(nested[1].type_name, "ObservationComponentReferenceRange");
-        assert_eq!(nested[1].element_path, "Observation.component.referenceRange");
+        assert_eq!(
+            nested[1].element_path,
+            "Observation.component.referenceRange"
+        );
         assert_eq!(nested[1].depth, 2);
     }
 }

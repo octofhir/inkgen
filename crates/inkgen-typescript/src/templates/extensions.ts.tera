@@ -1,0 +1,84 @@
+{%- if extensions %}
+/**
+ * Extension type definitions and accessor functions
+ * This file is generated and should not be manually edited
+ */
+
+{%- for ext_url, ext in extensions %}
+{%- if ext.description %}
+/**
+ * {{ ext.description }}
+ * URL: {{ ext.url }}
+ */
+{%- endif %}
+export interface {{ ext.type_name }} {
+{%- if ext.is_complex %}
+{%- for nested in ext.nested_types %}
+  /** {{ nested.type_name }} */
+  {{ nested.type_name | camel_case }}?: {
+{%- for child in nested.children %}
+    /** {{ child.path }} */
+    field{% if child.cardinality.min == 0 %}?{% endif %}: unknown;
+{%- endfor %}
+  };
+{%- endfor %}
+{%- else %}
+{%- if ext.value_type %}
+  /** The value of this extension */
+  value{% if ext.cardinality_min == 0 %}?{% endif %}: {{ ext.value_type }};
+{%- endif %}
+{%- endif %}
+}
+
+/**
+ * Get the {{ ext.type_name }} extension from a resource
+ * @param resource The resource to get the extension from
+ * @returns The extension value or undefined if not found
+ */
+export function get{{ ext.type_name }}(resource: any): {{ ext.type_name }}{% if ext.cardinality_max != 1 %} | {{ ext.type_name }}[]{% endif %} | undefined {
+  if (!resource.extension) {
+    return undefined;
+  }
+
+  const ext = resource.extension.find((e: any) => e.url === '{{ ext.url }}');
+
+  if (!ext) {
+    return undefined;
+  }
+
+{%- if ext.cardinality_max != 1 %}
+  return Array.isArray(ext) ? ext : [ext];
+{%- else %}
+  return ext.valueXXX || ext;
+{%- endif %}
+}
+
+/**
+ * Set the {{ ext.type_name }} extension on a resource
+ * @param resource The resource to set the extension on
+ * @param value The extension value to set
+ */
+export function set{{ ext.type_name }}(resource: any, value: {{ ext.type_name }}{% if ext.cardinality_max != 1 %} | {{ ext.type_name }}[]{% endif %}): void {
+  if (!resource.extension) {
+    resource.extension = [];
+  }
+
+  // Remove existing extensions with this URL
+  resource.extension = resource.extension.filter((e: any) => e.url !== '{{ ext.url }}');
+
+{%- if ext.cardinality_max != 1 %}
+  const values = Array.isArray(value) ? value : [value];
+  resource.extension.push(...values.map(v => ({
+    url: '{{ ext.url }}',
+    ...v
+  })));
+{%- else %}
+  resource.extension.push({
+    url: '{{ ext.url }}',
+    ...value
+  });
+{%- endif %}
+}
+
+{%- endfor %}
+{%- endif %}

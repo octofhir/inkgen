@@ -1,0 +1,107 @@
+{%- if terminology_helpers %}
+/**
+ * Terminology helpers: Code systems and value sets
+ * Generated from FHIR resource definition
+ */
+
+{%- if terminology_helpers.code_systems %}
+// Code Systems
+{%- for cs_url, code_system in terminology_helpers.code_systems %}
+
+{%- if code_system.description %}
+/**
+ * {{ code_system.description }}
+ * URL: {{ code_system.url }}
+ */
+{%- endif %}
+export const {{ code_system.type_name }} = {
+{%- for constant in code_system.constants %}
+  /** {{ constant.display | default(value="") }} */
+  {{ constant.constant_name }}: '{{ constant.code_value }}',
+{%- endfor %}
+} as const;
+
+export type {{ code_system.type_name }} = typeof {{ code_system.type_name }}[keyof typeof {{ code_system.type_name }}];
+{%- endfor %}
+{%- endif %}
+
+{%- if terminology_helpers.value_set_bindings %}
+// Value Set Bindings
+{%- for vs_url, value_set in terminology_helpers.value_set_bindings %}
+
+{%- if value_set.description %}
+/**
+ * {{ value_set.description }}
+ * Binding Strength: {{ value_set.strength }}
+ * Extensible: {{ value_set.extensible }}
+ * URL: {{ value_set.value_set_url }}
+ */
+{%- endif %}
+export const {{ value_set.type_name }}Binding = {
+  system: '{{ value_set.value_set_url }}',
+  strength: '{{ value_set.strength }}',
+  extensible: {{ value_set.extensible }},
+} as const;
+
+export type {{ value_set.type_name }}Binding = typeof {{ value_set.type_name }}Binding;
+{%- endfor %}
+{%- endif %}
+
+{%- if terminology_helpers.code_accessors %}
+// Code Accessor Functions
+{%- for accessor in terminology_helpers.code_accessors %}
+
+/**
+ * Get the {{ accessor.code_value }} code from the {{ accessor.code_system_url }} code system
+ */
+export function {{ accessor.function_name }}(): {{ accessor.return_type }} {
+  return {
+    system: '{{ accessor.code_system_url }}',
+    code: '{{ accessor.code_value }}',
+{%- if accessor.display %}
+    display: '{{ accessor.display }}',
+{%- endif %}
+  };
+}
+{%- endfor %}
+{%- endif %}
+
+{%- if terminology_helpers.builders %}
+// CodeableConcept Builders
+{%- for builder in terminology_helpers.builders %}
+
+/**
+ * Create a CodeableConcept with {{ builder.code_system_name }} coding
+ * @param code The code value from {{ builder.code_system_url }}
+ */
+export function {{ builder.function_name }}(code: string{%- if builder.is_union %} | string[]{% endif %}): CodeableConcept {
+  const codes = Array.isArray(code) ? code : [code];
+  return {
+    coding: codes.map(c => ({
+      system: '{{ builder.code_system_url }}',
+      code: c,
+    })),
+  };
+}
+{%- endfor %}
+{%- endif %}
+{%- endif %}
+
+/**
+ * Common FHIR Coding type (if not imported from elsewhere)
+ */
+export interface Coding {
+  system?: string;
+  version?: string;
+  code?: string;
+  display?: string;
+  userSelected?: boolean;
+}
+
+/**
+ * Common FHIR CodeableConcept type (if not imported from elsewhere)
+ */
+export interface CodeableConcept {
+  coding?: Coding[];
+  text?: string;
+}

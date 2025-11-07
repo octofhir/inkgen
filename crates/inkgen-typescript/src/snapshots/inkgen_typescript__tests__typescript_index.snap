@@ -1,0 +1,46 @@
+---
+source: crates/inkgen-typescript/src/lib.rs
+expression: index_file
+---
+export * from "./address";
+export * from "./age";
+export * from "./annotation";
+export * from "./attachment";
+export * from "./backboneelement";
+export * from "./codeableconcept";
+export * from "./coding";
+export * from "./contactpoint";
+export * from "./count";
+export * from "./datarequirement";
+export * from "./distance";
+export * from "./dosage";
+export * from "./elementdefinition";
+export * from "./expression";
+export * from "./extension";
+export * from "./identifier";
+export * from "./marketingstatus";
+export * from "./meta";
+export * from "./narrative";
+export * from "./parameterdefinition";
+export * from "./patient";
+export * from "./productshelflife";
+export * from "./ratio";
+export * from "./reference";
+export * from "./relatedartifact";
+export * from "./signature";
+export * from "./substanceamount";
+export * from "./timing";
+export * from "./triggerdefinition";
+export * from "./usagecontext";
+export * from "./boolean";
+export * from "./code";
+export * from "./datetime";
+export * from "./integer";
+export * from "./markdown";
+export * from "./oid";
+export * from "./positiveint";
+export * from "./string";
+export * from "./time";
+export * from "./unsignedint";
+export * from "./uri";
+export * from "./uuid";

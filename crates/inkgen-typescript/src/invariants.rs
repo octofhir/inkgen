@@ -166,7 +166,10 @@ fn is_evaluable_expression(expr: &str, complexity: &ExpressionComplexity) -> boo
 
     // Currently we can evaluate simple and moderate expressions
     // This is a conservative estimate - actual evaluation depends on expression syntax
-    matches!(complexity, ExpressionComplexity::Simple | ExpressionComplexity::Moderate)
+    matches!(
+        complexity,
+        ExpressionComplexity::Simple | ExpressionComplexity::Moderate
+    )
 }
 
 /// Generate validation function metadata from an invariant definition.
