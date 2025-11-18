@@ -19,7 +19,7 @@ mod terminology;
 
 pub use cache::{InstallMode, PackageCache, PackageCacheConfig};
 pub use config::{
-    InkgenConfig, LanguagesSection, PackageEntry, TreeShakingSection, TypescriptLanguageConfig,
+    FilterMode, InkgenConfig, LanguagesSection, PackageEntry, TypescriptLanguageConfig,
 };
 pub use error::{CoreError, CoreResult};
 pub use generator::LanguageGenerator;

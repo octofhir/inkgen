@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
@@ -14,9 +13,6 @@ pub struct InkgenConfig {
     pub packages: Vec<PackageEntry>,
 
     #[serde(default)]
-    pub tree_shaking: TreeShakingSection,
-
-    #[serde(default)]
     pub languages: LanguagesSection,
 }
 
@@ -24,16 +20,53 @@ pub struct InkgenConfig {
 pub struct PackageEntry {
     pub name: String,
     pub version: String,
+
+    /// Optional custom folder name (defaults to sanitized package name)
+    #[serde(default)]
+    pub folder: Option<String>,
+
+    /// Filter mode for this package
+    #[serde(default = "default_filter_mode")]
+    pub filter: FilterMode,
+
+    /// Resources to include (only used with filter = "include")
+    #[serde(default)]
+    pub include_resources: Vec<String>,
+
+    /// Resource URLs to include (only used with filter = "include")
+    #[serde(default)]
+    pub include_urls: Vec<String>,
+
+    /// Resources to exclude (only used with filter = "exclude")
+    #[serde(default)]
+    pub exclude_resources: Vec<String>,
+
+    /// Resource URLs to exclude (only used with filter = "exclude")
+    #[serde(default)]
+    pub exclude_urls: Vec<String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct TreeShakingSection {
-    #[serde(default)]
-    pub allowed_resources: Vec<String>,
-
-    #[serde(default)]
-    pub allowed_profiles: Vec<String>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FilterMode {
+    /// Generate all resources from this package
+    All,
+    /// Only generate resources referenced by other packages (smart default for base FHIR)
+    Dependencies,
+    /// Skip this package (reference only)
+    None,
+    /// Explicit include list
+    Include,
+    /// Explicit exclude list
+    Exclude,
 }
+
+fn default_filter_mode() -> FilterMode {
+    FilterMode::All
+}
+
+// REMOVED: Global tree_shaking section
+// Per-package filtering is now the standard approach
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct LanguagesSection {
@@ -104,6 +137,78 @@ fn default_max_valueset_size() -> usize {
     50
 }
 
+impl PackageEntry {
+    /// Get the folder name for this package (custom or sanitized)
+    pub fn folder_name(&self) -> String {
+        self.folder
+            .clone()
+            .unwrap_or_else(|| sanitize_package_name(&self.name))
+    }
+
+    /// Check if a resource should be included based on this package's filter
+    pub fn should_include_resource(&self, name: &str, url: &str) -> bool {
+        match self.filter {
+            FilterMode::All => true,
+            FilterMode::None => false,
+            FilterMode::Dependencies => {
+                // Dependencies mode handled by dependency analyzer
+                // Default to false here, analyzer will override
+                false
+            }
+            FilterMode::Include => {
+                // Include if in whitelist (by name or URL)
+                self.include_resources.contains(&name.to_string())
+                    || self.include_urls.contains(&url.to_string())
+            }
+            FilterMode::Exclude => {
+                // Exclude if in blacklist
+                !self.exclude_resources.contains(&name.to_string())
+                    && !self.exclude_urls.contains(&url.to_string())
+            }
+        }
+    }
+
+    /// Check if resource should be included considering dependencies
+    pub fn should_include_by_filter(&self, url: &str, is_dependency: bool) -> bool {
+        match self.filter {
+            FilterMode::All => true,
+            FilterMode::None => false,
+            FilterMode::Dependencies => is_dependency,
+            FilterMode::Include => self.include_urls.contains(&url.to_string()),
+            FilterMode::Exclude => !self.exclude_urls.contains(&url.to_string()),
+        }
+    }
+}
+
+/// Sanitize package name to a clean folder name
+///
+/// Rules:
+/// - Remove common prefixes: `hl7.fhir.`, `hl7.`, `ihe.`, `org.`
+/// - Replace `.` with `-`
+///
+/// Examples:
+/// - `hl7.fhir.r4.core` → `r4-core`
+/// - `hl7.fhir.r5.core` → `r5-core`
+/// - `hl7.fhir.us.core` → `us-core`
+/// - `ihe.iti.pix` → `iti-pix`
+/// - `org.example.custom` → `example-custom`
+pub fn sanitize_package_name(name: &str) -> String {
+    let mut result = name.to_string();
+
+    // Remove common prefixes
+    for prefix in ["hl7.fhir.", "hl7.", "ihe.", "org."] {
+        if let Some(stripped) = result.strip_prefix(prefix) {
+            result = stripped.to_string();
+            break;
+        }
+    }
+
+    // Replace dots with hyphens
+    result = result.replace('.', "-");
+
+    result
+}
+
 impl InkgenConfig {
     pub fn load_from_path(path: impl AsRef<Path>) -> CoreResult<Self> {
         let contents = fs::read_to_string(path)?;
@@ -123,22 +228,12 @@ impl InkgenConfig {
             .collect()
     }
 
+    /// Get structure provider config (per-package filtering now preferred)
     pub fn structure_config(&self) -> StructureProviderConfig {
-        let allowed = if self.tree_shaking.allowed_resources.is_empty() {
-            None
-        } else {
-            Some(
-                self.tree_shaking
-                    .allowed_resources
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect::<HashSet<_>>(),
-            )
-        };
-
+        // No global filtering - use per-package filtering instead
         StructureProviderConfig {
-            allowed_resource_types: allowed,
-            include_profiles: !self.tree_shaking.allowed_profiles.is_empty(),
+            allowed_resource_types: None,  // Include all at provider level
+            include_profiles: true,         // Filter at generation time
         }
     }
 
