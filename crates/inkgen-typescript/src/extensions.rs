@@ -9,9 +9,10 @@
 use crate::nested::NestedTypeInfo;
 use indexmap::IndexMap;
 use inkgen_core::ir::{ElementDefinition, ExtensionDefinition, ResourceDefinition};
+use serde::Serialize;
 
 /// Metadata extracted from an extension definition for TypeScript rendering.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct RenderExtension {
     /// Extension URL
     pub url: String,
@@ -33,7 +34,7 @@ pub struct RenderExtension {
 }
 
 /// Context information for where an extension can appear.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ExtensionContextInfo {
     /// Resource or element path where extension can appear
     pub context: String,
@@ -42,7 +43,7 @@ pub struct ExtensionContextInfo {
 }
 
 /// Helper function for accessing an extension value from a resource.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ExtensionAccessorFunction {
     /// Function name (e.g., "getUSCoreRaceExtension")
     pub function_name: String,

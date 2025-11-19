@@ -9,10 +9,11 @@
 use inkgen_core::ir::{
     DiscriminatorType, ElementDefinition, ResourceDefinition, SliceDiscriminator,
 };
+use serde::Serialize;
 use serde_json::Value;
 
 /// Information about a single slice within a sliced element.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SliceInfo {
     /// Slice name (e.g., "codeExt", "valueExt")
     pub name: String,
@@ -25,7 +26,7 @@ pub struct SliceInfo {
 }
 
 /// Pattern of slicing found in a parent element.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SlicePattern {
     /// Path to the sliced element (e.g., "Extension.extension")
     pub path: String,
@@ -127,14 +128,41 @@ fn find_slices_for_parent(elements: &[ElementDefinition], parent_path: &str) -> 
 
 /// Extract the discriminator value from a slice element (for value discriminators).
 fn extract_discriminator_value(element: &ElementDefinition) -> Option<String> {
-    // Look for fixed value that matches discriminator field
+    // First, try to extract from fixed value
     if let Some(fixed) = &element.fixed {
         match fixed {
             Value::Object(map) => {
                 // For value discriminators, try to extract the discriminator field value
-                // This is a heuristic - we'd need the discriminator path to be precise
+                // Common discriminator fields: url, system, code, value
                 if let Some(Value::String(url)) = map.get("url") {
                     return Some(url.clone());
+                }
+                if let Some(Value::String(system)) = map.get("system") {
+                    return Some(system.clone());
+                }
+                if let Some(Value::String(code)) = map.get("code") {
+                    return Some(code.clone());
+                }
+            }
+            Value::String(s) => {
+                return Some(s.clone());
+            }
+            _ => {}
+        }
+    }
+
+    // Try pattern if fixed is not available
+    if let Some(pattern) = &element.pattern {
+        match pattern {
+            Value::Object(map) => {
+                if let Some(Value::String(url)) = map.get("url") {
+                    return Some(url.clone());
+                }
+                if let Some(Value::String(system)) = map.get("system") {
+                    return Some(system.clone());
+                }
+                if let Some(Value::String(code)) = map.get("code") {
+                    return Some(code.clone());
                 }
             }
             Value::String(s) => {
@@ -319,5 +347,95 @@ mod tests {
         assert_eq!(guard.input_type, "ExtensionSlice");
         assert!(guard.condition.contains("url"));
         assert!(guard.condition.contains("http://example.org/code"));
+    }
+
+    #[test]
+    fn test_extract_discriminator_value_from_fixed_url() {
+        use inkgen_core::ir::{ElementCardinality, ElementMax};
+        use serde_json::json;
+
+        let element = ElementDefinition {
+            id: "Extension.extension:race".to_string(),
+            path: "Extension.extension".to_string(),
+            slice_name: Some("race".to_string()),
+            fixed: Some(json!({
+                "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race"
+            })),
+            pattern: None,
+            cardinality: ElementCardinality {
+                min: 0,
+                max: ElementMax::Finite(1),
+            },
+            types: Vec::new(),
+            short: None,
+            definition: None,
+            comment: None,
+            requirements: None,
+            content_reference: None,
+            binding: None,
+            invariants: Vec::new(),
+            default_value: None,
+            example_values: Vec::new(),
+            must_support: false,
+            is_summary: false,
+            slicing: None,
+            extension: Vec::new(),
+            additional_fields: indexmap::IndexMap::new(),
+            children: Vec::new(),
+            parent_path: None,
+            depth: 0,
+            is_backbone: false,
+        };
+
+        let discriminator_value = extract_discriminator_value(&element);
+        assert_eq!(
+            discriminator_value,
+            Some("http://hl7.org/fhir/us/core/StructureDefinition/us-core-race".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_discriminator_value_from_pattern_url() {
+        use inkgen_core::ir::{ElementCardinality, ElementMax};
+        use serde_json::json;
+
+        let element = ElementDefinition {
+            id: "Extension.extension:ethnicity".to_string(),
+            path: "Extension.extension".to_string(),
+            slice_name: Some("ethnicity".to_string()),
+            fixed: None,
+            pattern: Some(json!({
+                "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity"
+            })),
+            cardinality: ElementCardinality {
+                min: 0,
+                max: ElementMax::Finite(1),
+            },
+            types: Vec::new(),
+            short: None,
+            definition: None,
+            comment: None,
+            requirements: None,
+            content_reference: None,
+            binding: None,
+            invariants: Vec::new(),
+            default_value: None,
+            example_values: Vec::new(),
+            must_support: false,
+            is_summary: false,
+            slicing: None,
+            extension: Vec::new(),
+            additional_fields: indexmap::IndexMap::new(),
+            children: Vec::new(),
+            parent_path: None,
+            depth: 0,
+            is_backbone: false,
+        };
+
+        let discriminator_value = extract_discriminator_value(&element);
+        assert_eq!(
+            discriminator_value,
+            Some("http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity".to_string())
+        );
     }
 }

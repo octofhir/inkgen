@@ -108,24 +108,110 @@ pub fn merge_element_snapshots(
 
 /// Resolves a complete profile chain by walking baseDefinition links.
 ///
-/// This would require access to the package cache to load base definitions.
-/// For now, this is a stub that will be enhanced when we integrate with
-/// the actual package resolution system.
+/// Recursively follows the baseDefinition chain from a profile to its root ancestor,
+/// building a complete list of all ancestors in the inheritance hierarchy.
 ///
 /// # Arguments
 ///
 /// * `resource` - The starting resource definition
+/// * `provider` - Provider for loading base definitions
 ///
 /// # Returns
 ///
-/// Result containing the complete profile chain
-pub fn resolve_full_chain(resource: &ResourceDefinition) -> CoreResult<ProfileChain> {
-    // For now, just return the immediate chain
-    // In a future enhancement, this would:
-    // 1. Look up the base definition from package cache
-    // 2. Recursively build the full chain
-    // 3. Return all ancestors up to the root
-    Ok(ProfileChain::from_resource(resource))
+/// Result containing the complete profile chain with all ancestors
+pub async fn resolve_full_chain<P>(
+    resource: &ResourceDefinition,
+    provider: &P,
+) -> CoreResult<ProfileChain>
+where
+    P: crate::services::StructureDefinitionProvider,
+{
+    let mut ancestors = Vec::new();
+    let mut current = resource.clone();
+
+    // Walk up the base definition chain
+    while let Some(base_url) = &current.lineage.base_definition {
+        // Add this base to ancestors
+        ancestors.push(ProfileAncestor {
+            canonical_url: base_url.clone(),
+            id: current
+                .lineage
+                .base_id
+                .clone()
+                .unwrap_or_else(|| extract_id_from_url(base_url)),
+            derivation_type: current
+                .lineage
+                .derivation
+                .map(|d| format!("{:?}", d).to_lowercase()),
+        });
+
+        // Try to load the base definition to continue the chain
+        match provider.load_structure(base_url).await {
+            Ok(base_def) => {
+                current = base_def;
+            }
+            Err(_) => {
+                // Base definition not found - stop chain resolution
+                // This is expected for root types like Resource, DomainResource
+                break;
+            }
+        }
+    }
+
+    Ok(ProfileChain {
+        canonical_url: resource.url.clone(),
+        ancestors,
+    })
+}
+
+/// Merges snapshots for a complete profile chain.
+///
+/// Recursively merges element snapshots from the root ancestor down to the final profile,
+/// ensuring that each derived profile properly inherits and constrains its base.
+///
+/// # Arguments
+///
+/// * `profile` - The profile to resolve
+/// * `provider` - Provider for loading base definitions
+///
+/// # Returns
+///
+/// A ResourceDefinition with fully merged snapshots from all ancestors
+pub async fn merge_full_chain_snapshots<P>(
+    profile: &ResourceDefinition,
+    provider: &P,
+) -> CoreResult<ResourceDefinition>
+where
+    P: crate::services::StructureDefinitionProvider,
+{
+    let mut resolved = profile.clone();
+
+    // If this profile has a base definition, recursively resolve and merge it
+    if let Some(base_url) = &profile.lineage.base_definition {
+        match provider.load_structure(base_url).await {
+            Ok(base_def) => {
+                // Recursively resolve the base's chain first
+                let base_resolved = Box::pin(merge_full_chain_snapshots(&base_def, provider)).await?;
+
+                // Merge base snapshots with this profile's snapshots
+                resolved.elements = merge_element_snapshots(
+                    &base_resolved.elements,
+                    &profile.elements,
+                );
+
+                // Merge invariants (additive)
+                let mut all_invariants = base_resolved.invariants.clone();
+                all_invariants.extend(profile.invariants.clone());
+                resolved.invariants = all_invariants;
+            }
+            Err(_) => {
+                // Base not found - use profile as-is
+                // This is expected for root types
+            }
+        }
+    }
+
+    Ok(resolved)
 }
 
 /// Extracts the StructureDefinition ID from a canonical URL.

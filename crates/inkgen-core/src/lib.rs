@@ -6,6 +6,7 @@
 //! - Profile resolution services that transform canonical StructureDefinitions
 //!   into deterministic IR snapshots
 
+pub mod backends;
 mod cache;
 pub mod config;
 pub mod dependencies;
@@ -16,8 +17,10 @@ mod lineage;
 mod package;
 mod profile;
 mod services;
+pub mod template_helpers;
 mod terminology;
 
+pub use backends::{BackendRegistry, LanguageBackend};
 pub use cache::{InstallMode, PackageCache, PackageCacheConfig};
 pub use config::{
     sanitize_package_name, FilterMode, InkgenConfig, LanguagesSection, PackageEntry,
@@ -27,6 +30,9 @@ pub use dependencies::DependencyAnalyzer;
 pub use error::{CoreError, CoreResult};
 pub use generator::LanguageGenerator;
 pub use lineage::{ProfileAncestor, ProfileChain, merge_element_snapshots, resolve_full_chain};
+pub use template_helpers::{
+    ImportPathFunction, PackageFolderFunction, calculate_relative_import,
+};
 pub use package::{
     ArtifactDescriptor, ArtifactKind, PackageDescriptor, PackageId, PackageInventory,
     PackageRequest, PackageSource, StructureKind, StructureSummary,

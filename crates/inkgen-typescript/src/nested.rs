@@ -6,7 +6,7 @@
 use inkgen_core::ir::{ElementDefinition, ResourceDefinition};
 
 /// Information about a nested type to be generated.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct NestedTypeInfo {
     /// Generated TypeScript type name (e.g., "PatientContact")
     pub type_name: String,

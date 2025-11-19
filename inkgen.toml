@@ -1,19 +1,16 @@
-# InkGen Configuration File
-# By default, all resources from packages are generated
+# InkGen Configuration - Correct Filtering Semantics
 
 [[packages]]
 name = "hl7.fhir.r4.core"
 version = "4.0.1"
-
-# Optional: Use tree-shaking to limit generation to specific resources
-# Disabled for now to ensure all referenced types are generated
-# [tree_shaking]
-# allowed_resources = ["Patient", "Observation", "Practitioner", "Organization"]
-# allowed_profiles = ["us-core-patient", "us-core-observation"]
+folder = "r4-core"
+filter = "include"
+include_resources = ["Patient", "Observation"]  # Only these RESOURCES
+# Complex types and primitives are ALWAYS generated
 
 [languages.typescript]
-mode = "interface"  # Use interface mode for idiomatic TypeScript (not class_with_builder)
+mode = "interface"
 structural_guards = true
-naming_convention = "PascalCase"  # Only affects type names, field names are always camelCase
-output_structure = "flat"
-# output_dir = "src/generated/fhir"  # Optional: custom output directory (relative or absolute)
+naming_convention = "PascalCase"
+output_structure = "by_package"
+output_dir = "generated"

@@ -9,11 +9,11 @@ use anyhow::{Context, Result};
 use clap::{ArgAction, Args, CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 use inkgen_core::{
-    BaseStructureService, DependencyAnalyzer, FilterMode, InstallMode, LanguageGenerator,
-    PackageCache, PackageCacheConfig, StructureDefinitionProvider, StructureFilter,
-    StructureKind,
+    BackendRegistry, BaseStructureService, DependencyAnalyzer, FilterMode, InstallMode,
+    LanguageGenerator, PackageCache, PackageCacheConfig, StructureDefinitionProvider,
+    StructureFilter, StructureKind,
 };
-use inkgen_typescript::{TypescriptGenerator, TypescriptGeneratorConfig};
+use inkgen_typescript::{TypeRegistry, TypescriptGenerator, TypescriptGeneratorConfig};
 use project::{ProjectContext, describe_source, select_requests};
 use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
@@ -35,6 +35,8 @@ enum Commands {
     Fetch(FetchArgs),
     /// Generate SDK artifacts.
     Generate(GenerateArgs),
+    /// List available code generation backends.
+    Backends,
     /// Manage configuration files.
     Config(ConfigArgs),
     /// Compare two generated output directories.
@@ -180,6 +182,7 @@ async fn main() -> Result<()> {
         Commands::Generate(args) => match args.command {
             GenerateSubcommand::Typescript(ts_args) => generate_typescript(ts_args).await,
         },
+        Commands::Backends => list_backends_command(),
         Commands::Config(args) => match args.command {
             ConfigSubcommand::Init(init_args) => config_init(init_args),
             ConfigSubcommand::Validate(validate_args) => config_validate(validate_args),
@@ -317,7 +320,7 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
     let descriptors = resolver.ensure_packages(&packages, mode).await?;
 
     let service = Arc::new(BaseStructureService::from_project_config(
-        cache,
+        cache.clone(),
         context.manifest(),
     ));
 
@@ -399,6 +402,55 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
         None
     };
 
+    // Build global type registry for cross-package imports
+    info!("Building global type registry for cross-package imports...");
+    let mut type_registry = TypeRegistry::new();
+
+    for descriptor in &descriptors {
+        let filter = StructureFilter::from_config(&provider_config);
+        let summaries = service.list_structures(&filter).await?;
+        let package_folder = package_folders
+            .get(&descriptor.id)
+            .cloned()
+            .unwrap_or_else(|| inkgen_core::sanitize_package_name(&descriptor.id.name));
+
+        let mut used_stems: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+
+        for summary in summaries.iter().filter(|s| s.package == descriptor.id) {
+            // Only register BaseResource, ComplexType, PrimitiveType, and Logical structures
+            if summary.kind == StructureKind::BaseResource
+                || summary.kind == StructureKind::ComplexType
+                || summary.kind == StructureKind::PrimitiveType
+                || summary.kind == StructureKind::Logical
+            {
+                let structure = service
+                    .load_structure(&summary.canonical_url)
+                    .await
+                    .with_context(|| format!("failed to load {}", summary.canonical_url))?;
+
+                // Generate type name using pascal case (matching TypeScript generator logic)
+                let raw_name = summary.type_code.as_deref().unwrap_or(&structure.id);
+                let type_name = to_pascal_case(raw_name);
+
+                // Generate file stem using snake case (matching TypeScript generator logic)
+                let mut stem = to_snake_case(&structure.id)
+                    .replace('_', "-")
+                    .to_ascii_lowercase();
+
+                let counter = used_stems.entry(stem.clone()).or_insert(0);
+                *counter += 1;
+                if *counter > 1 {
+                    stem = format!("{stem}_{}", counter);
+                }
+
+                type_registry.register(type_name, package_folder.clone(), stem);
+            }
+        }
+    }
+
+    info!("Type registry built with types from {} packages", descriptors.len());
+
     let generator_config = TypescriptGeneratorConfig::from_manifest(
         context.typescript_section(),
         default_output,
@@ -406,6 +458,8 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
         package_folders,
         package_filters,
         dependency_analyzer,
+        Some(type_registry),
+        Some(cache.clone()),
     );
     let generator = TypescriptGenerator::new(generator_config);
 
@@ -512,6 +566,130 @@ fn diff_command(args: DiffArgs) -> Result<()> {
         result.total_changes
     );
 
+    Ok(())
+}
+
+// Helper functions for type name generation (matching TypeScript generator logic)
+fn to_pascal_case(value: &str) -> String {
+    split_tokens(value)
+        .into_iter()
+        .map(|token| {
+            let mut chars = token.chars();
+            match chars.next() {
+                Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<String>()
+}
+
+fn to_snake_case(value: &str) -> String {
+    split_tokens(value)
+        .into_iter()
+        .map(|token| token.to_ascii_lowercase())
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
+fn split_tokens(value: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    for ch in value.chars() {
+        if ch.is_alphanumeric() {
+            current.push(ch);
+        } else if !current.is_empty() {
+            tokens.push(current.clone());
+            current.clear();
+        }
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    if tokens.is_empty() {
+        tokens.push(value.to_string());
+    }
+    tokens
+}
+
+/// Create and populate the backend registry with all available backends.
+///
+/// This function serves as the central registry for all language backends.
+/// When adding a new backend, register it here.
+fn create_backend_registry(
+    generator_config: TypescriptGeneratorConfig,
+) -> BackendRegistry<BaseStructureService> {
+    let mut registry = BackendRegistry::new();
+
+    // Register TypeScript backend
+    registry.register(Box::new(TypescriptGenerator::new(generator_config)));
+
+    // Future: Register other backends here
+    // registry.register(Box::new(RustGenerator::new(rust_config)));
+    // registry.register(Box::new(PythonGenerator::new(python_config)));
+    // registry.register(Box::new(GoGenerator::new(go_config)));
+
+    registry
+}
+
+/// List all available code generation backends.
+fn list_backends_command() -> Result<()> {
+    // Create a minimal registry just for listing (doesn't need real config)
+    let temp_config = TypescriptGeneratorConfig::from_manifest(
+        None,
+        PathBuf::from("."),
+        None,
+        std::collections::HashMap::new(),
+        std::collections::HashMap::new(),
+        None,
+        None,
+        None,
+    );
+
+    let registry = create_backend_registry(temp_config);
+
+    println!("Available code generation backends:\n");
+
+    let mut backends: Vec<_> = registry.list().iter().map(|&s| s).collect();
+    backends.sort();
+
+    for name in backends {
+        if let Some(backend) = registry.get(name) {
+            println!("  {} - {}", name, backend.description());
+            println!("    Version: {}", backend.version());
+            println!("    File extension: .{}", backend.file_extension());
+
+            // Check for common features
+            let features = [
+                "interfaces",
+                "classes",
+                "builders",
+                "validation",
+                "serialization",
+                "structural-guards",
+                "primitives",
+                "cross-package-imports",
+            ];
+
+            let supported: Vec<_> = features
+                .iter()
+                .filter(|&&f| backend.supports_feature(f))
+                .collect();
+
+            if !supported.is_empty() {
+                println!(
+                    "    Features: {}",
+                    supported
+                        .iter()
+                        .map(|&&f| f)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            println!();
+        }
+    }
+
+    println!("Total backends: {}", registry.len());
     Ok(())
 }
 
