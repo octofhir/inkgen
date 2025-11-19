@@ -7,9 +7,11 @@ use async_trait::async_trait;
 use indexmap::IndexMap;
 use inkgen_core::ir::{Derivation, ElementDefinition, ElementMax, ElementType, ResourceDefinition};
 use inkgen_core::{
-    LanguageGenerator, PackageDescriptor, PackageId, StructureDefinitionProvider, StructureFilter,
-    StructureKind, StructureProviderConfig, StructureSummary, TypescriptLanguageConfig,
+    DependencyAnalyzer, LanguageGenerator, PackageDescriptor, PackageId,
+    StructureDefinitionProvider, StructureFilter, StructureKind, StructureProviderConfig,
+    StructureSummary, TypescriptLanguageConfig,
 };
+use inkgen_core::config::{sanitize_package_name, FilterMode, PackageEntry};
 use once_cell::sync::Lazy;
 use serde::Serialize;
 use tera::{Context as TeraContext, Tera};
@@ -89,6 +91,12 @@ mod config {
         pub naming: NamingConvention,
         pub output_structure: OutputStructure,
         pub output_dir: PathBuf,
+        /// Mapping of package IDs to their folder names (for by_package output structure)
+        pub package_folders: HashMap<PackageId, String>,
+        /// Mapping of package IDs to their filter settings (for per-package filtering)
+        pub package_filters: HashMap<PackageId, PackageEntry>,
+        /// Dependency analyzer for cross-package tree-shaking (optional)
+        pub dependency_analyzer: Option<DependencyAnalyzer>,
     }
 
     impl TypescriptGeneratorConfig {
@@ -96,6 +104,9 @@ mod config {
             section: Option<&TypescriptLanguageConfig>,
             default_output: PathBuf,
             override_output: Option<PathBuf>,
+            package_folders: HashMap<PackageId, String>,
+            package_filters: HashMap<PackageId, PackageEntry>,
+            dependency_analyzer: Option<DependencyAnalyzer>,
         ) -> Self {
             let section = section.cloned();
             let mode = section
@@ -132,6 +143,9 @@ mod config {
                 naming,
                 output_structure,
                 output_dir,
+                package_folders,
+                package_filters,
+                dependency_analyzer,
             }
         }
     }
@@ -447,6 +461,14 @@ struct RenderStructure {
     nested_types: Vec<RenderNestedType>,
     /// Generic type parameters for the interface (e.g., "T extends string = string" for Reference<T>)
     type_parameters: Option<String>,
+    /// Package name (e.g., "hl7.fhir.r4.core")
+    package_name: String,
+    /// Package folder name (e.g., "r4-core")
+    package_folder: String,
+    /// Whether this is a profile (constraint derivation)
+    is_profile: bool,
+    /// Output subfolder (e.g., "profiles" or "")
+    output_folder: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -506,6 +528,73 @@ where
             .into_iter()
             .filter(|summary| summary.package == descriptor.id)
             .collect();
+
+        // Apply per-package filtering if configured
+        // IMPORTANT: Filters only apply to BaseResource (actual FHIR resources)
+        // ComplexType and PrimitiveType are ALWAYS generated (they're dependencies)
+        if let Some(package_entry) = self.config.package_filters.get(&descriptor.id) {
+            match package_entry.filter {
+                FilterMode::All => {
+                    // Keep all resources - no additional filtering
+                }
+                FilterMode::None => {
+                    // Skip this package entirely
+                    info!("Skipping package {} (filter = None)", descriptor.id);
+                    return Ok(());
+                }
+                FilterMode::Include => {
+                    // Keep only whitelisted RESOURCES (not types/primitives/logical)
+                    relevant.retain(|summary| {
+                        // Always keep ComplexType, PrimitiveType, and Logical (data types)
+                        if summary.kind != StructureKind::BaseResource {
+                            return true;
+                        }
+                        // Filter BaseResource by include list
+                        let type_name = summary.type_code.as_deref().unwrap_or("");
+                        package_entry.include_resources.contains(&type_name.to_string())
+                            || package_entry.include_urls.contains(&summary.canonical_url)
+                    });
+                }
+                FilterMode::Exclude => {
+                    // Remove blacklisted RESOURCES (not types/primitives/logical)
+                    relevant.retain(|summary| {
+                        // Always keep ComplexType, PrimitiveType, and Logical (data types)
+                        if summary.kind != StructureKind::BaseResource {
+                            return true;
+                        }
+                        // Filter BaseResource by exclude list
+                        let type_name = summary.type_code.as_deref().unwrap_or("");
+                        !package_entry.exclude_resources.contains(&type_name.to_string())
+                            && !package_entry.exclude_urls.contains(&summary.canonical_url)
+                    });
+                }
+                FilterMode::Dependencies => {
+                    // Filter using dependency analyzer
+                    if let Some(analyzer) = &self.config.dependency_analyzer {
+                        relevant.retain(|summary| {
+                            // Always keep ComplexType, PrimitiveType, and Logical (data types)
+                            if summary.kind != StructureKind::BaseResource {
+                                return true;
+                            }
+                            // For BaseResource, check if other packages depend on it
+                            let package_key = format!("{}", descriptor.id);
+                            analyzer.should_generate(&package_key, &summary.canonical_url, FilterMode::Dependencies)
+                        });
+                        info!(
+                            "Applied dependency filtering for package {}: {} resources remain",
+                            descriptor.id,
+                            relevant.len()
+                        );
+                    } else {
+                        warn!(
+                            "Dependencies mode requested for package {} but no analyzer available; generating all resources",
+                            descriptor.id
+                        );
+                    }
+                }
+            }
+        }
+
         // Sort by canonical URL for deterministic processing order
         relevant.sort_by(|a, b| a.canonical_url.cmp(&b.canonical_url));
 
@@ -517,7 +606,11 @@ where
             return Ok(());
         }
 
-        let package_dir = package_output_dir(&self.config.output_dir, &descriptor.id);
+        let package_dir = package_output_dir(
+            &self.config.output_dir,
+            &descriptor.id,
+            &self.config.package_folders,
+        );
         fs::create_dir_all(&package_dir).with_context(|| {
             format!(
                 "failed to create package output directory {}",
@@ -527,10 +620,12 @@ where
 
         let mut entries = Vec::new();
         for summary in relevant {
-            // Only generate BaseResource, ComplexType, and PrimitiveType structures
+            // Generate BaseResource, ComplexType, PrimitiveType, and Logical structures
+            // Logical includes important data types like CodeableConcept, Extension, Period, Range, etc.
             if summary.kind != StructureKind::BaseResource
                 && summary.kind != StructureKind::ComplexType
                 && summary.kind != StructureKind::PrimitiveType
+                && summary.kind != StructureKind::Logical
             {
                 continue;
             }
@@ -614,6 +709,11 @@ where
                 }
             } else {
                 // Regular structure
+                let package_folder = self.config.package_folders
+                    .get(&descriptor.id)
+                    .cloned()
+                    .unwrap_or_else(|| sanitize_package_name(&descriptor.id.name));
+
                 let render = build_render_structure(
                     &definition,
                     &summary,
@@ -622,6 +722,9 @@ where
                     &file_stem,
                     &self.config,
                     &name_to_stem,
+                    &descriptor.id.name,
+                    &package_folder,
+                    false, // is_profile = false for regular structures
                 );
 
                 structures.push(render);
@@ -669,16 +772,33 @@ fn write_package(package: &PackageOutput) -> Result<()> {
             .with_context(|| format!("failed to write {}", file_path.display()))?;
     }
 
-    // Write profiles
-    for profile in &package.profiles {
-        let file_path = package.path.join(&profile.file_name);
-        fs::write(&file_path, &profile.typescript_code)
-            .with_context(|| format!("failed to write {}", file_path.display()))?;
+    // Create profiles subdirectory if there are profiles
+    if !package.profiles.is_empty() {
+        let profiles_dir = package.path.join("profiles");
+        fs::create_dir_all(&profiles_dir)
+            .with_context(|| format!("failed to create profiles directory {}", profiles_dir.display()))?;
+
+        // Write profiles to profiles/ subfolder
+        for profile in &package.profiles {
+            let file_path = profiles_dir.join(&profile.file_name);
+            fs::write(&file_path, &profile.typescript_code)
+                .with_context(|| format!("failed to write {}", file_path.display()))?;
+        }
+
+        // Generate profiles/index.ts barrel export
+        let mut profile_exports = String::new();
+        for profile in &package.profiles {
+            let stem = &profile.file_stem;
+            profile_exports.push_str(&format!("export * from './{}';\n", stem));
+        }
+        fs::write(profiles_dir.join("index.ts"), profile_exports)
+            .with_context(|| "failed to write profiles/index.ts")?;
     }
 
-    // Write index with all exports
+    // Write main index with all exports
     let mut context = TeraContext::new();
     context.insert("structures", &package.structures);
+    context.insert("has_profiles", &!package.profiles.is_empty());
     let index_content = templates::render("index.ts.tera", &context)?;
     fs::write(package.path.join("index.ts"), index_content)?;
     Ok(())
@@ -704,6 +824,7 @@ fn extract_primitives_from_type(type_expr: &str, primitives: &mut HashSet<String
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_render_structure(
     definition: &ResourceDefinition,
     summary: &StructureSummary,
@@ -712,6 +833,9 @@ fn build_render_structure(
     file_stem: &str,
     config: &TypescriptGeneratorConfig,
     name_to_stem: &IndexMap<String, String>,
+    package_name: &str,
+    package_folder: &str,
+    is_profile: bool,
 ) -> RenderStructure {
     let class_name = type_name.to_string();
     let emit_interface = matches!(
@@ -806,6 +930,12 @@ fn build_render_structure(
         None
     };
 
+    let output_folder = if is_profile {
+        "profiles".to_string()
+    } else {
+        String::new()
+    };
+
     RenderStructure {
         type_name: type_name.to_string(),
         class_name,
@@ -824,6 +954,10 @@ fn build_render_structure(
         imports,
         nested_types,
         type_parameters,
+        package_name: package_name.to_string(),
+        package_folder: package_folder.to_string(),
+        is_profile,
+        output_folder,
     }
 }
 
@@ -1041,10 +1175,19 @@ fn map_primitive(code: &str) -> Option<&'static str> {
     }
 }
 
-fn package_output_dir(base: &Path, package: &PackageId) -> PathBuf {
-    let name = package.name.replace('.', "-");
-    let version = package.version.replace('.', "-");
-    base.join(format!("{name}-{}", version))
+fn package_output_dir(
+    base: &Path,
+    package: &PackageId,
+    folder_mapping: &HashMap<PackageId, String>,
+) -> PathBuf {
+    // Use custom folder name if available, otherwise sanitize package name
+    if let Some(folder) = folder_mapping.get(package) {
+        base.join(folder)
+    } else {
+        // Fallback to sanitized package name (without version for cleaner output)
+        let folder = sanitize_package_name(&package.name);
+        base.join(folder)
+    }
 }
 
 fn file_stem(identifier: &str) -> String {
@@ -1127,6 +1270,9 @@ mod tests {
             naming: NamingConvention::PascalCase,
             output_structure: OutputStructure::Flat,
             output_dir: temp.path().to_path_buf(),
+            package_folders: HashMap::new(),
+            package_filters: HashMap::new(),
+            dependency_analyzer: None,
         };
         let generator = TypescriptGenerator::new(config.clone());
         generator
@@ -1134,7 +1280,7 @@ mod tests {
             .await
             .expect("generate");
 
-        let package_dir = package_output_dir(&config.output_dir, &descriptor.id);
+        let package_dir = package_output_dir(&config.output_dir, &descriptor.id, &config.package_folders);
 
         // Check what files were actually generated
         let generated_files: Vec<_> = fs::read_dir(&package_dir)

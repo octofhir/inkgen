@@ -1,3 +1,6 @@
 {%- for structure in structures %}
 export * from "./{{ structure.file_stem }}";
 {%- endfor %}
+{%- if has_profiles %}
+export * from "./profiles";
+{%- endif %}

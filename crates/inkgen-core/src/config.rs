@@ -192,6 +192,15 @@ impl PackageEntry {
 /// - `hl7.fhir.us.core` → `us-core`
 /// - `ihe.iti.pix` → `iti-pix`
 /// - `org.example.custom` → `example-custom`
+///
+/// # Examples
+///
+/// ```
+/// use inkgen_core::config::sanitize_package_name;
+///
+/// assert_eq!(sanitize_package_name("hl7.fhir.r4.core"), "r4-core");
+/// assert_eq!(sanitize_package_name("hl7.fhir.us.core"), "us-core");
+/// ```
 pub fn sanitize_package_name(name: &str) -> String {
     let mut result = name.to_string();
 
