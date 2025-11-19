@@ -1,0 +1,255 @@
+/**
+ * Generic extension utility functions
+ *
+ * These functions provide a low-level API for working with FHIR extensions
+ * when you don't have typed helper functions available.
+ *
+ * This file is generated and should not be manually edited.
+ */
+
+import type { Extension, DomainResource, Element } from '../types';
+
+/**
+ * Get the first extension matching the given URL from a resource.
+ *
+ * @param resource - The resource to search for extensions
+ * @param url - The extension URL to match
+ * @returns The matching extension or undefined if not found
+ *
+ * @example
+ * ```typescript
+ * const raceExt = getExtension(patient, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-race');
+ * ```
+ */
+export function getExtension(
+  resource: DomainResource | Element,
+  url: string
+): Extension | undefined {
+  return resource.extension?.find(e => e.url === url);
+}
+
+/**
+ * Get all extensions matching the given URL from a resource.
+ *
+ * @param resource - The resource to search for extensions
+ * @param url - The extension URL to match
+ * @returns Array of matching extensions (empty array if none found)
+ *
+ * @example
+ * ```typescript
+ * const identifiers = getExtensions(patient, 'http://example.org/identifier');
+ * ```
+ */
+export function getExtensions(
+  resource: DomainResource | Element,
+  url: string
+): Extension[] {
+  return resource.extension?.filter(e => e.url === url) ?? [];
+}
+
+/**
+ * Check if a resource has an extension with the given URL.
+ *
+ * @param resource - The resource to check
+ * @param url - The extension URL to look for
+ * @returns True if the extension exists, false otherwise
+ *
+ * @example
+ * ```typescript
+ * if (hasExtension(patient, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-race')) {
+ *   // Handle race extension
+ * }
+ * ```
+ */
+export function hasExtension(
+  resource: DomainResource | Element,
+  url: string
+): boolean {
+  return resource.extension?.some(e => e.url === url) ?? false;
+}
+
+/**
+ * Set or update an extension on a resource.
+ *
+ * If an extension with the same URL already exists, it will be replaced.
+ * Otherwise, the extension will be added.
+ *
+ * @param resource - The resource to modify
+ * @param extension - The extension to set
+ *
+ * @example
+ * ```typescript
+ * setExtension(patient, {
+ *   url: 'http://example.org/custom',
+ *   valueString: 'value'
+ * });
+ * ```
+ */
+export function setExtension(
+  resource: DomainResource | Element,
+  extension: Extension
+): void {
+  if (!resource.extension) {
+    resource.extension = [];
+  }
+
+  const idx = resource.extension.findIndex(e => e.url === extension.url);
+  if (idx !== undefined && idx >= 0) {
+    resource.extension[idx] = extension;
+  } else {
+    resource.extension.push(extension);
+  }
+}
+
+/**
+ * Add an extension to a resource (allowing duplicates).
+ *
+ * Unlike `setExtension`, this always adds a new extension even if one
+ * with the same URL already exists. Useful for extensions with max cardinality > 1.
+ *
+ * @param resource - The resource to modify
+ * @param extension - The extension to add
+ *
+ * @example
+ * ```typescript
+ * addExtension(patient, {
+ *   url: 'http://example.org/multi',
+ *   valueString: 'first'
+ * });
+ * addExtension(patient, {
+ *   url: 'http://example.org/multi',
+ *   valueString: 'second'
+ * });
+ * ```
+ */
+export function addExtension(
+  resource: DomainResource | Element,
+  extension: Extension
+): void {
+  if (!resource.extension) {
+    resource.extension = [];
+  }
+  resource.extension.push(extension);
+}
+
+/**
+ * Remove the first extension matching the given URL from a resource.
+ *
+ * @param resource - The resource to modify
+ * @param url - The extension URL to remove
+ * @returns True if an extension was removed, false otherwise
+ *
+ * @example
+ * ```typescript
+ * const removed = removeExtension(patient, 'http://example.org/custom');
+ * ```
+ */
+export function removeExtension(
+  resource: DomainResource | Element,
+  url: string
+): boolean {
+  if (!resource.extension) {
+    return false;
+  }
+
+  const idx = resource.extension.findIndex(e => e.url === url);
+  if (idx !== undefined && idx >= 0) {
+    resource.extension.splice(idx, 1);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Remove all extensions matching the given URL from a resource.
+ *
+ * @param resource - The resource to modify
+ * @param url - The extension URL to remove
+ * @returns The number of extensions removed
+ *
+ * @example
+ * ```typescript
+ * const count = removeExtensions(patient, 'http://example.org/multi');
+ * console.log(`Removed ${count} extensions`);
+ * ```
+ */
+export function removeExtensions(
+  resource: DomainResource | Element,
+  url: string
+): number {
+  if (!resource.extension) {
+    return 0;
+  }
+
+  const initialLength = resource.extension.length;
+  resource.extension = resource.extension.filter(e => e.url !== url);
+  return initialLength - resource.extension.length;
+}
+
+/**
+ * Clear all extensions from a resource.
+ *
+ * @param resource - The resource to modify
+ *
+ * @example
+ * ```typescript
+ * clearExtensions(patient);
+ * ```
+ */
+export function clearExtensions(resource: DomainResource | Element): void {
+  resource.extension = undefined;
+}
+
+/**
+ * Get an extension value by URL and value field name.
+ *
+ * This is a convenience function for simple extensions with a single value field.
+ *
+ * @param resource - The resource to search
+ * @param url - The extension URL
+ * @param valueField - The value field name (e.g., 'valueString', 'valueBoolean')
+ * @returns The extension value or undefined if not found
+ *
+ * @example
+ * ```typescript
+ * const value = getExtensionValue(patient, 'http://example.org/custom', 'valueString');
+ * ```
+ */
+export function getExtensionValue<T = any>(
+  resource: DomainResource | Element,
+  url: string,
+  valueField: string
+): T | undefined {
+  const ext = getExtension(resource, url);
+  if (!ext) {
+    return undefined;
+  }
+  return (ext as any)[valueField];
+}
+
+/**
+ * Set an extension value by URL and value field name.
+ *
+ * This is a convenience function for simple extensions with a single value field.
+ *
+ * @param resource - The resource to modify
+ * @param url - The extension URL
+ * @param valueField - The value field name (e.g., 'valueString', 'valueBoolean')
+ * @param value - The value to set
+ *
+ * @example
+ * ```typescript
+ * setExtensionValue(patient, 'http://example.org/custom', 'valueString', 'my value');
+ * ```
+ */
+export function setExtensionValue<T = any>(
+  resource: DomainResource | Element,
+  url: string,
+  valueField: string,
+  value: T
+): void {
+  setExtension(resource, {
+    url,
+    [valueField]: value,
+  } as Extension);
+}

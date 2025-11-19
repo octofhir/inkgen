@@ -1,9 +1,13 @@
+{%- if structure.generate_zod_schema %}
+import { z } from 'zod';
+
+{%- endif %}
 {%- if structure.has_primitives %}
 import type { {{ structure.primitive_imports | join(sep=", ") }} } from "./primitives";
 {% endif -%}
 {%- if structure.imports | length > 0 %}
 {% for import in structure.imports -%}
-import type { {{ import.type_name }} } from "./{{ import.path }}";
+import type { {{ import.types | join(sep=", ") }} } from "{{ import.path }}";
 {% endfor -%}
 
 {%- endif %}
@@ -56,4 +60,54 @@ export class {{ structure.class_name }} {
 export function is{{ structure.type_name }}(input: unknown): input is {{ structure.type_name }} {
   return typeof input === "object" && input !== null;
 }
+{%- endif %}
+
+{%- if structure.generate_zod_schema %}
+
+/**
+ * Zod schema for {{ structure.type_name }}
+ */
+export const {{ structure.type_name }}Schema = z.object({
+{%- for field in structure.zod_fields %}
+  {{ field.name }}: {{ field.zod_type }},
+{%- endfor %}
+});
+
+/**
+ * Type inferred from Zod schema
+ */
+export type {{ structure.type_name }}Validated = z.infer<typeof {{ structure.type_name }}Schema>;
+{%- endif %}
+
+{%- if structure.slices is defined and structure.slices | length > 0 %}
+
+// Discriminated unions for sliced elements
+{%- for slice in structure.slices %}
+{%- if slice.discriminator %}
+{%- set discriminator_field = slice.discriminator.path | split(pat=".") | last -%}
+{%- else %}
+{%- set discriminator_field = "value" -%}
+{%- endif %}
+
+/**
+ * Discriminated union for {{ slice.path }}
+ */
+export type {{ slice.path | split(pat=".") | last | title }}Slice =
+{%- for slice_info in slice.slices %}
+{%- if slice_info.discriminator_value %}
+  | { {{ discriminator_field }}: "{{ slice_info.discriminator_value }}"{% if slice_info.discriminator_type %}, value: {{ slice_info.discriminator_type }}{% endif %} }
+{%- endif %}
+{%- endfor %};
+
+// Type guards for slices
+{%- for slice_info in slice.slices %}
+{%- if slice_info.discriminator_value %}
+export function is{{ slice_info.name | title }}Slice(
+  value: {{ slice.path | split(pat=".") | last | title }}Slice
+): value is Extract<{{ slice.path | split(pat=".") | last | title }}Slice, { {{ discriminator_field }}: "{{ slice_info.discriminator_value }}" }> {
+  return (value as any).{{ discriminator_field }} === "{{ slice_info.discriminator_value }}";
+}
+{%- endif %}
+{% endfor %}
+{%- endfor %}
 {%- endif %}

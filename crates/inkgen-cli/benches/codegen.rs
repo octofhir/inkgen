@@ -15,7 +15,7 @@
 //! - Profile resolution is ~2-3x slower due to inheritance chain resolution
 //! - File I/O is negligible compared to processing time
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
 // Placeholder benchmarks demonstrating structure
 fn bench_ir_construction(c: &mut Criterion) {
@@ -24,7 +24,7 @@ fn bench_ir_construction(c: &mut Criterion) {
     // Future: Add real IR construction benchmarks once we have test data
     group.bench_function("placeholder", |b| {
         b.iter(|| {
-            let data = black_box(vec![1, 2, 3, 4, 5]);
+            let data = std::hint::black_box(vec![1, 2, 3, 4, 5]);
             data.iter().sum::<i32>()
         });
     });
@@ -38,7 +38,7 @@ fn bench_profile_resolution(c: &mut Criterion) {
     // Future: Add real profile resolution benchmarks
     group.bench_function("placeholder", |b| {
         b.iter(|| {
-            let data = black_box("profile_resolution".to_string());
+            let data = std::hint::black_box("profile_resolution".to_string());
             data.len()
         });
     });
@@ -52,7 +52,7 @@ fn bench_template_rendering(c: &mut Criterion) {
     // Future: Add real template rendering benchmarks with actual Tera templates
     group.bench_function("simple_template", |b| {
         b.iter(|| {
-            let template = black_box("Hello {{ name }}");
+            let template = std::hint::black_box("Hello {{ name }}");
             template.len()
         });
     });
@@ -66,7 +66,7 @@ fn bench_code_generation(c: &mut Criterion) {
     // Future: Add end-to-end generation benchmarks with real packages
     group.bench_function("typescript_patient", |b| {
         b.iter(|| {
-            let name = black_box("Patient");
+            let name = std::hint::black_box("Patient");
             let struct_code = format!("pub struct {} {{\n    pub resource_type: String,\n}}", name);
             struct_code.len()
         });
@@ -91,7 +91,7 @@ fn bench_configuration_variants(c: &mut Criterion) {
             &name,
             |b, _config_name| {
                 b.iter(|| {
-                    let data = black_box(vec![1; 100]);
+                    let data = std::hint::black_box(vec![1; 100]);
                     data.iter().sum::<i32>()
                 });
             },

@@ -25,6 +25,8 @@ pub struct ProfileInfo {
     pub fixed_elements: Vec<FixedElement>,
     /// Elements with tightened cardinality
     pub constrained_elements: Vec<ConstrainedElement>,
+    /// Extensions defined on this profile
+    pub extensions: Vec<crate::extensions::RenderExtension>,
 }
 
 /// Represents an element with a fixed value in a profile.
@@ -88,6 +90,10 @@ impl ProfileInfo {
             &mut constrained_elements,
         );
 
+        // Extract extensions from the definition
+        let extensions_map = crate::extensions::extract_extensions(definition);
+        let extensions: Vec<_> = extensions_map.into_values().collect();
+
         Some(Self {
             type_name,
             canonical_url: definition.url.clone(),
@@ -97,13 +103,14 @@ impl ProfileInfo {
             must_support_elements,
             fixed_elements,
             constrained_elements,
+            extensions,
         })
     }
 
     /// Generates TypeScript code for this profile.
     ///
-    /// Produces an interface that extends the base type with profile constraints.
-    pub fn generate_typescript(&self) -> String {
+    /// Produces an interface or class that extends the base type with profile constraints.
+    pub fn generate_typescript(&self, as_class: bool, with_methods: bool, with_zod: bool) -> String {
         let mut output = String::new();
 
         // Add JSDoc comment
@@ -122,42 +129,89 @@ impl ProfileInfo {
             output.push_str(" */\n");
         }
 
-        // Generate interface extending base type
-        output.push_str(&format!(
-            "export interface {} extends {} {{\n",
-            self.type_name, self.base_type
-        ));
+        if as_class {
+            // Generate class extending base type
+            output.push_str(&format!(
+                "export class {} extends {} {{\n",
+                self.type_name, self.base_type
+            ));
 
-        // Add __profileUrl metadata field
-        output.push_str("  /** Profile URL for runtime validation */\n");
-        output.push_str(&format!(
-            "  readonly __profileUrl: \"{}\";\n",
-            self.canonical_url
-        ));
+            // Add __profile readonly property
+            output.push_str("  /** Profile URL for runtime validation */\n");
+            output.push_str(&format!(
+                "  readonly __profile = '{}';\n\n",
+                self.canonical_url
+            ));
 
-        // Add fixed value fields (override with specific literals)
-        for fixed in &self.fixed_elements {
-            output.push_str(&format!("  /** Fixed value: {} */\n", fixed.fixed_value));
-            output.push_str(&format!("  {}: {};\n", fixed.field_name, fixed.fixed_value));
-        }
-
-        // Add constrained fields (override cardinality)
-        for constrained in &self.constrained_elements {
-            if constrained.makes_required {
-                output.push_str(&format!(
-                    "  /** Required by profile (min: {}) */\n",
-                    constrained.min
-                ));
-                // Remove optional marker by redefining as required
-                output.push_str(&format!("  {}: ", constrained.field_name));
-                // Get the type from base, removing optional marker
-                output.push_str("NonNullable<");
-                output.push_str(&format!("{}['{}']", self.base_type, constrained.field_name));
-                output.push_str(">;\n");
+            // Add fixed value fields (override with specific literals)
+            for fixed in &self.fixed_elements {
+                output.push_str(&format!("  /** Fixed value: {} */\n", fixed.fixed_value));
+                output.push_str(&format!("  declare {}: {};\n\n", fixed.field_name, fixed.fixed_value));
             }
-        }
 
-        output.push_str("}\n\n");
+            // Add constrained fields (override cardinality with declare)
+            for constrained in &self.constrained_elements {
+                if constrained.makes_required {
+                    output.push_str(&format!(
+                        "  /** Required by profile (min: {}) */\n",
+                        constrained.min
+                    ));
+                    // Use declare to override parent field as required
+                    output.push_str(&format!("  declare {}: ", constrained.field_name));
+                    // Get the type from base, removing optional marker
+                    output.push_str("NonNullable<");
+                    output.push_str(&format!("{}['{}']", self.base_type, constrained.field_name));
+                    output.push_str(">;\n\n");
+                }
+            }
+
+            // Add extension methods if requested
+            if with_methods && !self.extensions.is_empty() {
+                output.push_str("  // Extension accessor methods\n\n");
+                for extension in &self.extensions {
+                    self.generate_extension_methods(&mut output, extension);
+                }
+            }
+
+            output.push_str("}\n\n");
+        } else {
+            // Generate interface extending base type
+            output.push_str(&format!(
+                "export interface {} extends {} {{\n",
+                self.type_name, self.base_type
+            ));
+
+            // Add __profileUrl metadata field
+            output.push_str("  /** Profile URL for runtime validation */\n");
+            output.push_str(&format!(
+                "  readonly __profileUrl: \"{}\";\n",
+                self.canonical_url
+            ));
+
+            // Add fixed value fields (override with specific literals)
+            for fixed in &self.fixed_elements {
+                output.push_str(&format!("  /** Fixed value: {} */\n", fixed.fixed_value));
+                output.push_str(&format!("  {}: {};\n", fixed.field_name, fixed.fixed_value));
+            }
+
+            // Add constrained fields (override cardinality)
+            for constrained in &self.constrained_elements {
+                if constrained.makes_required {
+                    output.push_str(&format!(
+                        "  /** Required by profile (min: {}) */\n",
+                        constrained.min
+                    ));
+                    // Remove optional marker by redefining as required
+                    output.push_str(&format!("  {}: ", constrained.field_name));
+                    // Get the type from base, removing optional marker
+                    output.push_str("NonNullable<");
+                    output.push_str(&format!("{}['{}']", self.base_type, constrained.field_name));
+                    output.push_str(">;\n");
+                }
+            }
+
+            output.push_str("}\n\n");
+        }
 
         // Generate type guard
         output.push_str(&format!(
@@ -170,7 +224,164 @@ impl ProfileInfo {
         ));
         output.push_str("}\n");
 
+        // Generate Zod schema if requested
+        if with_zod {
+            output.push_str("\n");
+            output.push_str(&format!(
+                "/**\n * Zod schema for {}\n */\n",
+                self.type_name
+            ));
+            output.push_str(&format!(
+                "export const {}Schema = {}Schema.extend({{\n",
+                self.type_name, self.base_type
+            ));
+
+            // Add constrained fields to the schema
+            for constrained in &self.constrained_elements {
+                if constrained.makes_required {
+                    // Override to make required
+                    output.push_str(&format!(
+                        "  {}: z.array(z.unknown()).min({}),\n",
+                        constrained.field_name, constrained.min
+                    ));
+                }
+            }
+
+            output.push_str("});\n");
+        }
+
         output
+    }
+
+    /// Generate extension accessor methods for a profile class.
+    fn generate_extension_methods(
+        &self,
+        output: &mut String,
+        extension: &crate::extensions::RenderExtension,
+    ) {
+        let method_name = extension
+            .type_name
+            .strip_suffix("Extension")
+            .unwrap_or(&extension.type_name);
+
+        // Generate getter method
+        output.push_str(&format!(
+            "  /**\n   * Get the {} extension\n   * @see {}\n   */\n",
+            extension
+                .description
+                .as_deref()
+                .unwrap_or(&extension.type_name),
+            extension.url
+        ));
+
+        if extension.is_complex {
+            // Complex extension returns the extension object itself
+            output.push_str(&format!(
+                "  get{}(): {{ url: string; extension?: Extension[] }} | undefined {{\n",
+                method_name
+            ));
+            output.push_str(&format!(
+                "    return this.extension?.find(e => e.url === '{}');\n",
+                extension.url
+            ));
+            output.push_str("  }\n\n");
+        } else {
+            // Simple extension returns the value
+            let value_type = extension
+                .value_type
+                .as_deref()
+                .unwrap_or("unknown");
+            output.push_str(&format!(
+                "  get{}(): {} | undefined {{\n",
+                method_name, value_type
+            ));
+            output.push_str(&format!(
+                "    const ext = this.extension?.find(e => e.url === '{}');\n",
+                extension.url
+            ));
+
+            // Try to determine the value field from the type
+            let value_field = match value_type {
+                "string" => "valueString",
+                "number" => "valueInteger",
+                "boolean" => "valueBoolean",
+                "CodeableConcept" => "valueCodeableConcept",
+                "Coding" => "valueCoding",
+                "Reference" => "valueReference",
+                _ => "value",
+            };
+
+            output.push_str(&format!("    return ext?.{} as {} | undefined;\n", value_field, value_type));
+            output.push_str("  }\n\n");
+        }
+
+        // Generate setter method
+        output.push_str(&format!(
+            "  /**\n   * Set the {} extension\n   * @see {}\n   */\n",
+            extension
+                .description
+                .as_deref()
+                .unwrap_or(&extension.type_name),
+            extension.url
+        ));
+
+        if extension.is_complex {
+            output.push_str(&format!(
+                "  set{}(value: {{ url: string; extension?: Extension[] }}): void {{\n",
+                method_name
+            ));
+        } else {
+            let value_type = extension
+                .value_type
+                .as_deref()
+                .unwrap_or("unknown");
+            output.push_str(&format!(
+                "  set{}(value: {}): void {{\n",
+                method_name, value_type
+            ));
+        }
+
+        output.push_str("    if (!this.extension) {\n");
+        output.push_str("      this.extension = [];\n");
+        output.push_str("    }\n");
+        output.push_str(&format!(
+            "    const idx = this.extension.findIndex(e => e.url === '{}');\n",
+            extension.url
+        ));
+
+        if extension.is_complex {
+            output.push_str("    if (idx !== undefined && idx >= 0) {\n");
+            output.push_str("      this.extension[idx] = value;\n");
+            output.push_str("    } else {\n");
+            output.push_str("      this.extension.push(value);\n");
+            output.push_str("    }\n");
+        } else {
+            let value_type = extension
+                .value_type
+                .as_deref()
+                .unwrap_or("unknown");
+            let value_field = match value_type {
+                "string" => "valueString",
+                "number" => "valueInteger",
+                "boolean" => "valueBoolean",
+                "CodeableConcept" => "valueCodeableConcept",
+                "Coding" => "valueCoding",
+                "Reference" => "valueReference",
+                _ => "value",
+            };
+
+            output.push_str("    const ext = {\n");
+            output.push_str(&format!("      url: '{}',\n", extension.url));
+            output.push_str(&format!("      {}: value\n", value_field));
+            output.push_str("    };\n");
+            output.push_str("    if (idx !== undefined && idx >= 0) {\n");
+            output.push_str("      this.extension[idx] = ext;\n");
+            output.push_str("    } else {\n");
+            output.push_str("      this.extension.push(ext);\n");
+            output.push_str("    }\n");
+        }
+
+        output.push_str("  }\n\n");
     }
 
     /// Returns true if this profile has any constraints worth generating.
@@ -466,15 +677,77 @@ mod tests {
                 max: "*".to_string(),
                 makes_required: true,
             }],
+            extensions: vec![],
         };
 
-        let output = profile.generate_typescript();
+        let output = profile.generate_typescript(false, false, false);
 
         assert!(output.contains("export interface USCorePatient extends Patient"));
         assert!(output.contains("readonly __profileUrl"));
         assert!(output.contains("active: true"));
         assert!(output.contains("NonNullable<Patient['name']>"));
         assert!(output.contains("export function isUSCorePatient"));
+    }
+
+    #[test]
+    fn test_generate_profile_class_with_extensions() {
+        // Create a simple extension for testing
+        let race_extension = crate::extensions::RenderExtension {
+            url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race".to_string(),
+            type_name: "USCoreRaceExtension".to_string(),
+            contexts: vec![],
+            is_complex: false,
+            value_type: Some("CodeableConcept".to_string()),
+            nested_types: vec![],
+            cardinality_min: 0,
+            cardinality_max: Some(1),
+            description: Some("Race of the patient".to_string()),
+        };
+
+        let profile = ProfileInfo {
+            type_name: "USCorePatient".to_string(),
+            canonical_url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+                .to_string(),
+            base_type: "Patient".to_string(),
+            title: Some("US Core Patient".to_string()),
+            description: Some("US Core Patient Profile".to_string()),
+            must_support_elements: vec![],
+            fixed_elements: vec![],
+            constrained_elements: vec![ConstrainedElement {
+                path: "Patient.identifier".to_string(),
+                field_name: "identifier".to_string(),
+                min: 1,
+                max: "*".to_string(),
+                makes_required: true,
+            }],
+            extensions: vec![race_extension],
+        };
+
+        // Test class generation with extension methods
+        let output = profile.generate_typescript(true, true, false);
+
+        assert!(output.contains("export class USCorePatient extends Patient"));
+        assert!(output.contains("readonly __profile ="));
+        assert!(output.contains("declare identifier: NonNullable<Patient['identifier']>"));
+        assert!(output.contains("getUSCoreRace()"));
+        assert!(output.contains("setUSCoreRace(value: CodeableConcept)"));
+        assert!(output.contains("valueCodeableConcept"));
+
+        // Test class generation without extension methods
+        let output_no_methods = profile.generate_typescript(true, false, false);
+        assert!(output_no_methods.contains("export class USCorePatient extends Patient"));
+        assert!(!output_no_methods.contains("getUSCoreRace()"));
+
+        // Test interface generation (original behavior)
+        let output_interface = profile.generate_typescript(false, false, false);
+        assert!(output_interface.contains("export interface USCorePatient extends Patient"));
+        assert!(output_interface.contains("readonly __profileUrl"));
+        assert!(!output_interface.contains("getUSCoreRace()"));
+
+        // Test Zod schema generation
+        let output_with_zod = profile.generate_typescript(false, false, true);
+        assert!(output_with_zod.contains("export const USCorePatientSchema = PatientSchema.extend({"));
+        assert!(output_with_zod.contains("identifier: z.array(z.unknown()).min(1)"));
     }
 
     fn create_test_element(

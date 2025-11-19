@@ -115,6 +115,27 @@ pub struct TypescriptLanguageConfig {
     /// the built-in templates with matching names.
     #[serde(default)]
     pub overlays: Vec<String>,
+
+    /// Generate profile classes instead of interfaces (default: false)
+    #[serde(default)]
+    pub profile_classes: bool,
+
+    /// Include extension methods in profile classes (default: true)
+    #[serde(default = "default_true")]
+    pub profile_methods: bool,
+
+    /// Generate Zod schemas for runtime validation (default: false)
+    #[serde(default)]
+    pub zod_schemas: bool,
+
+    /// Co-locate Zod schemas in same file as types (default: true)
+    /// If false, generates separate .schemas.ts files
+    #[serde(default = "default_true")]
+    pub zod_colocated: bool,
+
+    /// Generate branded primitive types for type-level safety (default: false)
+    #[serde(default)]
+    pub branded_primitives: bool,
 }
 
 fn default_mode() -> String {

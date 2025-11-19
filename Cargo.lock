@@ -1625,6 +1625,7 @@ dependencies = [
  "octofhir-canonical-manager",
  "serde",
  "serde_json",
+ "tera",
  "thiserror",
  "tokio",
  "toml",

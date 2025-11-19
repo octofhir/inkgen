@@ -1,93 +1,180 @@
-// FHIR Primitive Types with Branding for Type Safety
-// These branded types prevent accidental mixing of different FHIR primitive types
-
-/**
- * Branded type helper - creates a nominal type from a base type
- * @internal
- */
-declare const brand: unique symbol;
-type Brand<T, TBrand extends string> = T & { readonly [brand]: TBrand };
+// FHIR Primitive Types
+{% if branded_primitives %}// Branded types for compile-time type safety
+// These prevent accidental mixing of different FHIR primitive types
 
 // String-based FHIR primitives
-export type FhirString = Brand<string, 'FhirString'>;
-export type FhirCode = Brand<string, 'FhirCode'>;
-export type FhirId = Brand<string, 'FhirId'>;
-export type FhirMarkdown = Brand<string, 'FhirMarkdown'>;
-export type FhirOid = Brand<string, 'FhirOid'>;
-export type FhirUri = Brand<string, 'FhirUri'>;
-export type FhirCanonical = Brand<string, 'FhirCanonical'>;
-export type FhirUrl = Brand<string, 'FhirUrl'>;
-export type FhirUuid = Brand<string, 'FhirUuid'>;
-export type FhirBase64Binary = Brand<string, 'FhirBase64Binary'>;
-export type FhirDate = Brand<string, 'FhirDate'>;
-export type FhirDateTime = Brand<string, 'FhirDateTime'>;
-export type FhirTime = Brand<string, 'FhirTime'>;
-export type FhirInstant = Brand<string, 'FhirInstant'>;
-export type FhirXhtml = Brand<string, 'FhirXhtml'>;
+export type FhirString = string & { readonly __brand: 'FhirString' };
+export type FhirCode = string & { readonly __brand: 'FhirCode' };
+export type FhirId = string & { readonly __brand: 'FhirId' };
+export type FhirMarkdown = string & { readonly __brand: 'FhirMarkdown' };
+export type FhirOid = string & { readonly __brand: 'FhirOid' };
+export type FhirUri = string & { readonly __brand: 'FhirUri' };
+export type FhirCanonical = string & { readonly __brand: 'FhirCanonical' };
+export type FhirUrl = string & { readonly __brand: 'FhirUrl' };
+export type FhirUuid = string & { readonly __brand: 'FhirUuid' };
+export type FhirBase64Binary = string & { readonly __brand: 'FhirBase64Binary' };
+export type FhirDate = string & { readonly __brand: 'FhirDate' };
+export type FhirDateTime = string & { readonly __brand: 'FhirDateTime' };
+export type FhirTime = string & { readonly __brand: 'FhirTime' };
+export type FhirInstant = string & { readonly __brand: 'FhirInstant' };
+export type FhirXhtml = string & { readonly __brand: 'FhirXhtml' };
 
 // Number-based FHIR primitives
-export type FhirInteger = Brand<number, 'FhirInteger'>;
-export type FhirDecimal = Brand<number, 'FhirDecimal'>;
-export type FhirPositiveInt = Brand<number, 'FhirPositiveInt'>;
-export type FhirUnsignedInt = Brand<number, 'FhirUnsignedInt'>;
-export type FhirInteger64 = Brand<string, 'FhirInteger64'>; // int64 is serialized as string in JSON
+export type FhirInteger = number & { readonly __brand: 'FhirInteger' };
+export type FhirDecimal = number & { readonly __brand: 'FhirDecimal' };
+export type FhirPositiveInt = number & { readonly __brand: 'FhirPositiveInt' };
+export type FhirUnsignedInt = number & { readonly __brand: 'FhirUnsignedInt' };
+export type FhirInteger64 = string & { readonly __brand: 'FhirInteger64' }; // int64 is serialized as string in JSON
 
 // Boolean FHIR primitive
-export type FhirBoolean = Brand<boolean, 'FhirBoolean'>;
+export type FhirBoolean = boolean & { readonly __brand: 'FhirBoolean' };
+{% else %}// Plain type aliases
+export type FhirString = string;
+export type FhirCode = string;
+export type FhirId = string;
+export type FhirMarkdown = string;
+export type FhirOid = string;
+export type FhirUri = string;
+export type FhirCanonical = string;
+export type FhirUrl = string;
+export type FhirUuid = string;
+export type FhirBase64Binary = string;
+export type FhirDate = string;
+export type FhirDateTime = string;
+export type FhirTime = string;
+export type FhirInstant = string;
+export type FhirXhtml = string;
+export type FhirInteger = number;
+export type FhirDecimal = number;
+export type FhirPositiveInt = number;
+export type FhirUnsignedInt = number;
+export type FhirInteger64 = string; // int64 is serialized as string in JSON
+export type FhirBoolean = boolean;
+{% endif %}
 
-// Type guards for runtime validation
-export function isFhirString(value: unknown): value is FhirString {
-  return typeof value === 'string';
-}
+{% if zod_schemas %}import { z } from 'zod';
 
-export function isFhirInteger(value: unknown): value is FhirInteger {
-  return typeof value === 'number' && Number.isInteger(value);
-}
+// Zod schemas for runtime validation
+export const FhirStringSchema = z.string();
+export const FhirBooleanSchema = z.boolean();
+export const FhirIntegerSchema = z.number().int();
+export const FhirDecimalSchema = z.number();
+export const FhirPositiveIntSchema = z.number().int().positive();
+export const FhirUnsignedIntSchema = z.number().int().nonnegative();
 
-export function isFhirDecimal(value: unknown): value is FhirDecimal {
-  return typeof value === 'number';
-}
+// Regex-validated string primitives
+export const FhirIdSchema = z.string().regex(/^[A-Za-z0-9\-\.]{1,64}$/);
+export const FhirCodeSchema = z.string().regex(/^[^\s]+(\s[^\s]+)*$/);
+export const FhirDateSchema = z.string().regex(/^\d{4}(-\d{2}(-\d{2})?)?$/);
+export const FhirTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d+)?$/);
+export const FhirDateTimeSchema = z.string().datetime();
+export const FhirInstantSchema = z.string().datetime();
 
-export function isFhirBoolean(value: unknown): value is FhirBoolean {
-  return typeof value === 'boolean';
-}
+// URI-based primitives
+export const FhirUriSchema = z.string();
+export const FhirUrlSchema = z.string().url();
+export const FhirCanonicalSchema = z.string();
+export const FhirOidSchema = z.string().regex(/^urn:oid:[0-2](\.(0|[1-9]\d*))+$/);
+export const FhirUuidSchema = z.string().uuid();
 
-// Constructor functions for creating branded values
+// Text primitives
+export const FhirMarkdownSchema = z.string();
+export const FhirBase64BinarySchema = z.string().base64();
+export const FhirXhtmlSchema = z.string();
+export const FhirInteger64Schema = z.string();
+{% endif %}
+
+{% if branded_primitives %}// Constructor functions for creating branded primitive values
 export function fhirString(value: string): FhirString {
-  return value as FhirString;
-}
-
-export function fhirId(value: string): FhirId {
-  return value as FhirId;
-}
-
-export function fhirUri(value: string): FhirUri {
-  return value as FhirUri;
+  {% if zod_schemas %}return FhirStringSchema.parse(value) as FhirString;{% else %}return value as FhirString;{% endif %}
 }
 
 export function fhirCode(value: string): FhirCode {
-  return value as FhirCode;
+  {% if zod_schemas %}return FhirCodeSchema.parse(value) as FhirCode;{% else %}return value as FhirCode;{% endif %}
 }
 
-export function fhirInteger(value: number): FhirInteger {
-  if (!Number.isInteger(value)) {
-    throw new Error('FhirInteger must be an integer');
-  }
-  return value as FhirInteger;
+export function fhirId(value: string): FhirId {
+  {% if zod_schemas %}return FhirIdSchema.parse(value) as FhirId;{% else %}return value as FhirId;{% endif %}
 }
 
-export function fhirDecimal(value: number): FhirDecimal {
-  return value as FhirDecimal;
+export function fhirMarkdown(value: string): FhirMarkdown {
+  {% if zod_schemas %}return FhirMarkdownSchema.parse(value) as FhirMarkdown;{% else %}return value as FhirMarkdown;{% endif %}
 }
 
-export function fhirBoolean(value: boolean): FhirBoolean {
-  return value as FhirBoolean;
+export function fhirOid(value: string): FhirOid {
+  {% if zod_schemas %}return FhirOidSchema.parse(value) as FhirOid;{% else %}return value as FhirOid;{% endif %}
 }
 
-export function fhirDateTime(value: string): FhirDateTime {
-  return value as FhirDateTime;
+export function fhirUri(value: string): FhirUri {
+  {% if zod_schemas %}return FhirUriSchema.parse(value) as FhirUri;{% else %}return value as FhirUri;{% endif %}
+}
+
+export function fhirCanonical(value: string): FhirCanonical {
+  {% if zod_schemas %}return FhirCanonicalSchema.parse(value) as FhirCanonical;{% else %}return value as FhirCanonical;{% endif %}
+}
+
+export function fhirUrl(value: string): FhirUrl {
+  {% if zod_schemas %}return FhirUrlSchema.parse(value) as FhirUrl;{% else %}return value as FhirUrl;{% endif %}
+}
+
+export function fhirUuid(value: string): FhirUuid {
+  {% if zod_schemas %}return FhirUuidSchema.parse(value) as FhirUuid;{% else %}return value as FhirUuid;{% endif %}
+}
+
+export function fhirBase64Binary(value: string): FhirBase64Binary {
+  {% if zod_schemas %}return FhirBase64BinarySchema.parse(value) as FhirBase64Binary;{% else %}return value as FhirBase64Binary;{% endif %}
 }
 
 export function fhirDate(value: string): FhirDate {
-  return value as FhirDate;
+  {% if zod_schemas %}return FhirDateSchema.parse(value) as FhirDate;{% else %}return value as FhirDate;{% endif %}
 }
+
+export function fhirDateTime(value: string): FhirDateTime {
+  {% if zod_schemas %}return FhirDateTimeSchema.parse(value) as FhirDateTime;{% else %}return value as FhirDateTime;{% endif %}
+}
+
+export function fhirTime(value: string): FhirTime {
+  {% if zod_schemas %}return FhirTimeSchema.parse(value) as FhirTime;{% else %}return value as FhirTime;{% endif %}
+}
+
+export function fhirInstant(value: string): FhirInstant {
+  {% if zod_schemas %}return FhirInstantSchema.parse(value) as FhirInstant;{% else %}return value as FhirInstant;{% endif %}
+}
+
+export function fhirXhtml(value: string): FhirXhtml {
+  {% if zod_schemas %}return FhirXhtmlSchema.parse(value) as FhirXhtml;{% else %}return value as FhirXhtml;{% endif %}
+}
+
+export function fhirInteger(value: number): FhirInteger {
+  {% if zod_schemas %}return FhirIntegerSchema.parse(value) as FhirInteger;{% else %}if (!Number.isInteger(value)) {
+    throw new Error('FhirInteger must be an integer');
+  }
+  return value as FhirInteger;{% endif %}
+}
+
+export function fhirDecimal(value: number): FhirDecimal {
+  {% if zod_schemas %}return FhirDecimalSchema.parse(value) as FhirDecimal;{% else %}return value as FhirDecimal;{% endif %}
+}
+
+export function fhirPositiveInt(value: number): FhirPositiveInt {
+  {% if zod_schemas %}return FhirPositiveIntSchema.parse(value) as FhirPositiveInt;{% else %}if (!Number.isInteger(value) || value <= 0) {
+    throw new Error('FhirPositiveInt must be a positive integer');
+  }
+  return value as FhirPositiveInt;{% endif %}
+}
+
+export function fhirUnsignedInt(value: number): FhirUnsignedInt {
+  {% if zod_schemas %}return FhirUnsignedIntSchema.parse(value) as FhirUnsignedInt;{% else %}if (!Number.isInteger(value) || value < 0) {
+    throw new Error('FhirUnsignedInt must be a non-negative integer');
+  }
+  return value as FhirUnsignedInt;{% endif %}
+}
+
+export function fhirInteger64(value: string): FhirInteger64 {
+  {% if zod_schemas %}return FhirInteger64Schema.parse(value) as FhirInteger64;{% else %}return value as FhirInteger64;{% endif %}
+}
+
+export function fhirBoolean(value: boolean): FhirBoolean {
+  {% if zod_schemas %}return FhirBooleanSchema.parse(value) as FhirBoolean;{% else %}return value as FhirBoolean;{% endif %}
+}
+{% endif %}
