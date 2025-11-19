@@ -7,7 +7,8 @@
 //!   into deterministic IR snapshots
 
 mod cache;
-mod config;
+pub mod config;
+pub mod dependencies;
 mod error;
 pub mod generator;
 pub mod ir;
@@ -19,8 +20,10 @@ mod terminology;
 
 pub use cache::{InstallMode, PackageCache, PackageCacheConfig};
 pub use config::{
-    FilterMode, InkgenConfig, LanguagesSection, PackageEntry, TypescriptLanguageConfig,
+    sanitize_package_name, FilterMode, InkgenConfig, LanguagesSection, PackageEntry,
+    TypescriptLanguageConfig,
 };
+pub use dependencies::DependencyAnalyzer;
 pub use error::{CoreError, CoreResult};
 pub use generator::LanguageGenerator;
 pub use lineage::{ProfileAncestor, ProfileChain, merge_element_snapshots, resolve_full_chain};

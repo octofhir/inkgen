@@ -9,7 +9,9 @@ use anyhow::{Context, Result};
 use clap::{ArgAction, Args, CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 use inkgen_core::{
-    BaseStructureService, InstallMode, LanguageGenerator, PackageCache, PackageCacheConfig,
+    BaseStructureService, DependencyAnalyzer, FilterMode, InstallMode, LanguageGenerator,
+    PackageCache, PackageCacheConfig, StructureDefinitionProvider, StructureFilter,
+    StructureKind,
 };
 use inkgen_typescript::{TypescriptGenerator, TypescriptGeneratorConfig};
 use project::{ProjectContext, describe_source, select_requests};
@@ -321,13 +323,94 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
 
     let provider_config = context.manifest().structure_config();
     let default_output = context.default_output_dir();
+
+    // Build package folder mapping and filter settings from config
+    let mut package_folders = std::collections::HashMap::new();
+    let mut package_filters = std::collections::HashMap::new();
+    let mut needs_dependency_analysis = false;
+
+    for entry in &context.manifest().packages {
+        let package_id = inkgen_core::PackageId {
+            name: entry.name.clone(),
+            version: entry.version.clone(),
+        };
+        package_folders.insert(package_id.clone(), entry.folder_name());
+        package_filters.insert(package_id.clone(), entry.clone());
+
+        // Check if any package uses Dependencies filter mode
+        if entry.filter == FilterMode::Dependencies {
+            needs_dependency_analysis = true;
+        }
+    }
+
+    // Three-phase dependency analysis (if needed)
+    let dependency_analyzer = if needs_dependency_analysis {
+        info!("Performing three-phase dependency analysis across all packages...");
+        let mut analyzer = DependencyAnalyzer::new();
+
+        // Phase 1: Register all packages and their resources
+        info!("Phase 1: Registering packages and resources...");
+        for descriptor in &descriptors {
+            let filter = StructureFilter::from_config(&provider_config);
+            let summaries = service.list_structures(&filter).await?;
+
+            let package_key = format!("{}", descriptor.id);
+            let urls: Vec<String> = summaries
+                .iter()
+                .filter(|s| s.package == descriptor.id)
+                .map(|s| s.canonical_url.clone())
+                .collect();
+
+            analyzer.register_package(&package_key, urls);
+            info!("  Registered {} with {} resources", package_key, summaries.len());
+        }
+
+        // Phase 2: Analyze dependencies across all packages
+        info!("Phase 2: Analyzing cross-package dependencies...");
+        for descriptor in &descriptors {
+            let filter = StructureFilter::from_config(&provider_config);
+            let summaries = service.list_structures(&filter).await?;
+            let package_key = format!("{}", descriptor.id);
+
+            for summary in summaries.iter().filter(|s| s.package == descriptor.id) {
+                // Only analyze BaseResource and ComplexType structures
+                if summary.kind == StructureKind::BaseResource
+                    || summary.kind == StructureKind::ComplexType
+                    || summary.kind == StructureKind::Logical
+                {
+                    let structure = service
+                        .load_structure(&summary.canonical_url)
+                        .await
+                        .with_context(|| format!("failed to load {}", summary.canonical_url))?;
+                    analyzer.analyze(&structure, &package_key);
+                }
+            }
+        }
+
+        // Log dependency statistics
+        let (total_packages, total_resources, total_deps) = analyzer.statistics();
+        info!(
+            "Dependency analysis complete: {} packages, {} resources, {} cross-package dependencies",
+            total_packages, total_resources, total_deps
+        );
+
+        Some(analyzer)
+    } else {
+        None
+    };
+
     let generator_config = TypescriptGeneratorConfig::from_manifest(
         context.typescript_section(),
         default_output,
         args.output.clone(),
+        package_folders,
+        package_filters,
+        dependency_analyzer,
     );
     let generator = TypescriptGenerator::new(generator_config);
 
+    // Phase 3: Generate with filtering
+    info!("Phase 3: Generating TypeScript code with filtering...");
     for descriptor in descriptors {
         generator
             .generate(&*service, &descriptor, &provider_config)

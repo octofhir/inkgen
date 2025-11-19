@@ -5,8 +5,8 @@ use std::sync::{Arc, OnceLock};
 
 use anyhow::Result;
 use inkgen_core::{
-    BaseStructureService, CoreResult, InkgenConfig, InstallMode, LanguagesSection, PackageCache,
-    PackageCacheConfig, PackageEntry, TreeShakingSection,
+    BaseStructureService, CoreResult, FilterMode, InkgenConfig, InstallMode, LanguagesSection,
+    PackageCache, PackageCacheConfig, PackageEntry,
 };
 use tempfile::TempDir;
 use tokio::sync::Mutex;
@@ -88,8 +88,13 @@ impl CoreTestWorkspace {
             packages: vec![PackageEntry {
                 name: CORE_PACKAGE.to_string(),
                 version: CORE_VERSION.to_string(),
+                folder: None,
+                filter: FilterMode::All,
+                include_resources: vec![],
+                include_urls: vec![],
+                exclude_resources: vec![],
+                exclude_urls: vec![],
             }],
-            tree_shaking: TreeShakingSection::default(),
             languages: LanguagesSection::default(),
         }
     }
@@ -103,11 +108,13 @@ impl CoreTestWorkspace {
             packages: vec![PackageEntry {
                 name: CORE_PACKAGE.to_string(),
                 version: CORE_VERSION.to_string(),
+                folder: None,
+                filter: FilterMode::Include,
+                include_resources: resources.into_iter().map(Into::into).collect(),
+                include_urls: vec![],
+                exclude_resources: vec![],
+                exclude_urls: vec![],
             }],
-            tree_shaking: TreeShakingSection {
-                allowed_resources: resources.into_iter().map(Into::into).collect(),
-                allowed_profiles: Vec::new(),
-            },
             languages: LanguagesSection::default(),
         }
     }
@@ -135,7 +142,11 @@ impl CoreTestContext {
     {
         let workspace = CoreTestWorkspace::shared()?;
         let mut config = workspace.default_manifest();
-        config.tree_shaking.allowed_resources = resources.into_iter().map(Into::into).collect();
+        // Update filter to include specified resources
+        if let Some(package) = config.packages.first_mut() {
+            package.filter = FilterMode::Include;
+            package.include_resources = resources.into_iter().map(Into::into).collect();
+        }
 
         let cache_config = workspace.package_cache_config()?;
         let cache = PackageCache::builder().config(cache_config).build().await?;
