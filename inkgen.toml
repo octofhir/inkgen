@@ -9,8 +9,24 @@ include_resources = ["Patient", "Observation"]  # Only these RESOURCES
 # Complex types and primitives are ALWAYS generated
 
 [languages.typescript]
+# Basic generation settings
 mode = "interface"
 structural_guards = true
 naming_convention = "PascalCase"
 output_structure = "by_package"
 output_dir = "generated"
+
+# Profile generation (Task 09)
+profile_classes = true        # Generate profile classes instead of interfaces
+profile_methods = true        # Include extension accessor methods in profile classes
+
+# Runtime validation (Task 10)
+zod_schemas = true           # Generate Zod schemas for runtime validation
+zod_colocated = true         # Co-locate Zod schemas with types (same file)
+
+# Type safety (Task 12)
+branded_primitives = true    # Use branded types for FHIR primitives (compile-time safety)
+
+# Note: The following features are enabled automatically (no config needed):
+# - Profile chain resolution (Task 11): Recursively resolves profile ancestry
+# - Slicing integration (Task 13): Generates discriminated unions for sliced elements

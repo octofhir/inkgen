@@ -628,6 +628,8 @@ struct RenderField {
     optional: bool,
     doc: Option<String>,
     must_support: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    zod_type: Option<String>,
 }
 
 /// Represents a group of types imported from the same source file
@@ -670,6 +672,9 @@ struct RenderStructure {
     primitive_imports: Vec<String>,
     fields: Vec<RenderField>,
     imports: Vec<RenderImport>,
+    /// Schema imports for Zod schemas (separate from type imports)
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    schema_imports: Vec<RenderImport>,
     nested_types: Vec<RenderNestedType>,
     /// Generic type parameters for the interface (e.g., "T extends string = string" for Reference<T>)
     type_parameters: Option<String>,
@@ -1296,6 +1301,19 @@ fn build_render_structure(
             nested_fields.push(field);
         }
 
+        // Add Zod types to nested fields if enabled
+        if config.zod_schemas {
+            for field in &mut nested_fields {
+                // Find the element for this field
+                if let Some(element) = nested_info.children.iter().find(|e| {
+                    let field_name = e.path.split('.').next_back().unwrap_or("").replace("[x]", "");
+                    naming::camel_case(&field_name) == field.name
+                }) {
+                    field.zod_type = crate::zod::element_to_zod_schema(element);
+                }
+            }
+        }
+
         nested_types.push(RenderNestedType {
             type_name: nested_info.type_name,
             description: nested_info.doc_comment,
@@ -1319,11 +1337,11 @@ fn build_render_structure(
 
     // Group imports by (package_folder, file_stem) and calculate paths
     let mut import_groups: HashMap<(String, String), Vec<String>> = HashMap::new();
-    for (type_name, (pkg_folder, stem)) in imports_map {
+    for (imported_type, (pkg_folder, stem)) in &imports_map {
         import_groups
-            .entry((pkg_folder, stem))
+            .entry((pkg_folder.clone(), stem.clone()))
             .or_default()
-            .push(type_name);
+            .push(imported_type.clone());
     }
 
     // Determine subfolder for import path calculation
@@ -1388,22 +1406,84 @@ fn build_render_structure(
         String::new()
     };
 
-    // Generate Zod schema fields if enabled
+    // Generate Zod schema fields if enabled, collecting schema imports
     let generate_zod_schema = config.zod_schemas;
-    let zod_fields = if generate_zod_schema {
-        top_level_elements(definition)
+    let (zod_fields, schema_imports) = if generate_zod_schema {
+        let mut fields = Vec::new();
+        let mut schema_type_refs: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+
+        for element in top_level_elements(definition)
             .iter()
-            .filter_map(|element| {
-                let field_name = crate::zod::element_to_field_name(element);
-                let zod_type = crate::zod::element_to_zod_schema(element)?;
-                Some(ZodSchemaField {
+            // Filter out choice type placeholders (e.g., "deceased[x]")
+            // Keep only the specific variants (e.g., "deceasedBoolean", "deceasedDateTime")
+            .filter(|element| !element.path.contains("[x]"))
+        {
+            let field_name = crate::zod::element_to_field_name(element);
+
+            // Check if this element has a nested type (backbone element)
+            if let Some(nested_type_name) = element_to_nested_type.get(&element.path) {
+                // Use the specific nested type schema (defined in same file, no import needed)
+                let base_info = crate::zod::ZodSchemaInfo {
+                    schema: format!("{}Schema", nested_type_name),
+                    type_refs: Vec::new(), // Nested types are in the same file
+                };
+                let schema_info = crate::zod::apply_cardinality(base_info, &element.cardinality);
+
+                fields.push(ZodSchemaField {
                     name: field_name,
-                    zod_type,
-                })
+                    zod_type: schema_info.schema,
+                });
+            } else if let Some(schema_info) = crate::zod::element_to_zod_schema_info(element) {
+                // Collect type references for schema imports
+                for type_ref in &schema_info.type_refs {
+                    // Determine import path based on type location
+                    let import_path = if let Some(import) = imports.iter().find(|imp| imp.types.contains(type_ref)) {
+                        import.path.clone()
+                    } else if has_primitives && primitive_imports.contains(&type_ref) {
+                        "./primitives".to_string()
+                    } else {
+                        // Same package type
+                        let file_name = naming::snake_case(type_ref)
+                            .replace('_', "-")
+                            .to_ascii_lowercase();
+                        format!("./{}", file_name)
+                    };
+
+                    schema_type_refs
+                        .entry(import_path)
+                        .or_insert_with(Vec::new)
+                        .push(type_ref.clone());
+                }
+
+                fields.push(ZodSchemaField {
+                    name: field_name,
+                    zod_type: schema_info.schema,
+                });
+            }
+        }
+
+        // Convert schema_type_refs HashMap to Vec<RenderImport>
+        let mut schema_imports: Vec<RenderImport> = schema_type_refs
+            .into_iter()
+            .map(|(path, types)| {
+                // Deduplicate types
+                let mut unique_types: Vec<String> = types.into_iter().collect::<std::collections::HashSet<_>>().into_iter().collect();
+                unique_types.sort();
+
+                RenderImport {
+                    types: unique_types,
+                    path,
+                    source_package_folder: package_folder.to_string(),
+                }
             })
-            .collect()
+            .collect();
+
+        // Sort imports for consistent output
+        schema_imports.sort_by(|a, b| a.path.cmp(&b.path));
+
+        (fields, schema_imports)
     } else {
-        Vec::new()
+        (Vec::new(), Vec::new())
     };
 
     // Detect slices for discriminated unions
@@ -1425,6 +1505,7 @@ fn build_render_structure(
         primitive_imports,
         fields,
         imports,
+        schema_imports,
         nested_types,
         type_parameters,
         package_name: package_name.to_string(),
@@ -1444,14 +1525,25 @@ fn top_level_elements(definition: &ResourceDefinition) -> Vec<&ElementDefinition
         .iter()
         .find(|elem| elem.path == definition.id);
 
-    // If we have a tree structure with children, return the root's children (sorted for determinism)
+    // If we have a tree structure with children, collect all top-level fields
     if let Some(root) = root
         && !root.children.is_empty()
     {
-        let mut children: Vec<_> = root.children.iter().collect();
+        let mut elements = Vec::new();
+
+        for child in &root.children {
+            // If this is a choice type placeholder (e.g., "deceased[x]"),
+            // include its specific variants instead
+            if child.path.contains("[x]") && !child.children.is_empty() {
+                elements.extend(child.children.iter());
+            } else {
+                elements.push(child);
+            }
+        }
+
         // Sort by path for deterministic ordering
-        children.sort_by(|a, b| a.path.cmp(&b.path));
-        return children;
+        elements.sort_by(|a, b| a.path.cmp(&b.path));
+        return elements;
     }
 
     // Fallback to flat structure: find elements at depth 1 (sorted for determinism)
@@ -1572,6 +1664,7 @@ fn map_field_with_nested_context(
         optional,
         doc,
         must_support: element.must_support,
+        zod_type: None, // Will be populated separately when generating Zod schemas
     }
 }
 

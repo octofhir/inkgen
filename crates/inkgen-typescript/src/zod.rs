@@ -5,51 +5,111 @@
 
 use inkgen_core::ir::{ElementCardinality, ElementDefinition, ElementMax};
 
+/// Information about a Zod schema including the schema expression and type references.
+#[derive(Debug, Clone)]
+pub struct ZodSchemaInfo {
+    /// The Zod schema expression (e.g., "z.string()" or "AddressSchema")
+    pub schema: String,
+    /// Complex types referenced that need schema imports (e.g., ["Address", "Identifier"])
+    /// Does NOT include primitives since they use inline Zod validators
+    pub type_refs: Vec<String>,
+}
+
+/// Normalize a FHIR type reference to a simple type name.
+///
+/// Handles both simple type names and full URLs.
+/// Examples:
+/// - "string" -> "string"
+/// - "http://hl7.org/fhirpath/System.String" -> "string"
+/// - "http://hl7.org/fhir/StructureDefinition/Address" -> "Address"
+fn normalize_type_name(fhir_type: &str) -> String {
+    // If it's a URL, extract the last part
+    if fhir_type.starts_with("http://") || fhir_type.starts_with("https://") {
+        let last_part = fhir_type
+            .split('/')
+            .last()
+            .unwrap_or(fhir_type);
+
+        // For System types like "System.String", extract after the dot
+        if let Some(type_name) = last_part.split('.').last() {
+            // Convert to lowercase for primitives (String -> string)
+            let normalized = type_name.to_string();
+            // Check if it's a known primitive that should be lowercase
+            match normalized.as_str() {
+                "String" => return "string".to_string(),
+                "Boolean" => return "boolean".to_string(),
+                "Integer" => return "integer".to_string(),
+                "Decimal" => return "decimal".to_string(),
+                "Date" => return "date".to_string(),
+                "DateTime" => return "dateTime".to_string(),
+                "Time" => return "time".to_string(),
+                "Instant" => return "instant".to_string(),
+                _ => return normalized,
+            }
+        }
+        last_part.to_string()
+    } else {
+        fhir_type.to_string()
+    }
+}
+
 /// Map FHIR primitive types to Zod validators.
 ///
-/// Returns the Zod expression for validating a FHIR primitive type.
-/// Complex types return a reference to their schema (e.g., "IdentifierSchema").
-pub fn fhir_to_zod_type(fhir_type: &str) -> String {
-    match fhir_type {
+/// Returns ZodSchemaInfo containing the Zod expression and type references.
+/// Primitive types use inline Zod validators (no type refs).
+/// Complex types return a reference to their schema with the type added to type_refs.
+pub fn fhir_to_zod_type(fhir_type: &str) -> ZodSchemaInfo {
+    let normalized = normalize_type_name(fhir_type);
+    let (schema, is_complex) = match normalized.as_str() {
         // String-like primitives
-        "string" | "markdown" => "z.string()".to_string(),
-        "code" => "z.string()".to_string(), // Could add enum validation
-        "id" => "z.string().regex(/^[A-Za-z0-9\\-\\.]{1,64}$/)".to_string(),
-        "uri" => "z.string().url()".to_string(),
-        "url" => "z.string().url()".to_string(),
-        "canonical" => "z.string().url()".to_string(),
-        "oid" => "z.string().regex(/^urn:oid:[0-2](\\.(0|[1-9][0-9]*))+$/)".to_string(),
-        "uuid" => "z.string().uuid()".to_string(),
+        "string" | "markdown" => ("z.string()".to_string(), false),
+        "code" => ("z.string()".to_string(), false), // Could add enum validation
+        "id" => ("z.string().regex(/^[A-Za-z0-9\\-\\.]{1,64}$/)".to_string(), false),
+        "uri" => ("z.string().url()".to_string(), false),
+        "url" => ("z.string().url()".to_string(), false),
+        "canonical" => ("z.string().url()".to_string(), false),
+        "oid" => ("z.string().regex(/^urn:oid:[0-2](\\.(0|[1-9][0-9]*))+$/)".to_string(), false),
+        "uuid" => ("z.string().uuid()".to_string(), false),
 
         // Date/time primitives
-        "date" => "z.string().regex(/^\\d{4}(-\\d{2}(-\\d{2})?)?$/)".to_string(),
-        "dateTime" => "z.string().regex(/^\\d{4}(-\\d{2}(-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?)?)?$/)".to_string(),
-        "instant" => "z.string().datetime()".to_string(),
-        "time" => "z.string().regex(/^\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$/)".to_string(),
+        "date" => ("z.string().regex(/^\\d{4}(-\\d{2}(-\\d{2})?)?$/)".to_string(), false),
+        "dateTime" => ("z.string().regex(/^\\d{4}(-\\d{2}(-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?)?)?$/)".to_string(), false),
+        "instant" => ("z.string().datetime()".to_string(), false),
+        "time" => ("z.string().regex(/^\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$/)".to_string(), false),
 
         // Numeric primitives
-        "boolean" => "z.boolean()".to_string(),
-        "integer" => "z.number().int()".to_string(),
-        "unsignedInt" => "z.number().int().nonnegative()".to_string(),
-        "positiveInt" => "z.number().int().positive()".to_string(),
-        "decimal" => "z.number()".to_string(),
+        "boolean" => ("z.boolean()".to_string(), false),
+        "integer" => ("z.number().int()".to_string(), false),
+        "unsignedInt" => ("z.number().int().nonnegative()".to_string(), false),
+        "positiveInt" => ("z.number().int().positive()".to_string(), false),
+        "decimal" => ("z.number()".to_string(), false),
 
         // Base64
-        "base64Binary" => "z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/)".to_string(),
+        "base64Binary" => ("z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/)".to_string(), false),
 
         // XHTML
-        "xhtml" => "z.string()".to_string(),
+        "xhtml" => ("z.string()".to_string(), false),
 
         // Complex types - reference their schemas
-        _ => format!("{}Schema", fhir_type),
+        _ => (format!("{}Schema", normalized), true),
+    };
+
+    ZodSchemaInfo {
+        schema,
+        type_refs: if is_complex {
+            vec![normalized]
+        } else {
+            Vec::new()
+        },
     }
 }
 
 /// Apply cardinality constraints to a Zod type.
 ///
 /// Handles array wrapping, min/max items, and optional/required.
-pub fn apply_cardinality(base_type: &str, cardinality: &ElementCardinality) -> String {
-    let mut schema = base_type.to_string();
+/// Preserves type references from the input ZodSchemaInfo.
+pub fn apply_cardinality(base_info: ZodSchemaInfo, cardinality: &ElementCardinality) -> ZodSchemaInfo {
+    let mut schema = base_info.schema;
 
     let is_array = match &cardinality.max {
         ElementMax::Unbounded => true,
@@ -78,33 +138,50 @@ pub fn apply_cardinality(base_type: &str, cardinality: &ElementCardinality) -> S
         schema = format!("{}.optional()", schema);
     }
 
-    schema
+    ZodSchemaInfo {
+        schema,
+        type_refs: base_info.type_refs,
+    }
 }
 
-/// Generate Zod schema for an element.
-pub fn element_to_zod_schema(element: &ElementDefinition) -> Option<String> {
+/// Generate Zod schema for an element with type tracking.
+pub fn element_to_zod_schema_info(element: &ElementDefinition) -> Option<ZodSchemaInfo> {
     // Skip elements without types
     if element.types.is_empty() {
         return None;
     }
 
     // Get the base Zod type
-    let base_type = if element.types.len() == 1 {
+    let base_info = if element.types.len() == 1 {
         // Single type
         fhir_to_zod_type(&element.types[0].code)
     } else {
         // Choice type - union of possibilities
-        let union_types: Vec<String> = element.types
+        let mut all_type_refs = Vec::new();
+        let union_schemas: Vec<String> = element.types
             .iter()
-            .map(|t| fhir_to_zod_type(&t.code))
+            .map(|t| {
+                let info = fhir_to_zod_type(&t.code);
+                all_type_refs.extend(info.type_refs);
+                info.schema
+            })
             .collect();
-        format!("z.union([{}])", union_types.join(", "))
+
+        ZodSchemaInfo {
+            schema: format!("z.union([{}])", union_schemas.join(", ")),
+            type_refs: all_type_refs,
+        }
     };
 
     // Apply cardinality
-    let schema = apply_cardinality(&base_type, &element.cardinality);
+    let schema_info = apply_cardinality(base_info, &element.cardinality);
 
-    Some(schema)
+    Some(schema_info)
+}
+
+/// Generate Zod schema for an element (schema string only, for backward compatibility).
+pub fn element_to_zod_schema(element: &ElementDefinition) -> Option<String> {
+    element_to_zod_schema_info(element).map(|info| info.schema)
 }
 
 /// Generate field name for an element in a Zod schema.
@@ -123,10 +200,41 @@ mod tests {
     use inkgen_core::ir::{ElementMax, ElementCardinality};
 
     #[test]
+    fn test_normalize_type_name() {
+        // Simple type names pass through
+        assert_eq!(normalize_type_name("string"), "string");
+        assert_eq!(normalize_type_name("Address"), "Address");
+
+        // URLs are normalized
+        assert_eq!(
+            normalize_type_name("http://hl7.org/fhirpath/System.String"),
+            "string"
+        );
+        assert_eq!(
+            normalize_type_name("http://hl7.org/fhirpath/System.Boolean"),
+            "boolean"
+        );
+        assert_eq!(
+            normalize_type_name("http://hl7.org/fhir/StructureDefinition/Address"),
+            "Address"
+        );
+    }
+
+    #[test]
     fn test_fhir_to_zod_primitive_types() {
         assert_eq!(fhir_to_zod_type("string"), "z.string()");
         assert_eq!(fhir_to_zod_type("boolean"), "z.boolean()");
         assert_eq!(fhir_to_zod_type("integer"), "z.number().int()");
+
+        // Test with URLs
+        assert_eq!(
+            fhir_to_zod_type("http://hl7.org/fhirpath/System.String"),
+            "z.string()"
+        );
+        assert_eq!(
+            fhir_to_zod_type("http://hl7.org/fhirpath/System.Boolean"),
+            "z.boolean()"
+        );
         assert_eq!(fhir_to_zod_type("decimal"), "z.number()");
         assert!(fhir_to_zod_type("id").contains("regex"));
         assert!(fhir_to_zod_type("date").contains("regex"));

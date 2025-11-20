@@ -2,9 +2,11 @@
 
 Welcome to the InkGen documentation! InkGen is a powerful, extensible code generator that transforms FHIR (Fast Healthcare Interoperability Resources) StructureDefinitions into type-safe, idiomatic code for multiple programming languages.
 
+⚠️ **Development Stage**: InkGen is currently in active development. The TypeScript backend is functional and tested, but the project is evolving and APIs may change. We welcome early adopters and contributors!
+
 ## What is InkGen?
 
-InkGen automates the generation of language-specific SDKs from FHIR specifications. Whether you're building a healthcare application in TypeScript, Rust, or another language, InkGen ensures your code stays in sync with the latest FHIR standards while maintaining flexibility for custom extensions and profiles.
+InkGen automates the generation of language-specific SDKs from FHIR specifications. Whether you're building a healthcare application in TypeScript or another language, InkGen ensures your code stays in sync with FHIR standards while maintaining flexibility for custom extensions and profiles.
 
 ## Key Features
 
