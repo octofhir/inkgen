@@ -10,22 +10,19 @@ InkGen is designed to bridge the gap between FHIR specifications and practical S
 
 ## Project Status
 
-> ✅ **TASK-0004: TypeScript Backend MVP** is COMPLETE (100% - Production Ready)
+⚠️ **Development Stage**: InkGen is currently in active development. The TypeScript backend is functional and tested, but the project is evolving and APIs may change. We welcome early adopters and contributors!
 
-> ✅ **TASK-0006: Extensibility & Tooling** is COMPLETE (100% - All Phases Done)
+### Current Features
 
-### Completed Features
-
-**TASK-0004 (TypeScript MVP)**
+**TypeScript Backend**
 - ✅ CLI provides fetch/generate/config commands powered by the core services
 - ✅ **TypeScript generation is fully functional and tested**: 74 tests passing
   - Generates interfaces, nested types, profiles, and structural guards
   - Multiple output modes (interface, class, class_with_builder)
   - Customizable naming conventions and output directory
   - Default output to `./generated` directory
-- ⚠️ Value set integration requires additional infrastructure (planned for TASK-0005)
 
-**TASK-0006 (Extensibility & Tooling - Complete)**
+**Extensibility & Tooling**
 - ✅ **Extensible Backend Architecture**: Core `LanguageGenerator` trait enabling third-party backends
 - ✅ **Template Overlay System**: Customize built-in templates without forking, with validation and merge strategies
 - ✅ **Example Rust Backend**: Complete skeleton implementing programmatic code generation patterns
@@ -33,14 +30,15 @@ InkGen is designed to bridge the gap between FHIR specifications and practical S
 - ✅ **Directory Diff Tooling**: Compare generated outputs with unified diff format and file filtering
 - ✅ **Comprehensive Documentation**: README enhancements, CONTRIBUTING.md guide, and architecture documentation
 
-### Upcoming Work
-- 📋 TASK-0007: Hardening and Release Prep (release automation, documentation site, feedback channels)
-- ❌ Template lint command for overlay validation (future optimization)
-- ❌ Other languages (planned for TASK-0008+)
+### Upcoming Features
+- Template lint command for overlay validation
+- Additional language backends
+- Value set integration
+- Release automation and documentation site
 
-Follow the architecture roadmap in [`docs/adr`](docs/adr) and the work queue in [`docs/tasks`](docs/tasks) for upcoming milestones.
+See [Roadmap](docs/book/src/roadmap.md) for planned features and timeline.
 
-## New Features (TASK-0006)
+## Key Features
 
 ### Extensible Backend Architecture
 
@@ -220,12 +218,12 @@ Use `just --list` to see recipe parameters and defaults.
 - `inkgen diff --old <dir> --new <dir> [--extension <ext>] [--context <lines>]` — compare two generated output directories with unified diff format.
 - `inkgen config completions <shell> --output <path>` — emit shell completion scripts.
 
-## Roadmap References
+## Documentation
 
-- Architecture decisions: [`docs/adr`](docs/adr)
-- Task breakdown and progress logs: [`docs/tasks`](docs/tasks)
-
-Contributions should reference the relevant ADRs and task files to keep context up to date.
+- Full documentation: [InkGen Documentation](docs/book/src/)
+- Getting Started: [Quick Start Guide](docs/book/src/getting-started.md)
+- Architecture: [Architecture Overview](docs/book/src/architecture/README.md)
+- Contributing: [Contributing Guide](CONTRIBUTING.md)
 
 ## Contributing
 
@@ -242,8 +240,7 @@ Before participating, please review our [Code of Conduct](CODE_OF_CONDUCT.md).
 - Use `just bootstrap`, `just test`, and `just review` to validate changes locally
 - Keep documentation aligned with your changes
 - The CI workflow mirrors `just review`, so a passing run locally should translate to green builds
-
-**For Maintainers**: We use task tracking and ADRs for managing internal work. See [CONTRIBUTING.md](CONTRIBUTING.md) for optional internal practices.
+- For detailed guidelines on adding new language backends and development best practices, see [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## License
 
@@ -258,4 +255,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Roadmap
 
-Active and upcoming milestones are tracked in [`docs/tasks`](docs/tasks); consult those files for the authoritative roadmap.
+See [Roadmap](docs/book/src/roadmap.md) for planned features and future development.

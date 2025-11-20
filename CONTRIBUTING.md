@@ -296,13 +296,6 @@ Overlay templates with the same filename override built-in templates. See `crate
 4. **Add tests**: New features must include tests
 5. **Use templates**: Fill out the [PR template](.github/PULL_REQUEST_TEMPLATE.md)
 
-### Optional (for maintainers)
-
-These practices are used by the InkGen team for managing internal work:
-
-- Reference task files from `docs/tasks/` when working on major features
-- Create Architecture Decision Records (ADRs) in `docs/adr/` for significant design changes
-- Update progress notes in task files as you work
 
 ## Release Process
 
@@ -384,17 +377,17 @@ Found a bug? Please report it via [GitHub Issues](https://github.com/octofhir/in
 - Expected vs. actual behavior
 - Your environment (Rust version, OS, etc.)
 
-## Architecture References
+## Architecture Documentation
 
-- [Architecture Decision Records](docs/adr/) — Design decisions and rationales
-- [Task Tracking](docs/tasks/) — Feature work and progress notes
+- [Architecture Overview](docs/book/src/architecture/README.md) — High-level architecture and design
 - [InkGen Core Documentation](crates/inkgen-core/src/lib.rs) — API documentation
+- [Backends Guide](docs/book/src/backends/README.md) — Language backend implementations
 
 ## Questions?
 
 - Check existing [GitHub Issues](https://github.com/octofhir/inkgen/issues)
 - Start a discussion in [GitHub Discussions](https://github.com/octofhir/inkgen/discussions)
-- Review the ADRs in `docs/adr/`
+- Review the [documentation](docs/book/src/README.md)
 
 ## License
 

@@ -11,6 +11,12 @@ import type { {{ import.types | join(sep=", ") }} } from "{{ import.path }}";
 {% endfor -%}
 
 {%- endif %}
+{%- if structure.generate_zod_schema and structure.schema_imports | length > 0 %}
+{% for import in structure.schema_imports -%}
+import { {% for type in import.types %}{{ type }}Schema{% if not loop.last %}, {% endif %}{% endfor %} } from "{{ import.path }}";
+{% endfor -%}
+
+{%- endif %}
 {%- if structure.nested_types | length > 0 %}
 {%- for nested in structure.nested_types %}
 {%- if nested.description %}
@@ -26,6 +32,25 @@ export interface {{ nested.type_name }} {
   {{ field.name }}{% if field.optional %}?{% endif %}: {{ field.type_expr }};
 {%- endfor %}
 }
+
+{%- if structure.generate_zod_schema %}
+
+/**
+ * Zod schema for {{ nested.type_name }}
+ */
+export const {{ nested.type_name }}Schema = z.object({
+{%- for field in nested.fields %}
+{%- if field.zod_type %}
+  {{ field.name }}: {{ field.zod_type }},
+{%- endif %}
+{%- endfor %}
+});
+
+/**
+ * Type inferred from Zod schema
+ */
+export type {{ nested.type_name }}Validated = z.infer<typeof {{ nested.type_name }}Schema>;
+{%- endif %}
 
 {% endfor -%}
 {%- endif %}
@@ -57,8 +82,21 @@ export class {{ structure.class_name }} {
 {%- endif %}
 
 {%- if structure.structural_guards %}
+/**
+ * Type guard to check if input is a valid {{ structure.type_name }}
+ */
 export function is{{ structure.type_name }}(input: unknown): input is {{ structure.type_name }} {
-  return typeof input === "object" && input !== null;
+  if (typeof input !== "object" || input === null) {
+    return false;
+  }
+
+  // Check resourceType for FHIR resources
+  const obj = input as any;
+  if (obj.resourceType !== undefined && obj.resourceType !== "{{ structure.type_name }}") {
+    return false;
+  }
+
+  return true;
 }
 {%- endif %}
 
@@ -77,6 +115,16 @@ export const {{ structure.type_name }}Schema = z.object({
  * Type inferred from Zod schema
  */
 export type {{ structure.type_name }}Validated = z.infer<typeof {{ structure.type_name }}Schema>;
+
+/**
+ * Safely parse and validate input as {{ structure.type_name }} using Zod schema
+ * @param input - The input to parse
+ * @returns The parsed {{ structure.type_name }} if valid, or false if invalid
+ */
+export function parse{{ structure.type_name }}(input: unknown): {{ structure.type_name }}Validated | false {
+  const result = {{ structure.type_name }}Schema.safeParse(input);
+  return result.success ? result.data : false;
+}
 {%- endif %}
 
 {%- if structure.slices is defined and structure.slices | length > 0 %}
