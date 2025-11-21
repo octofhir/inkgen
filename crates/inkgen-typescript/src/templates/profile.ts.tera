@@ -1,0 +1,222 @@
+{%- if profile.imports | length > 0 %}
+{% for import in profile.imports -%}
+import type { {{ import.types | join(sep=", ") }} } from "{{ import.path }}";
+{% endfor -%}
+{%- endif %}
+{%- if profile.generate_zod %}
+import { z } from 'zod';
+import { {{ profile.base_type }}Schema } from "./{{ profile.base_type }}";
+{%- endif %}
+
+{%- if profile.title or profile.description %}
+/**
+{%- if profile.title %}
+ * {{ profile.title }}
+{%- endif %}
+{%- if profile.description %}
+{%- if profile.title %}
+ *
+{%- endif %}
+ * {{ profile.description }}
+{%- endif %}
+ * @profile {{ profile.canonical_url }}
+ */
+{%- endif %}
+export class {{ profile.type_name }} extends {{ profile.base_type }} {
+  /** Profile URL for runtime validation */
+  readonly __profile = '{{ profile.canonical_url }}';
+
+{%- if profile.fixed_elements | length > 0 %}
+
+  // Fixed value constraints
+{%- for fixed in profile.fixed_elements %}
+  /** Fixed value: {{ fixed.fixed_value }} */
+  declare {{ fixed.field_name }}: {{ fixed.fixed_value }};
+{%- endfor %}
+{%- endif %}
+
+{%- if profile.must_support_elements | length > 0 %}
+
+  // Must-support elements (required by profile)
+{%- for element in profile.must_support_elements %}
+  /** Required by profile: {{ element.path }} */
+  declare {{ element.field_name }}: NonNullable<{{ profile.base_type }}['{{ element.field_name }}']>;
+{%- endfor %}
+{%- endif %}
+
+{%- if profile.extension_accessors | length > 0 %}
+
+  // Extension accessors
+{%- for accessor in profile.extension_accessors %}
+
+{%- if profile.extension_style == "both" or profile.extension_style == "typed" %}
+  /**
+   * Get the {{ accessor.name }} extension value
+{%- if accessor.description %}
+   * {{ accessor.description }}
+{%- endif %}
+   * @see {{ accessor.url }}
+   */
+  get {{ accessor.getter_name }}(): {{ accessor.value_type }} {
+    const ext = this.extension?.find(e => e.url === '{{ accessor.url }}');
+{%- if accessor.is_array %}
+    if (!ext?.extension) return [];
+    return ext.extension.map(e => e.{{ accessor.value_field }}).filter((v): v is NonNullable<typeof v> => v !== undefined);
+{%- else %}
+{%- if accessor.is_complex %}
+    return ext;
+{%- else %}
+    return ext?.{{ accessor.value_field }};
+{%- endif %}
+{%- endif %}
+  }
+
+  /**
+   * Set the {{ accessor.name }} extension value
+{%- if accessor.description %}
+   * {{ accessor.description }}
+{%- endif %}
+   * @see {{ accessor.url }}
+   */
+  set {{ accessor.getter_name }}(value: {{ accessor.value_type }}) {
+    if (!this.extension) {
+      this.extension = [];
+    }
+    const existingIndex = this.extension.findIndex(e => e.url === '{{ accessor.url }}');
+{%- if accessor.is_array %}
+    const newExt = {
+      url: '{{ accessor.url }}',
+      extension: value.map(v => ({ {{ accessor.value_field }}: v }))
+    };
+{%- else %}
+{%- if accessor.is_complex %}
+    const newExt = value ? { ...value, url: '{{ accessor.url }}' } : undefined;
+{%- else %}
+    const newExt = value !== undefined ? { url: '{{ accessor.url }}', {{ accessor.value_field }}: value } : undefined;
+{%- endif %}
+{%- endif %}
+    if (existingIndex >= 0) {
+{%- if accessor.is_array or accessor.is_complex %}
+      if (newExt) {
+        this.extension[existingIndex] = newExt;
+      } else {
+        this.extension.splice(existingIndex, 1);
+      }
+{%- else %}
+      if (newExt) {
+        this.extension[existingIndex] = newExt;
+      } else {
+        this.extension.splice(existingIndex, 1);
+      }
+{%- endif %}
+    } else if (newExt) {
+      this.extension.push(newExt);
+    }
+  }
+{%- endif %}
+
+{%- if profile.extension_style == "both" or profile.extension_style == "raw" %}
+
+  /**
+   * Get the raw {{ accessor.name }} Extension object
+   * @see {{ accessor.url }}
+   */
+  get {{ accessor.getter_name }}Extension(): Extension | undefined {
+    return this.extension?.find(e => e.url === '{{ accessor.url }}');
+  }
+
+  /**
+   * Set the raw {{ accessor.name }} Extension object
+   * @see {{ accessor.url }}
+   */
+  set {{ accessor.getter_name }}Extension(value: Extension | undefined) {
+    if (!this.extension) {
+      this.extension = [];
+    }
+    const existingIndex = this.extension.findIndex(e => e.url === '{{ accessor.url }}');
+    if (existingIndex >= 0) {
+      if (value) {
+        this.extension[existingIndex] = value;
+      } else {
+        this.extension.splice(existingIndex, 1);
+      }
+    } else if (value) {
+      this.extension.push(value);
+    }
+  }
+{%- endif %}
+{%- endfor %}
+{%- endif %}
+
+{%- if profile.with_serialization %}
+
+  /**
+   * Serialize to JSON string
+   * @param pretty Whether to pretty-print the JSON
+   */
+  toJson(pretty?: boolean): string {
+    return pretty ? JSON.stringify(this, null, 2) : JSON.stringify(this);
+  }
+
+  /**
+   * Convert to plain object (strips __profile metadata)
+   */
+  toObject(): {{ profile.base_type }} {
+    const { __profile, ...rest } = this;
+    return rest as {{ profile.base_type }};
+  }
+{%- endif %}
+
+{%- if profile.with_validation %}
+
+  /**
+   * Create instance from JSON string with validation
+   * @param json JSON string to parse
+   * @throws {z.ZodError} if validation fails
+   */
+  static fromJson(json: string): {{ profile.type_name }} {
+    const parsed = JSON.parse(json);
+    return {{ profile.type_name }}.fromObject(parsed);
+  }
+
+  /**
+   * Create instance from object with validation
+   * @param obj Object to validate
+   * @throws {z.ZodError} if validation fails
+   */
+  static fromObject(obj: unknown): {{ profile.type_name }} {
+{%- if profile.generate_zod %}
+    const validated = {{ profile.type_name }}Schema.parse(obj);
+    return Object.assign(new {{ profile.type_name }}(), validated);
+{%- else %}
+    return Object.assign(new {{ profile.type_name }}(), obj);
+{%- endif %}
+  }
+{%- endif %}
+}
+
+{%- if profile.generate_zod %}
+
+/**
+ * Zod schema for {{ profile.type_name }}
+ */
+export const {{ profile.type_name }}Schema = {{ profile.base_type }}Schema.extend({
+{%- for element in profile.must_support_elements %}
+{%- if element.zod_constraint %}
+  {{ element.field_name }}: {{ element.zod_constraint }},
+{%- endif %}
+{%- endfor %}
+});
+
+/**
+ * Type inferred from Zod schema
+ */
+export type {{ profile.type_name }}Validated = z.infer<typeof {{ profile.type_name }}Schema>;
+{%- endif %}
+
+/**
+ * Type guard to check if a value is a {{ profile.type_name }}
+ */
+export function is{{ profile.type_name }}(value: {{ profile.base_type }}): value is {{ profile.type_name }} {
+  return '__profile' in value && value.__profile === '{{ profile.canonical_url }}';
+}

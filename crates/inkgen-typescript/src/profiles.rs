@@ -4,7 +4,9 @@
 //! that constrain base resources with additional rules like mustSupport, fixed values,
 //! and tightened cardinality.
 
+use inkgen_core::config::{ExtensionAccessorStyle, ProfileMethodConfig};
 use inkgen_core::ir::{Derivation, ElementDefinition, ResourceDefinition};
+use serde::Serialize;
 
 /// Information about a FHIR profile for TypeScript generation.
 #[derive(Debug, Clone)]
@@ -55,6 +57,87 @@ pub struct ConstrainedElement {
     pub max: String,
     /// Whether this makes an optional field required
     pub makes_required: bool,
+}
+
+/// Render context for profile template generation.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProfileRenderContext {
+    /// Profile type name
+    pub type_name: String,
+    /// Base resource type being extended
+    pub base_type: String,
+    /// Canonical URL
+    pub canonical_url: String,
+    /// Profile title
+    pub title: Option<String>,
+    /// Profile description
+    pub description: Option<String>,
+    /// Import statements needed
+    pub imports: Vec<ImportStatement>,
+    /// Fixed value elements
+    pub fixed_elements: Vec<FixedElementRender>,
+    /// Must-support elements
+    pub must_support_elements: Vec<MustSupportElementRender>,
+    /// Extension accessors
+    pub extension_accessors: Vec<ExtensionAccessor>,
+    /// Style of extension accessors (Both, Typed, or Raw)
+    pub extension_style: ExtensionAccessorStyle,
+    /// Generate Zod schema
+    pub generate_zod: bool,
+    /// Generate serialization methods
+    pub with_serialization: bool,
+    /// Generate validation methods
+    pub with_validation: bool,
+}
+
+/// Import statement for template rendering.
+#[derive(Debug, Clone, Serialize)]
+pub struct ImportStatement {
+    /// Types to import
+    pub types: Vec<String>,
+    /// Import path
+    pub path: String,
+}
+
+/// Fixed element for template rendering.
+#[derive(Debug, Clone, Serialize)]
+pub struct FixedElementRender {
+    /// Field name
+    pub field_name: String,
+    /// Fixed value as literal
+    pub fixed_value: String,
+}
+
+/// Must-support element for template rendering.
+#[derive(Debug, Clone, Serialize)]
+pub struct MustSupportElementRender {
+    /// Element path
+    pub path: String,
+    /// Field name
+    pub field_name: String,
+    /// Zod constraint if applicable
+    pub zod_constraint: Option<String>,
+}
+
+/// Extension accessor metadata for template rendering.
+#[derive(Debug, Clone, Serialize)]
+pub struct ExtensionAccessor {
+    /// Extension name (for documentation)
+    pub name: String,
+    /// Extension URL
+    pub url: String,
+    /// Getter/setter name (e.g., "race" for "raceExtension")
+    pub getter_name: String,
+    /// TypeScript value type (e.g., "Coding[]", "string | undefined")
+    pub value_type: String,
+    /// FHIR value field name (e.g., "valueString", "valueCoding")
+    pub value_field: String,
+    /// Whether this is a complex extension (returns Extension object)
+    pub is_complex: bool,
+    /// Whether this is an array
+    pub is_array: bool,
+    /// Extension description
+    pub description: Option<String>,
 }
 
 impl ProfileInfo {
@@ -110,7 +193,12 @@ impl ProfileInfo {
     /// Generates TypeScript code for this profile.
     ///
     /// Produces an interface or class that extends the base type with profile constraints.
-    pub fn generate_typescript(&self, as_class: bool, with_methods: bool, with_zod: bool) -> String {
+    pub fn generate_typescript(
+        &self,
+        as_class: bool,
+        with_methods: bool,
+        with_zod: bool,
+    ) -> String {
         let mut output = String::new();
 
         // Add JSDoc comment
@@ -146,7 +234,10 @@ impl ProfileInfo {
             // Add fixed value fields (override with specific literals)
             for fixed in &self.fixed_elements {
                 output.push_str(&format!("  /** Fixed value: {} */\n", fixed.fixed_value));
-                output.push_str(&format!("  declare {}: {};\n\n", fixed.field_name, fixed.fixed_value));
+                output.push_str(&format!(
+                    "  declare {}: {};\n\n",
+                    fixed.field_name, fixed.fixed_value
+                ));
             }
 
             // Add constrained fields (override cardinality with declare)
@@ -226,11 +317,8 @@ impl ProfileInfo {
 
         // Generate Zod schema if requested
         if with_zod {
-            output.push_str("\n");
-            output.push_str(&format!(
-                "/**\n * Zod schema for {}\n */\n",
-                self.type_name
-            ));
+            output.push('\n');
+            output.push_str(&format!("/**\n * Zod schema for {}\n */\n", self.type_name));
             output.push_str(&format!(
                 "export const {}Schema = {}Schema.extend({{\n",
                 self.type_name, self.base_type
@@ -287,10 +375,7 @@ impl ProfileInfo {
             output.push_str("  }\n\n");
         } else {
             // Simple extension returns the value
-            let value_type = extension
-                .value_type
-                .as_deref()
-                .unwrap_or("unknown");
+            let value_type = extension.value_type.as_deref().unwrap_or("unknown");
             output.push_str(&format!(
                 "  get{}(): {} | undefined {{\n",
                 method_name, value_type
@@ -311,7 +396,10 @@ impl ProfileInfo {
                 _ => "value",
             };
 
-            output.push_str(&format!("    return ext?.{} as {} | undefined;\n", value_field, value_type));
+            output.push_str(&format!(
+                "    return ext?.{} as {} | undefined;\n",
+                value_field, value_type
+            ));
             output.push_str("  }\n\n");
         }
 
@@ -331,10 +419,7 @@ impl ProfileInfo {
                 method_name
             ));
         } else {
-            let value_type = extension
-                .value_type
-                .as_deref()
-                .unwrap_or("unknown");
+            let value_type = extension.value_type.as_deref().unwrap_or("unknown");
             output.push_str(&format!(
                 "  set{}(value: {}): void {{\n",
                 method_name, value_type
@@ -356,10 +441,7 @@ impl ProfileInfo {
             output.push_str("      this.extension.push(value);\n");
             output.push_str("    }\n");
         } else {
-            let value_type = extension
-                .value_type
-                .as_deref()
-                .unwrap_or("unknown");
+            let value_type = extension.value_type.as_deref().unwrap_or("unknown");
             let value_field = match value_type {
                 "string" => "valueString",
                 "number" => "valueInteger",
@@ -389,6 +471,102 @@ impl ProfileInfo {
         !self.fixed_elements.is_empty()
             || !self.constrained_elements.is_empty()
             || !self.must_support_elements.is_empty()
+    }
+
+    /// Build a render context for template-based generation.
+    pub fn to_render_context(
+        &self,
+        method_config: &ProfileMethodConfig,
+        with_zod: bool,
+    ) -> ProfileRenderContext {
+        // Collect imports needed
+        let mut imports = Vec::new();
+        let mut import_types = std::collections::HashSet::new();
+
+        // Add Extension import if there are extensions
+        if !self.extensions.is_empty() {
+            import_types.insert("Extension".to_string());
+        }
+
+        // Add types from extensions
+        for ext in &self.extensions {
+            if let Some(value_type) = &ext.value_type
+                && !is_primitive_typescript_type(value_type)
+            {
+                import_types.insert(value_type.clone());
+            }
+        }
+
+        // Create imports statement
+        if !import_types.is_empty() {
+            let mut types: Vec<String> = import_types.into_iter().collect();
+            types.sort();
+            imports.push(ImportStatement {
+                types,
+                path: "./types".to_string(),
+            });
+        }
+
+        // Build fixed elements
+        let fixed_elements: Vec<FixedElementRender> = self
+            .fixed_elements
+            .iter()
+            .map(|f| FixedElementRender {
+                field_name: f.field_name.clone(),
+                fixed_value: f.fixed_value.clone(),
+            })
+            .collect();
+
+        // Build must-support elements
+        let must_support_elements: Vec<MustSupportElementRender> = self
+            .constrained_elements
+            .iter()
+            .filter(|c| c.makes_required)
+            .map(|c| MustSupportElementRender {
+                path: c.path.clone(),
+                field_name: c.field_name.clone(),
+                zod_constraint: Some(format!("z.array(z.unknown()).min({})", c.min)),
+            })
+            .collect();
+
+        // Build extension accessors only if enabled
+        let extension_accessors: Vec<ExtensionAccessor> = if method_config.extension_accessors {
+            self.extensions
+                .iter()
+                .map(build_extension_accessor)
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        ProfileRenderContext {
+            type_name: self.type_name.clone(),
+            base_type: self.base_type.clone(),
+            canonical_url: self.canonical_url.clone(),
+            title: self.title.clone(),
+            description: self.description.clone(),
+            imports,
+            fixed_elements,
+            must_support_elements,
+            extension_accessors,
+            extension_style: method_config.extension_style,
+            generate_zod: with_zod,
+            with_serialization: method_config.serialization,
+            with_validation: method_config.validation,
+        }
+    }
+
+    /// Generate TypeScript code using Tera template.
+    pub fn generate_typescript_with_template(
+        &self,
+        tera: &tera::Tera,
+        method_config: &ProfileMethodConfig,
+        with_zod: bool,
+    ) -> Result<String, tera::Error> {
+        let context = self.to_render_context(method_config, with_zod);
+        let mut tera_context = tera::Context::new();
+        tera_context.insert("profile", &context);
+        tera.render("profile.ts.tera", &tera_context)
     }
 }
 
@@ -532,12 +710,122 @@ pub fn profile_url_to_type_name(url: &str) -> String {
         .collect()
 }
 
+/// Check if a TypeScript type is a primitive (doesn't need import).
+fn is_primitive_typescript_type(type_name: &str) -> bool {
+    matches!(
+        type_name,
+        "string" | "number" | "boolean" | "undefined" | "null" | "unknown" | "any"
+    ) || type_name.ends_with(" | undefined")
+        || type_name.ends_with("[]")
+}
+
+/// Build an extension accessor from a RenderExtension.
+fn build_extension_accessor(ext: &crate::extensions::RenderExtension) -> ExtensionAccessor {
+    // Generate getter name by stripping "Extension" suffix if present
+    let getter_name = ext
+        .type_name
+        .strip_suffix("Extension")
+        .unwrap_or(&ext.type_name)
+        .chars()
+        .enumerate()
+        .map(|(i, c)| {
+            if i == 0 {
+                c.to_lowercase().next().unwrap()
+            } else {
+                c
+            }
+        })
+        .collect::<String>();
+
+    // Determine value type and field
+    let (value_type, value_field, is_complex, is_array) = if ext.is_complex {
+        // Complex extensions return the Extension object
+        (
+            "Extension | undefined".to_string(),
+            "extension".to_string(),
+            true,
+            false,
+        )
+    } else if let Some(vtype) = &ext.value_type {
+        // Simple extension - determine value field from type
+        let field = fhir_type_to_value_field(vtype);
+        let is_arr = ext.cardinality_max.is_none() || ext.cardinality_max.unwrap() > 1;
+
+        let final_type = if is_arr {
+            format!("{}[]", vtype)
+        } else {
+            format!("{} | undefined", vtype)
+        };
+
+        (final_type, field, false, is_arr)
+    } else {
+        // Unknown type
+        ("unknown".to_string(), "value".to_string(), false, false)
+    };
+
+    ExtensionAccessor {
+        name: ext.type_name.clone(),
+        url: ext.url.clone(),
+        getter_name,
+        value_type,
+        value_field,
+        is_complex,
+        is_array,
+        description: ext.description.clone(),
+    }
+}
+
+/// Map a FHIR type to its value[x] field name.
+fn fhir_type_to_value_field(fhir_type: &str) -> String {
+    let type_name = fhir_type
+        .trim_end_matches("[]")
+        .trim_end_matches(" | undefined");
+
+    match type_name {
+        "string" => "valueString",
+        "number" | "integer" => "valueInteger",
+        "boolean" => "valueBoolean",
+        "CodeableConcept" => "valueCodeableConcept",
+        "Coding" => "valueCoding",
+        "Reference" => "valueReference",
+        "Quantity" => "valueQuantity",
+        "Period" => "valuePeriod",
+        "Range" => "valueRange",
+        "Ratio" => "valueRatio",
+        "dateTime" | "Date" => "valueDateTime",
+        "date" => "valueDate",
+        "time" => "valueTime",
+        "instant" => "valueInstant",
+        "uri" | "url" => "valueUri",
+        "code" => "valueCode",
+        "id" => "valueId",
+        "markdown" => "valueMarkdown",
+        "base64Binary" => "valueBase64Binary",
+        "Identifier" => "valueIdentifier",
+        "HumanName" => "valueHumanName",
+        "Address" => "valueAddress",
+        "ContactPoint" => "valueContactPoint",
+        "Attachment" => "valueAttachment",
+        _ => "value",
+    }
+    .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use indexmap::IndexMap;
     use inkgen_core::ir::{ElementCardinality, ElementMax, ProfileLineage, ResourceKind};
     use serde_json::json;
+    use tera::Tera;
+
+    /// Helper function to create a Tera instance with the profile template
+    fn create_test_tera() -> Tera {
+        let mut tera = Tera::default();
+        tera.add_raw_template("profile.ts.tera", include_str!("templates/profile.ts.tera"))
+            .expect("Failed to add profile template");
+        tera
+    }
 
     #[test]
     fn test_profile_url_to_type_name() {
@@ -746,7 +1034,9 @@ mod tests {
 
         // Test Zod schema generation
         let output_with_zod = profile.generate_typescript(false, false, true);
-        assert!(output_with_zod.contains("export const USCorePatientSchema = PatientSchema.extend({"));
+        assert!(
+            output_with_zod.contains("export const USCorePatientSchema = PatientSchema.extend({")
+        );
         assert!(output_with_zod.contains("identifier: z.array(z.unknown()).min(1)"));
     }
 
@@ -791,5 +1081,395 @@ mod tests {
             depth: 0,
             is_backbone: false,
         }
+    }
+
+    #[test]
+    fn test_profile_render_context() {
+        let profile = ProfileInfo {
+            type_name: "USCorePatient".to_string(),
+            canonical_url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+                .to_string(),
+            base_type: "Patient".to_string(),
+            title: Some("US Core Patient".to_string()),
+            description: Some("Profile for US Core Patient".to_string()),
+            must_support_elements: vec![],
+            fixed_elements: vec![FixedElement {
+                path: "Patient.active".to_string(),
+                field_name: "active".to_string(),
+                fixed_value: "true".to_string(),
+                value_type: "boolean".to_string(),
+            }],
+            constrained_elements: vec![ConstrainedElement {
+                path: "Patient.identifier".to_string(),
+                field_name: "identifier".to_string(),
+                min: 1,
+                max: "*".to_string(),
+                makes_required: true,
+            }],
+            extensions: vec![],
+        };
+
+        let method_config = ProfileMethodConfig::default();
+        let context = profile.to_render_context(&method_config, true);
+
+        assert_eq!(context.type_name, "USCorePatient");
+        assert_eq!(context.base_type, "Patient");
+        assert_eq!(context.title, Some("US Core Patient".to_string()));
+        assert_eq!(context.fixed_elements.len(), 1);
+        assert_eq!(context.fixed_elements[0].field_name, "active");
+        assert_eq!(context.must_support_elements.len(), 1);
+        assert_eq!(context.must_support_elements[0].field_name, "identifier");
+        assert_eq!(context.extension_style, ExtensionAccessorStyle::Both);
+        assert!(context.generate_zod);
+        assert!(context.with_serialization);
+        assert!(context.with_validation);
+    }
+
+    #[test]
+    fn test_fhir_type_to_value_field() {
+        assert_eq!(fhir_type_to_value_field("string"), "valueString");
+        assert_eq!(fhir_type_to_value_field("integer"), "valueInteger");
+        assert_eq!(fhir_type_to_value_field("boolean"), "valueBoolean");
+        assert_eq!(fhir_type_to_value_field("Coding"), "valueCoding");
+        assert_eq!(
+            fhir_type_to_value_field("CodeableConcept"),
+            "valueCodeableConcept"
+        );
+        assert_eq!(fhir_type_to_value_field("Reference"), "valueReference");
+        assert_eq!(fhir_type_to_value_field("unknown"), "value");
+    }
+
+    #[test]
+    fn test_is_primitive_typescript_type() {
+        assert!(is_primitive_typescript_type("string"));
+        assert!(is_primitive_typescript_type("number"));
+        assert!(is_primitive_typescript_type("boolean"));
+        assert!(is_primitive_typescript_type("undefined"));
+        assert!(is_primitive_typescript_type("string | undefined"));
+        assert!(is_primitive_typescript_type("Coding[]"));
+        assert!(!is_primitive_typescript_type("Coding"));
+        assert!(!is_primitive_typescript_type("CodeableConcept"));
+    }
+
+    #[test]
+    fn test_profile_generation_with_typed_extension_style() {
+        let tera = create_test_tera();
+        let race_extension = crate::extensions::RenderExtension {
+            url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race".to_string(),
+            type_name: "USCoreRaceExtension".to_string(),
+            contexts: vec![],
+            is_complex: false,
+            value_type: Some("CodeableConcept".to_string()),
+            nested_types: vec![],
+            cardinality_min: 0,
+            cardinality_max: Some(1),
+            description: Some("Race of the patient".to_string()),
+        };
+
+        let profile = ProfileInfo {
+            type_name: "USCorePatient".to_string(),
+            canonical_url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+                .to_string(),
+            base_type: "Patient".to_string(),
+            title: Some("US Core Patient".to_string()),
+            description: Some("US Core Patient Profile".to_string()),
+            must_support_elements: vec![],
+            fixed_elements: vec![],
+            constrained_elements: vec![],
+            extensions: vec![race_extension],
+        };
+
+        let method_config = ProfileMethodConfig {
+            extension_accessors: true,
+            extension_style: ExtensionAccessorStyle::Typed,
+            serialization: true,
+            validation: true,
+        };
+
+        let output = profile
+            .generate_typescript_with_template(&tera, &method_config, false)
+            .unwrap();
+
+        // Should have typed accessors
+        assert!(output.contains("get uSCoreRace()"));
+        assert!(output.contains("set uSCoreRace(value: CodeableConcept"));
+        assert!(output.contains("valueCodeableConcept"));
+
+        // Should NOT have raw Extension accessors
+        assert!(!output.contains("get uSCoreRaceExtension()"));
+        assert!(!output.contains("Extension | undefined"));
+    }
+
+    #[test]
+    fn test_profile_generation_with_raw_extension_style() {
+        let tera = create_test_tera();
+        let race_extension = crate::extensions::RenderExtension {
+            url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race".to_string(),
+            type_name: "USCoreRaceExtension".to_string(),
+            contexts: vec![],
+            is_complex: false,
+            value_type: Some("CodeableConcept".to_string()),
+            nested_types: vec![],
+            cardinality_min: 0,
+            cardinality_max: Some(1),
+            description: Some("Race of the patient".to_string()),
+        };
+
+        let profile = ProfileInfo {
+            type_name: "USCorePatient".to_string(),
+            canonical_url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+                .to_string(),
+            base_type: "Patient".to_string(),
+            title: Some("US Core Patient".to_string()),
+            description: Some("US Core Patient Profile".to_string()),
+            must_support_elements: vec![],
+            fixed_elements: vec![],
+            constrained_elements: vec![],
+            extensions: vec![race_extension],
+        };
+
+        let method_config = ProfileMethodConfig {
+            extension_accessors: true,
+            extension_style: ExtensionAccessorStyle::Raw,
+            serialization: true,
+            validation: true,
+        };
+
+        let output = profile
+            .generate_typescript_with_template(&tera, &method_config, false)
+            .unwrap();
+
+        // Should have raw Extension accessors
+        assert!(output.contains("get uSCoreRaceExtension()"));
+        assert!(output.contains("set uSCoreRaceExtension(value: Extension | undefined)"));
+
+        // Should NOT have typed accessors
+        assert!(!output.contains("get uSCoreRace(): CodeableConcept"));
+        assert!(!output.contains("set uSCoreRace(value: CodeableConcept"));
+    }
+
+    #[test]
+    fn test_profile_generation_with_both_extension_style() {
+        let tera = create_test_tera();
+        let race_extension = crate::extensions::RenderExtension {
+            url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race".to_string(),
+            type_name: "USCoreRaceExtension".to_string(),
+            contexts: vec![],
+            is_complex: false,
+            value_type: Some("CodeableConcept".to_string()),
+            nested_types: vec![],
+            cardinality_min: 0,
+            cardinality_max: Some(1),
+            description: Some("Race of the patient".to_string()),
+        };
+
+        let profile = ProfileInfo {
+            type_name: "USCorePatient".to_string(),
+            canonical_url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+                .to_string(),
+            base_type: "Patient".to_string(),
+            title: Some("US Core Patient".to_string()),
+            description: Some("US Core Patient Profile".to_string()),
+            must_support_elements: vec![],
+            fixed_elements: vec![],
+            constrained_elements: vec![],
+            extensions: vec![race_extension],
+        };
+
+        let method_config = ProfileMethodConfig {
+            extension_accessors: true,
+            extension_style: ExtensionAccessorStyle::Both,
+            serialization: true,
+            validation: true,
+        };
+
+        let output = profile
+            .generate_typescript_with_template(&tera, &method_config, false)
+            .unwrap();
+
+        // Should have both typed accessors
+        assert!(output.contains("get uSCoreRace()"));
+        assert!(output.contains("set uSCoreRace(value: CodeableConcept"));
+
+        // AND raw Extension accessors
+        assert!(output.contains("get uSCoreRaceExtension()"));
+        assert!(output.contains("set uSCoreRaceExtension(value: Extension | undefined)"));
+    }
+
+    #[test]
+    fn test_profile_generation_without_serialization() {
+        let tera = create_test_tera();
+        let profile = ProfileInfo {
+            type_name: "USCorePatient".to_string(),
+            canonical_url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+                .to_string(),
+            base_type: "Patient".to_string(),
+            title: Some("US Core Patient".to_string()),
+            description: Some("US Core Patient Profile".to_string()),
+            must_support_elements: vec![],
+            fixed_elements: vec![],
+            constrained_elements: vec![],
+            extensions: vec![],
+        };
+
+        let method_config = ProfileMethodConfig {
+            extension_accessors: true,
+            extension_style: ExtensionAccessorStyle::Both,
+            serialization: false,
+            validation: true,
+        };
+
+        let output = profile
+            .generate_typescript_with_template(&tera, &method_config, false)
+            .unwrap();
+
+        // Should NOT have serialization methods
+        assert!(!output.contains("toJson("));
+        assert!(!output.contains("toObject()"));
+    }
+
+    #[test]
+    fn test_profile_generation_without_validation() {
+        let tera = create_test_tera();
+        let profile = ProfileInfo {
+            type_name: "USCorePatient".to_string(),
+            canonical_url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+                .to_string(),
+            base_type: "Patient".to_string(),
+            title: Some("US Core Patient".to_string()),
+            description: Some("US Core Patient Profile".to_string()),
+            must_support_elements: vec![],
+            fixed_elements: vec![],
+            constrained_elements: vec![],
+            extensions: vec![],
+        };
+
+        let method_config = ProfileMethodConfig {
+            extension_accessors: true,
+            extension_style: ExtensionAccessorStyle::Both,
+            serialization: true,
+            validation: false,
+        };
+
+        let output = profile
+            .generate_typescript_with_template(&tera, &method_config, false)
+            .unwrap();
+
+        // Should NOT have validation methods
+        assert!(!output.contains("static fromJson("));
+        assert!(!output.contains("static fromObject("));
+    }
+
+    #[test]
+    fn test_profile_generation_without_extension_accessors() {
+        let tera = create_test_tera();
+        let race_extension = crate::extensions::RenderExtension {
+            url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race".to_string(),
+            type_name: "USCoreRaceExtension".to_string(),
+            contexts: vec![],
+            is_complex: false,
+            value_type: Some("CodeableConcept".to_string()),
+            nested_types: vec![],
+            cardinality_min: 0,
+            cardinality_max: Some(1),
+            description: Some("Race of the patient".to_string()),
+        };
+
+        let profile = ProfileInfo {
+            type_name: "USCorePatient".to_string(),
+            canonical_url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+                .to_string(),
+            base_type: "Patient".to_string(),
+            title: Some("US Core Patient".to_string()),
+            description: Some("US Core Patient Profile".to_string()),
+            must_support_elements: vec![],
+            fixed_elements: vec![],
+            constrained_elements: vec![],
+            extensions: vec![race_extension],
+        };
+
+        let method_config = ProfileMethodConfig {
+            extension_accessors: false,
+            extension_style: ExtensionAccessorStyle::Both,
+            serialization: true,
+            validation: true,
+        };
+
+        let context = profile.to_render_context(&method_config, false);
+
+        // Should have no extension accessors
+        assert_eq!(context.extension_accessors.len(), 0);
+
+        let output = profile
+            .generate_typescript_with_template(&tera, &method_config, false)
+            .unwrap();
+
+        // Should NOT have any extension accessors
+        assert!(!output.contains("get uSCoreRace"));
+        assert!(!output.contains("set uSCoreRace"));
+        assert!(!output.contains("get uSCoreRaceExtension"));
+        assert!(!output.contains("set uSCoreRaceExtension"));
+    }
+
+    #[test]
+    fn test_profile_generation_all_methods_disabled() {
+        let tera = create_test_tera();
+        let race_extension = crate::extensions::RenderExtension {
+            url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race".to_string(),
+            type_name: "USCoreRaceExtension".to_string(),
+            contexts: vec![],
+            is_complex: false,
+            value_type: Some("CodeableConcept".to_string()),
+            nested_types: vec![],
+            cardinality_min: 0,
+            cardinality_max: Some(1),
+            description: Some("Race of the patient".to_string()),
+        };
+
+        let profile = ProfileInfo {
+            type_name: "USCorePatient".to_string(),
+            canonical_url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient"
+                .to_string(),
+            base_type: "Patient".to_string(),
+            title: Some("US Core Patient".to_string()),
+            description: Some("US Core Patient Profile".to_string()),
+            must_support_elements: vec![],
+            fixed_elements: vec![],
+            constrained_elements: vec![ConstrainedElement {
+                path: "Patient.identifier".to_string(),
+                field_name: "identifier".to_string(),
+                min: 1,
+                max: "*".to_string(),
+                makes_required: true,
+            }],
+            extensions: vec![race_extension],
+        };
+
+        let method_config = ProfileMethodConfig {
+            extension_accessors: false,
+            extension_style: ExtensionAccessorStyle::Both,
+            serialization: false,
+            validation: false,
+        };
+
+        let output = profile
+            .generate_typescript_with_template(&tera, &method_config, false)
+            .unwrap();
+
+        // Should have basic class structure
+        assert!(output.contains("export class USCorePatient extends Patient"));
+        assert!(output.contains("readonly __profile ="));
+        assert!(output.contains("declare identifier"));
+
+        // Should NOT have extension accessors
+        assert!(!output.contains("get uSCoreRace"));
+
+        // Should NOT have serialization methods
+        assert!(!output.contains("toJson("));
+        assert!(!output.contains("toObject()"));
+
+        // Should NOT have validation methods
+        assert!(!output.contains("static fromJson("));
+        assert!(!output.contains("static fromObject("));
     }
 }

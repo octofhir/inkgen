@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, CoreResult};
 use crate::package::PackageRequest;
@@ -65,6 +65,52 @@ fn default_filter_mode() -> FilterMode {
     FilterMode::All
 }
 
+/// Style of extension accessors to generate in profile classes
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ExtensionAccessorStyle {
+    /// Generate both typed value and raw Extension accessors
+    Both,
+    /// Generate only typed value getters/setters
+    Typed,
+    /// Generate only raw Extension getters/setters
+    Raw,
+}
+
+impl Default for ExtensionAccessorStyle {
+    fn default() -> Self {
+        Self::Both
+    }
+}
+
+/// Configuration for profile method generation
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct ProfileMethodConfig {
+    /// Generate extension accessor methods (default: true)
+    pub extension_accessors: bool,
+
+    /// Style of extension accessors to generate (default: Both)
+    pub extension_style: ExtensionAccessorStyle,
+
+    /// Generate serialization methods (toJson, toObject) (default: true)
+    pub serialization: bool,
+
+    /// Generate validation methods (fromJson, fromObject) (default: true)
+    pub validation: bool,
+}
+
+impl Default for ProfileMethodConfig {
+    fn default() -> Self {
+        Self {
+            extension_accessors: true,
+            extension_style: ExtensionAccessorStyle::Both,
+            serialization: true,
+            validation: true,
+        }
+    }
+}
+
 // REMOVED: Global tree_shaking section
 // Per-package filtering is now the standard approach
 
@@ -120,9 +166,9 @@ pub struct TypescriptLanguageConfig {
     #[serde(default)]
     pub profile_classes: bool,
 
-    /// Include extension methods in profile classes (default: true)
-    #[serde(default = "default_true")]
-    pub profile_methods: bool,
+    /// Profile method generation configuration
+    #[serde(default)]
+    pub profile_methods: ProfileMethodConfig,
 
     /// Generate Zod schemas for runtime validation (default: false)
     #[serde(default)]
@@ -262,12 +308,186 @@ impl InkgenConfig {
     pub fn structure_config(&self) -> StructureProviderConfig {
         // No global filtering - use per-package filtering instead
         StructureProviderConfig {
-            allowed_resource_types: None,  // Include all at provider level
-            include_profiles: true,         // Filter at generation time
+            allowed_resource_types: None, // Include all at provider level
+            include_profiles: true,       // Filter at generation time
         }
     }
 
     pub fn typescript_config(&self) -> Option<&TypescriptLanguageConfig> {
         self.languages.typescript.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_profile_method_config_defaults() {
+        let config = ProfileMethodConfig::default();
+        assert!(config.extension_accessors);
+        assert_eq!(config.extension_style, ExtensionAccessorStyle::Both);
+        assert!(config.serialization);
+        assert!(config.validation);
+    }
+
+    #[test]
+    fn test_extension_accessor_style_deserialization() {
+        // Test "both" variant
+        let toml_both = r#"
+            extension_accessors = true
+            extension_style = "both"
+            serialization = true
+            validation = true
+        "#;
+        let config: ProfileMethodConfig = toml::from_str(toml_both).unwrap();
+        assert_eq!(config.extension_style, ExtensionAccessorStyle::Both);
+
+        // Test "typed" variant
+        let toml_typed = r#"
+            extension_accessors = true
+            extension_style = "typed"
+            serialization = true
+            validation = true
+        "#;
+        let config: ProfileMethodConfig = toml::from_str(toml_typed).unwrap();
+        assert_eq!(config.extension_style, ExtensionAccessorStyle::Typed);
+
+        // Test "raw" variant
+        let toml_raw = r#"
+            extension_accessors = true
+            extension_style = "raw"
+            serialization = true
+            validation = true
+        "#;
+        let config: ProfileMethodConfig = toml::from_str(toml_raw).unwrap();
+        assert_eq!(config.extension_style, ExtensionAccessorStyle::Raw);
+    }
+
+    #[test]
+    fn test_profile_method_config_custom_values() {
+        let toml_config = r#"
+            extension_accessors = false
+            extension_style = "typed"
+            serialization = false
+            validation = false
+        "#;
+        let config: ProfileMethodConfig = toml::from_str(toml_config).unwrap();
+        assert!(!config.extension_accessors);
+        assert_eq!(config.extension_style, ExtensionAccessorStyle::Typed);
+        assert!(!config.serialization);
+        assert!(!config.validation);
+    }
+
+    #[test]
+    fn test_typescript_config_with_profile_methods() {
+        let toml_config = r#"
+            [languages.typescript]
+            mode = "class"
+            profile_classes = true
+
+            [languages.typescript.profile_methods]
+            extension_accessors = true
+            extension_style = "both"
+            serialization = true
+            validation = true
+        "#;
+        let config: InkgenConfig = toml::from_str(toml_config).unwrap();
+        let ts_config = config.typescript_config().unwrap();
+        assert!(ts_config.profile_classes);
+        assert!(ts_config.profile_methods.extension_accessors);
+        assert_eq!(
+            ts_config.profile_methods.extension_style,
+            ExtensionAccessorStyle::Both
+        );
+        assert!(ts_config.profile_methods.serialization);
+        assert!(ts_config.profile_methods.validation);
+    }
+
+    #[test]
+    fn test_typescript_config_with_typed_extension_style() {
+        let toml_config = r#"
+            [languages.typescript]
+            profile_classes = true
+
+            [languages.typescript.profile_methods]
+            extension_style = "typed"
+        "#;
+        let config: InkgenConfig = toml::from_str(toml_config).unwrap();
+        let ts_config = config.typescript_config().unwrap();
+        assert_eq!(
+            ts_config.profile_methods.extension_style,
+            ExtensionAccessorStyle::Typed
+        );
+        // Other values should be default
+        assert!(ts_config.profile_methods.extension_accessors);
+        assert!(ts_config.profile_methods.serialization);
+        assert!(ts_config.profile_methods.validation);
+    }
+
+    #[test]
+    fn test_typescript_config_with_raw_extension_style() {
+        let toml_config = r#"
+            [languages.typescript]
+            profile_classes = true
+
+            [languages.typescript.profile_methods]
+            extension_style = "raw"
+        "#;
+        let config: InkgenConfig = toml::from_str(toml_config).unwrap();
+        let ts_config = config.typescript_config().unwrap();
+        assert_eq!(
+            ts_config.profile_methods.extension_style,
+            ExtensionAccessorStyle::Raw
+        );
+    }
+
+    #[test]
+    fn test_typescript_config_defaults_when_missing() {
+        let toml_config = r#"
+            [languages.typescript]
+            profile_classes = true
+        "#;
+        let config: InkgenConfig = toml::from_str(toml_config).unwrap();
+        let ts_config = config.typescript_config().unwrap();
+        // profile_methods should use defaults
+        assert!(ts_config.profile_methods.extension_accessors);
+        assert_eq!(
+            ts_config.profile_methods.extension_style,
+            ExtensionAccessorStyle::Both
+        );
+        assert!(ts_config.profile_methods.serialization);
+        assert!(ts_config.profile_methods.validation);
+    }
+
+    #[test]
+    fn test_profile_methods_disabled() {
+        let toml_config = r#"
+            [languages.typescript]
+            profile_classes = true
+
+            [languages.typescript.profile_methods]
+            extension_accessors = false
+            serialization = false
+            validation = false
+        "#;
+        let config: InkgenConfig = toml::from_str(toml_config).unwrap();
+        let ts_config = config.typescript_config().unwrap();
+        assert!(!ts_config.profile_methods.extension_accessors);
+        assert!(!ts_config.profile_methods.serialization);
+        assert!(!ts_config.profile_methods.validation);
+    }
+
+    #[test]
+    fn test_sanitize_package_name() {
+        assert_eq!(sanitize_package_name("hl7.fhir.r4.core"), "r4-core");
+        assert_eq!(sanitize_package_name("hl7.fhir.us.core"), "us-core");
+        assert_eq!(sanitize_package_name("hl7.terminology"), "terminology");
+        assert_eq!(sanitize_package_name("ihe.iti.pix"), "iti-pix");
+        assert_eq!(
+            sanitize_package_name("org.example.custom"),
+            "example-custom"
+        );
+        assert_eq!(sanitize_package_name("custom.package"), "custom-package");
     }
 }

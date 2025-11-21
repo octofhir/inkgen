@@ -232,7 +232,7 @@ fn init_tracing(verbosity: u8) -> Result<()> {
                     }
 
                     true
-                }))
+                })),
         )
         .init();
 
@@ -365,7 +365,11 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
                 .collect();
 
             analyzer.register_package(&package_key, urls);
-            info!("  Registered {} with {} resources", package_key, summaries.len());
+            info!(
+                "  Registered {} with {} resources",
+                package_key,
+                summaries.len()
+            );
         }
 
         // Phase 2: Analyze dependencies across all packages
@@ -449,7 +453,10 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
         }
     }
 
-    info!("Type registry built with types from {} packages", descriptors.len());
+    info!(
+        "Type registry built with types from {} packages",
+        descriptors.len()
+    );
 
     let generator_config = TypescriptGeneratorConfig::from_manifest(
         context.typescript_section(),
@@ -649,7 +656,7 @@ fn list_backends_command() -> Result<()> {
 
     println!("Available code generation backends:\n");
 
-    let mut backends: Vec<_> = registry.list().iter().map(|&s| s).collect();
+    let mut backends = registry.list().to_vec();
     backends.sort();
 
     for name in backends {
@@ -678,11 +685,7 @@ fn list_backends_command() -> Result<()> {
             if !supported.is_empty() {
                 println!(
                     "    Features: {}",
-                    supported
-                        .iter()
-                        .map(|&&f| f)
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                    supported.iter().map(|&&f| f).collect::<Vec<_>>().join(", ")
                 );
             }
             println!();

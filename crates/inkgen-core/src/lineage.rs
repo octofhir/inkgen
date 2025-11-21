@@ -164,56 +164,6 @@ where
     })
 }
 
-/// Merges snapshots for a complete profile chain.
-///
-/// Recursively merges element snapshots from the root ancestor down to the final profile,
-/// ensuring that each derived profile properly inherits and constrains its base.
-///
-/// # Arguments
-///
-/// * `profile` - The profile to resolve
-/// * `provider` - Provider for loading base definitions
-///
-/// # Returns
-///
-/// A ResourceDefinition with fully merged snapshots from all ancestors
-pub async fn merge_full_chain_snapshots<P>(
-    profile: &ResourceDefinition,
-    provider: &P,
-) -> CoreResult<ResourceDefinition>
-where
-    P: crate::services::StructureDefinitionProvider,
-{
-    let mut resolved = profile.clone();
-
-    // If this profile has a base definition, recursively resolve and merge it
-    if let Some(base_url) = &profile.lineage.base_definition {
-        match provider.load_structure(base_url).await {
-            Ok(base_def) => {
-                // Recursively resolve the base's chain first
-                let base_resolved = Box::pin(merge_full_chain_snapshots(&base_def, provider)).await?;
-
-                // Merge base snapshots with this profile's snapshots
-                resolved.elements = merge_element_snapshots(
-                    &base_resolved.elements,
-                    &profile.elements,
-                );
-
-                // Merge invariants (additive)
-                let mut all_invariants = base_resolved.invariants.clone();
-                all_invariants.extend(profile.invariants.clone());
-                resolved.invariants = all_invariants;
-            }
-            Err(_) => {
-                // Base not found - use profile as-is
-                // This is expected for root types
-            }
-        }
-    }
-
-    Ok(resolved)
-}
-
 /// Extracts the StructureDefinition ID from a canonical URL.
 ///
 /// # Arguments

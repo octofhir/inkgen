@@ -238,6 +238,78 @@ cargo test -p <crate> <filter>     # Run specific tests
 just snap                           # Review snapshot changes
 ```
 
+#### Snapshot Testing with `insta`
+
+InkGen uses [`cargo-insta`](https://insta.rs/) for deterministic output verification. Snapshot tests ensure generated code remains consistent across changes.
+
+**Install `cargo-insta`:**
+```bash
+cargo install cargo-insta
+```
+
+**Writing Snapshot Tests:**
+
+```rust
+use insta::assert_snapshot;
+
+#[test]
+fn test_profile_generation() {
+    let profile = create_test_profile();
+    let generated = profile.generate_typescript();
+
+    // Compare against saved snapshot
+    assert_snapshot!("profile_all_features", generated);
+}
+```
+
+**Snapshot Workflow:**
+
+1. **Write test with `assert_snapshot!`**: First run creates `.snap.new` file
+2. **Generate snapshots**: Run `cargo insta test` or `cargo test`
+3. **Review snapshots**: Use `cargo insta review` for interactive review
+4. **Accept snapshots**: Use `cargo insta accept` to approve all pending snapshots
+5. **Verify**: Run `cargo test` to ensure snapshots match
+
+**Commands:**
+
+```bash
+# Generate new snapshots
+cargo insta test --package inkgen-typescript
+
+# Review snapshots interactively (shows diffs)
+cargo insta review
+
+# Accept all pending snapshots
+cargo insta accept
+
+# Run tests against accepted snapshots
+cargo test --package inkgen-typescript
+```
+
+**Best Practices:**
+
+- **Deterministic Output**: Ensure generated code is consistent (use `IndexMap` for sorted keys)
+- **Comprehensive Coverage**: Add snapshots for all major features and configurations
+- **Meaningful Names**: Use descriptive snapshot names (e.g., `"valueset_required_binding"`)
+- **Review Carefully**: Always review snapshot diffs before accepting changes
+- **Commit Snapshots**: Include `.snap` files in git for regression detection
+
+**Snapshot Test Organization:**
+
+- Place snapshots in `tests/snapshots/` directory
+- Name format: `<test_file>__<snapshot_name>.snap`
+- Group related snapshots (e.g., all ValueSet snapshots in valueset_tests.rs)
+
+**Example:**
+```
+crates/inkgen-typescript/tests/
+├── valueset_tests.rs           # Test file
+└── snapshots/
+    ├── valueset_tests__valueset_required_binding.snap
+    ├── valueset_tests__valueset_preferred_binding.snap
+    └── valueset_tests__valueset_no_displays.snap
+```
+
 ### Code Quality
 
 The CI pipeline enforces:
