@@ -136,6 +136,39 @@ dev:
     @just lint
     @just test
 
+# Version management
+version:
+    @grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/'
+
+bump-version level='patch':
+    #!/usr/bin/env bash
+    set -euo pipefail
+    CURRENT=$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+    IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+    case "{{level}}" in
+        major)
+            NEW_VERSION="$((MAJOR + 1)).0.0"
+            ;;
+        minor)
+            NEW_VERSION="${MAJOR}.$((MINOR + 1)).0"
+            ;;
+        patch)
+            NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+            ;;
+        *)
+            echo "Invalid level: {{level}}. Use: major, minor, or patch"
+            exit 1
+            ;;
+    esac
+    sed -i.bak "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
+    rm -f Cargo.toml.bak
+    echo "Bumped version: $CURRENT -> $NEW_VERSION"
+
+set-version version:
+    @sed -i.bak 's/^version = ".*"/version = "{{version}}"/' Cargo.toml
+    @rm -f Cargo.toml.bak
+    @echo "Set version to {{version}}"
+
 # Utility commands
 clean:
     @cargo clean
