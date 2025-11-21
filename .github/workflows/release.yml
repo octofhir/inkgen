@@ -136,7 +136,27 @@ jobs:
         id: changelog
         run: |
           cargo install git-cliff --locked
-          git-cliff --latest --strip header > /tmp/CHANGELOG.md
+          NEW_VERSION="${{ steps.new_version.outputs.new_version }}"
+
+          # Check if this is the first release (no previous tags)
+          TAG_COUNT=$(git tag -l 'v*' | wc -l)
+
+          if [ "$TAG_COUNT" -le 1 ]; then
+            echo "# Release v$NEW_VERSION" > /tmp/CHANGELOG.md
+            echo "" >> /tmp/CHANGELOG.md
+            echo "Initial release of InkGen - FHIR code generator." >> /tmp/CHANGELOG.md
+            echo "" >> /tmp/CHANGELOG.md
+            echo "## Features" >> /tmp/CHANGELOG.md
+            git log --oneline --no-merges | head -20 | sed 's/^/- /' >> /tmp/CHANGELOG.md
+          else
+            git-cliff --latest --strip header > /tmp/CHANGELOG.md || {
+              echo "# Release v$NEW_VERSION" > /tmp/CHANGELOG.md
+              echo "" >> /tmp/CHANGELOG.md
+              echo "## Changes" >> /tmp/CHANGELOG.md
+              git log --oneline --no-merges $(git describe --tags --abbrev=0 HEAD^)..HEAD | sed 's/^/- /' >> /tmp/CHANGELOG.md
+            }
+          fi
+
           echo "Generated changelog:"
           cat /tmp/CHANGELOG.md
 
