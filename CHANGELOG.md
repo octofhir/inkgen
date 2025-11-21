@@ -1,10 +1,9 @@
-## [v0.1.2] - 2025-11-21
+## [v0.1.3] - 2025-11-21
 
 ### Changes
 
-- ci: change order for jobs
-- ci: change order for jobs
-- ci: correctly handle initial changelog generation
+- fix: cli name in tests
+- ci: add missed binaries
 
 # Changelog
 
