@@ -66,21 +66,16 @@ fn default_filter_mode() -> FilterMode {
 }
 
 /// Style of extension accessors to generate in profile classes
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ExtensionAccessorStyle {
     /// Generate both typed value and raw Extension accessors
+    #[default]
     Both,
     /// Generate only typed value getters/setters
     Typed,
     /// Generate only raw Extension getters/setters
     Raw,
-}
-
-impl Default for ExtensionAccessorStyle {
-    fn default() -> Self {
-        Self::Both
-    }
 }
 
 /// Configuration for profile method generation

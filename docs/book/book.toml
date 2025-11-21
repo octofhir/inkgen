@@ -1,6 +1,6 @@
 [book]
 title = "InkGen Documentation"
-author = "OctoFHIR Team"
+authors = ["OctoFHIR Team"]
 language = "en"
 src = "src"
 

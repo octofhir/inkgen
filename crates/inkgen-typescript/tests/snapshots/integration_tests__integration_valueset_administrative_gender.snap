@@ -1,0 +1,43 @@
+---
+source: crates/inkgen-typescript/tests/integration_tests.rs
+expression: generated
+---
+/**
+ * Administrative Gender
+ *
+ * The gender of a person used for administrative purposes
+ * @see http://hl7.org/fhir/ValueSet/administrative-gender
+ */
+export const AdministrativeGenderValues = ["male", "female", "other", "unknown"] as const;
+
+// Open valueset - allows custom codes
+export type AdministrativeGender = typeof AdministrativeGenderValues[number] | (string & {});
+
+/**
+ * Type guard for AdministrativeGender
+ */
+export function isAdministrativeGender(value: string): value is AdministrativeGender {
+  return AdministrativeGenderValues.includes(value as any);
+}
+
+/**
+ * Code definitions
+ */
+export const AdministrativeGenderDefinitions = {
+  "male": {
+    code: "male",
+    display: "Male",
+  },
+  "female": {
+    code: "female",
+    display: "Female",
+  },
+  "other": {
+    code: "other",
+    display: "Other",
+  },
+  "unknown": {
+    code: "unknown",
+    display: "Unknown",
+  }
+} as const;

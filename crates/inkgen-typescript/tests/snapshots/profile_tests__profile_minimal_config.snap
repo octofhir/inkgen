@@ -1,0 +1,25 @@
+---
+source: crates/inkgen-typescript/tests/profile_tests.rs
+expression: generated
+---
+/**
+ * US Core Patient Profile
+ *
+ * Defines constraints and extensions on the Patient resource
+ * @profile http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient
+ */
+export class USCorePatient extends Patient {
+  /** Profile URL for runtime validation */
+  readonly __profile = 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient';
+
+  // Must-support elements (required by profile)
+  /** Required by profile: Patient.identifier */
+  declare identifier: NonNullable<Patient['identifier']>;
+}
+
+/**
+ * Type guard to check if a value is a USCorePatient
+ */
+export function isUSCorePatient(value: Patient): value is USCorePatient {
+  return '__profile' in value && value.__profile === 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient';
+}

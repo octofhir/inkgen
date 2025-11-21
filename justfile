@@ -58,7 +58,7 @@ snap:
 
 review:
     @cargo fmt --all --check
-    @cargo clippy --all-targets -- -D warnings
+    @cargo clippy --all-targets --all-features -- -D warnings
     @cargo test --all
 
 bench:
@@ -92,13 +92,49 @@ release-check:
 
 docs-build:
     @echo "Building documentation site..."
-    @echo "Note: Documentation site setup (mdBook) is planned"
-    @echo "See: docs/tasks/TASK-0007-hardening-and-release-prep.md"
+    @if command -v mdbook >/dev/null 2>&1; then \
+        cd docs/book && mdbook build; \
+        echo "✓ Documentation built successfully at docs/book/build/"; \
+    else \
+        echo "Error: mdbook not installed."; \
+        echo "Install with: cargo install mdbook"; \
+        exit 1; \
+    fi
 
-docs-serve:
-    @echo "Serving documentation locally..."
-    @echo "Note: Documentation site setup (mdBook) is planned"
-    @echo "See: docs/tasks/TASK-0007-hardening-and-release-prep.md"
+docs-serve port='3000':
+    @echo "Serving documentation locally on port {{port}}..."
+    @if command -v mdbook >/dev/null 2>&1; then \
+        cd docs/book && mdbook serve --port {{port}} --open; \
+    else \
+        echo "Error: mdbook not installed."; \
+        echo "Install with: cargo install mdbook"; \
+        exit 1; \
+    fi
+
+# Development commands
+fmt:
+    @echo "Formatting code..."
+    @cargo fmt --all
+
+lint:
+    @echo "Running clippy..."
+    @cargo clippy --all-targets --all-features -- -D warnings
+
+watch:
+    @echo "Watching for changes and running tests..."
+    @if command -v cargo-watch >/dev/null 2>&1; then \
+        cargo watch -x "test --all"; \
+    else \
+        echo "Error: cargo-watch not installed."; \
+        echo "Install with: cargo install cargo-watch"; \
+        exit 1; \
+    fi
+
+dev:
+    @echo "Running development checks..."
+    @just fmt
+    @just lint
+    @just test
 
 # Utility commands
 clean:

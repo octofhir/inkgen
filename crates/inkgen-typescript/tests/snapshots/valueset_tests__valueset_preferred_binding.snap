@@ -1,0 +1,39 @@
+---
+source: crates/inkgen-typescript/tests/valueset_tests.rs
+expression: generated
+---
+/**
+ * Condition Severity
+ *
+ * Preferred value set for condition severity
+ * @see http://hl7.org/fhir/ValueSet/condition-severity
+ */
+export const ConditionSeverityValues = ["mild", "moderate", "severe"] as const;
+
+// Open valueset - allows custom codes
+export type ConditionSeverity = typeof ConditionSeverityValues[number] | (string & {});
+
+/**
+ * Type guard for ConditionSeverity
+ */
+export function isConditionSeverity(value: string): value is ConditionSeverity {
+  return ConditionSeverityValues.includes(value as any);
+}
+
+/**
+ * Code definitions
+ */
+export const ConditionSeverityDefinitions = {
+  "mild": {
+    code: "mild",
+    display: "Mild",
+  },
+  "moderate": {
+    code: "moderate",
+    display: "Moderate",
+  },
+  "severe": {
+    code: "severe",
+    display: "Severe",
+  }
+} as const;

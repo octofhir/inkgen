@@ -1,0 +1,84 @@
+---
+source: crates/inkgen-typescript/tests/profile_tests.rs
+expression: generated
+---
+import { z } from 'zod';
+import { PatientSchema } from "./Patient";
+/**
+ * US Core Patient Profile
+ *
+ * Defines constraints and extensions on the Patient resource
+ * @profile http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient
+ */
+export class USCorePatient extends Patient {
+  /** Profile URL for runtime validation */
+  readonly __profile = 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient';
+
+  // Fixed value constraints
+  /** Fixed value: true */
+  declare active: true;
+  /** Fixed value: "female" */
+  declare gender: "female";
+
+  // Must-support elements (required by profile)
+  /** Required by profile: Patient.identifier */
+  declare identifier: NonNullable<Patient['identifier']>;
+  /** Required by profile: Patient.name */
+  declare name: NonNullable<Patient['name']>;
+
+  /**
+   * Serialize to JSON string
+   * @param pretty Whether to pretty-print the JSON
+   */
+  toJson(pretty?: boolean): string {
+    return pretty ? JSON.stringify(this, null, 2) : JSON.stringify(this);
+  }
+
+  /**
+   * Convert to plain object (strips __profile metadata)
+   */
+  toObject(): Patient {
+    const { __profile, ...rest } = this;
+    return rest as Patient;
+  }
+
+  /**
+   * Create instance from JSON string with validation
+   * @param json JSON string to parse
+   * @throws {z.ZodError} if validation fails
+   */
+  static fromJson(json: string): USCorePatient {
+    const parsed = JSON.parse(json);
+    return USCorePatient.fromObject(parsed);
+  }
+
+  /**
+   * Create instance from object with validation
+   * @param obj Object to validate
+   * @throws {z.ZodError} if validation fails
+   */
+  static fromObject(obj: unknown): USCorePatient {
+    const validated = USCorePatientSchema.parse(obj);
+    return Object.assign(new USCorePatient(), validated);
+  }
+}
+
+/**
+ * Zod schema for USCorePatient
+ */
+export const USCorePatientSchema = PatientSchema.extend({
+  identifier: z.array(z.unknown()).min(1),
+  name: z.array(z.unknown()).min(1),
+});
+
+/**
+ * Type inferred from Zod schema
+ */
+export type USCorePatientValidated = z.infer<typeof USCorePatientSchema>;
+
+/**
+ * Type guard to check if a value is a USCorePatient
+ */
+export function isUSCorePatient(value: Patient): value is USCorePatient {
+  return '__profile' in value && value.__profile === 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient';
+}
