@@ -25,13 +25,10 @@ pub struct ZodSchemaInfo {
 fn normalize_type_name(fhir_type: &str) -> String {
     // If it's a URL, extract the last part
     if fhir_type.starts_with("http://") || fhir_type.starts_with("https://") {
-        let last_part = fhir_type
-            .split('/')
-            .last()
-            .unwrap_or(fhir_type);
+        let last_part = fhir_type.split('/').next_back().unwrap_or(fhir_type);
 
         // For System types like "System.String", extract after the dot
-        if let Some(type_name) = last_part.split('.').last() {
+        if let Some(type_name) = last_part.split('.').next_back() {
             // Convert to lowercase for primitives (String -> string)
             let normalized = type_name.to_string();
             // Check if it's a known primitive that should be lowercase
@@ -108,7 +105,10 @@ pub fn fhir_to_zod_type(fhir_type: &str) -> ZodSchemaInfo {
 ///
 /// Handles array wrapping, min/max items, and optional/required.
 /// Preserves type references from the input ZodSchemaInfo.
-pub fn apply_cardinality(base_info: ZodSchemaInfo, cardinality: &ElementCardinality) -> ZodSchemaInfo {
+pub fn apply_cardinality(
+    base_info: ZodSchemaInfo,
+    cardinality: &ElementCardinality,
+) -> ZodSchemaInfo {
     let mut schema = base_info.schema;
 
     let is_array = match &cardinality.max {
@@ -126,10 +126,10 @@ pub fn apply_cardinality(base_info: ZodSchemaInfo, cardinality: &ElementCardinal
         }
 
         // Add max items constraint if finite
-        if let ElementMax::Finite(max) = &cardinality.max {
-            if *max > 1 {
-                schema = format!("{}.max({})", schema, max);
-            }
+        if let ElementMax::Finite(max) = &cardinality.max
+            && *max > 1
+        {
+            schema = format!("{}.max({})", schema, max);
         }
     }
 
@@ -158,7 +158,8 @@ pub fn element_to_zod_schema_info(element: &ElementDefinition) -> Option<ZodSche
     } else {
         // Choice type - union of possibilities
         let mut all_type_refs = Vec::new();
-        let union_schemas: Vec<String> = element.types
+        let union_schemas: Vec<String> = element
+            .types
             .iter()
             .map(|t| {
                 let info = fhir_to_zod_type(&t.code);
@@ -189,7 +190,7 @@ pub fn element_to_field_name(element: &ElementDefinition) -> String {
     element
         .path
         .split('.')
-        .last()
+        .next_back()
         .unwrap_or(&element.path)
         .to_string()
 }
@@ -197,7 +198,7 @@ pub fn element_to_field_name(element: &ElementDefinition) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use inkgen_core::ir::{ElementMax, ElementCardinality};
+    use inkgen_core::ir::{ElementCardinality, ElementMax};
 
     #[test]
     fn test_normalize_type_name() {
@@ -222,29 +223,37 @@ mod tests {
 
     #[test]
     fn test_fhir_to_zod_primitive_types() {
-        assert_eq!(fhir_to_zod_type("string"), "z.string()");
-        assert_eq!(fhir_to_zod_type("boolean"), "z.boolean()");
-        assert_eq!(fhir_to_zod_type("integer"), "z.number().int()");
+        assert_eq!(fhir_to_zod_type("string").schema, "z.string()");
+        assert_eq!(fhir_to_zod_type("boolean").schema, "z.boolean()");
+        assert_eq!(fhir_to_zod_type("integer").schema, "z.number().int()");
 
         // Test with URLs
         assert_eq!(
-            fhir_to_zod_type("http://hl7.org/fhirpath/System.String"),
+            fhir_to_zod_type("http://hl7.org/fhirpath/System.String").schema,
             "z.string()"
         );
         assert_eq!(
-            fhir_to_zod_type("http://hl7.org/fhirpath/System.Boolean"),
+            fhir_to_zod_type("http://hl7.org/fhirpath/System.Boolean").schema,
             "z.boolean()"
         );
-        assert_eq!(fhir_to_zod_type("decimal"), "z.number()");
-        assert!(fhir_to_zod_type("id").contains("regex"));
-        assert!(fhir_to_zod_type("date").contains("regex"));
+        assert_eq!(fhir_to_zod_type("decimal").schema, "z.number()");
+        assert!(fhir_to_zod_type("id").schema.contains("regex"));
+        assert!(fhir_to_zod_type("date").schema.contains("regex"));
     }
 
     #[test]
     fn test_fhir_to_zod_complex_types() {
-        assert_eq!(fhir_to_zod_type("Identifier"), "IdentifierSchema");
-        assert_eq!(fhir_to_zod_type("HumanName"), "HumanNameSchema");
-        assert_eq!(fhir_to_zod_type("CodeableConcept"), "CodeableConceptSchema");
+        let identifier_info = fhir_to_zod_type("Identifier");
+        assert_eq!(identifier_info.schema, "IdentifierSchema");
+        assert_eq!(identifier_info.type_refs, vec!["Identifier"]);
+
+        let human_name_info = fhir_to_zod_type("HumanName");
+        assert_eq!(human_name_info.schema, "HumanNameSchema");
+        assert_eq!(human_name_info.type_refs, vec!["HumanName"]);
+
+        let codeable_concept_info = fhir_to_zod_type("CodeableConcept");
+        assert_eq!(codeable_concept_info.schema, "CodeableConceptSchema");
+        assert_eq!(codeable_concept_info.type_refs, vec!["CodeableConcept"]);
     }
 
     #[test]
@@ -253,8 +262,12 @@ mod tests {
             min: 0,
             max: ElementMax::Finite(1),
         };
+        let base_info = ZodSchemaInfo {
+            schema: "z.string()".to_string(),
+            type_refs: Vec::new(),
+        };
         assert_eq!(
-            apply_cardinality("z.string()", &cardinality),
+            apply_cardinality(base_info, &cardinality).schema,
             "z.string().optional()"
         );
     }
@@ -265,8 +278,12 @@ mod tests {
             min: 1,
             max: ElementMax::Finite(1),
         };
+        let base_info = ZodSchemaInfo {
+            schema: "z.string()".to_string(),
+            type_refs: Vec::new(),
+        };
         assert_eq!(
-            apply_cardinality("z.string()", &cardinality),
+            apply_cardinality(base_info, &cardinality).schema,
             "z.string()"
         );
     }
@@ -277,8 +294,12 @@ mod tests {
             min: 0,
             max: ElementMax::Unbounded,
         };
+        let base_info = ZodSchemaInfo {
+            schema: "z.string()".to_string(),
+            type_refs: Vec::new(),
+        };
         assert_eq!(
-            apply_cardinality("z.string()", &cardinality),
+            apply_cardinality(base_info, &cardinality).schema,
             "z.array(z.string()).optional()"
         );
     }
@@ -289,8 +310,12 @@ mod tests {
             min: 1,
             max: ElementMax::Unbounded,
         };
+        let base_info = ZodSchemaInfo {
+            schema: "z.string()".to_string(),
+            type_refs: Vec::new(),
+        };
         assert_eq!(
-            apply_cardinality("z.string()", &cardinality),
+            apply_cardinality(base_info, &cardinality).schema,
             "z.array(z.string()).min(1)"
         );
     }
@@ -301,8 +326,12 @@ mod tests {
             min: 1,
             max: ElementMax::Finite(5),
         };
+        let base_info = ZodSchemaInfo {
+            schema: "z.string()".to_string(),
+            type_refs: Vec::new(),
+        };
         assert_eq!(
-            apply_cardinality("z.string()", &cardinality),
+            apply_cardinality(base_info, &cardinality).schema,
             "z.array(z.string()).min(1).max(5)"
         );
     }

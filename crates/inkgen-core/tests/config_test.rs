@@ -16,7 +16,10 @@ fn test_sanitize_package_name() {
     assert_eq!(sanitize_package_name("ihe.iti.pix"), "iti-pix");
 
     // Test org prefix removal
-    assert_eq!(sanitize_package_name("org.example.custom"), "example-custom");
+    assert_eq!(
+        sanitize_package_name("org.example.custom"),
+        "example-custom"
+    );
 
     // Test no prefix (already clean)
     assert_eq!(sanitize_package_name("custom-package"), "custom-package");
@@ -146,8 +149,13 @@ fn test_should_include_resource_all_mode() {
         exclude_urls: vec![],
     };
 
-    assert!(entry.should_include_resource("Patient", "http://hl7.org/fhir/StructureDefinition/Patient"));
-    assert!(entry.should_include_resource("Observation", "http://hl7.org/fhir/StructureDefinition/Observation"));
+    assert!(
+        entry.should_include_resource("Patient", "http://hl7.org/fhir/StructureDefinition/Patient")
+    );
+    assert!(entry.should_include_resource(
+        "Observation",
+        "http://hl7.org/fhir/StructureDefinition/Observation"
+    ));
 }
 
 #[test]
@@ -163,7 +171,10 @@ fn test_should_include_resource_none_mode() {
         exclude_urls: vec![],
     };
 
-    assert!(!entry.should_include_resource("Patient", "http://hl7.org/fhir/StructureDefinition/Patient"));
+    assert!(
+        !entry
+            .should_include_resource("Patient", "http://hl7.org/fhir/StructureDefinition/Patient")
+    );
 }
 
 #[test]
@@ -180,13 +191,21 @@ fn test_should_include_resource_include_mode() {
     };
 
     // Include by name
-    assert!(entry.should_include_resource("Patient", "http://hl7.org/fhir/StructureDefinition/Patient"));
+    assert!(
+        entry.should_include_resource("Patient", "http://hl7.org/fhir/StructureDefinition/Patient")
+    );
 
     // Include by URL
-    assert!(entry.should_include_resource("Observation", "http://hl7.org/fhir/StructureDefinition/Observation"));
+    assert!(entry.should_include_resource(
+        "Observation",
+        "http://hl7.org/fhir/StructureDefinition/Observation"
+    ));
 
     // Not in whitelist
-    assert!(!entry.should_include_resource("Condition", "http://hl7.org/fhir/StructureDefinition/Condition"));
+    assert!(!entry.should_include_resource(
+        "Condition",
+        "http://hl7.org/fhir/StructureDefinition/Condition"
+    ));
 }
 
 #[test]
@@ -203,13 +222,19 @@ fn test_should_include_resource_exclude_mode() {
     };
 
     // Not in blacklist - should include
-    assert!(entry.should_include_resource("Patient", "http://hl7.org/fhir/StructureDefinition/Patient"));
+    assert!(
+        entry.should_include_resource("Patient", "http://hl7.org/fhir/StructureDefinition/Patient")
+    );
 
     // In blacklist by name - should exclude
-    assert!(!entry.should_include_resource("Bundle", "http://hl7.org/fhir/StructureDefinition/Bundle"));
+    assert!(
+        !entry.should_include_resource("Bundle", "http://hl7.org/fhir/StructureDefinition/Bundle")
+    );
 
     // In blacklist by URL - should exclude
-    assert!(!entry.should_include_resource("Binary", "http://hl7.org/fhir/StructureDefinition/Binary"));
+    assert!(
+        !entry.should_include_resource("Binary", "http://hl7.org/fhir/StructureDefinition/Binary")
+    );
 }
 
 #[test]
@@ -226,8 +251,12 @@ fn test_should_include_by_filter_dependencies_mode() {
     };
 
     // Should only include if it's a dependency
-    assert!(entry.should_include_by_filter("http://hl7.org/fhir/StructureDefinition/Patient", true));
-    assert!(!entry.should_include_by_filter("http://hl7.org/fhir/StructureDefinition/Patient", false));
+    assert!(
+        entry.should_include_by_filter("http://hl7.org/fhir/StructureDefinition/Patient", true)
+    );
+    assert!(
+        !entry.should_include_by_filter("http://hl7.org/fhir/StructureDefinition/Patient", false)
+    );
 }
 
 #[test]

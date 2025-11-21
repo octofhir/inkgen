@@ -16,8 +16,10 @@ InkGen is designed to bridge the gap between FHIR specifications and practical S
 
 **TypeScript Backend**
 - ✅ CLI provides fetch/generate/config commands powered by the core services
-- ✅ **TypeScript generation is fully functional and tested**: 74 tests passing
+- ✅ **TypeScript generation is fully functional and tested**: 163 tests passing
   - Generates interfaces, nested types, profiles, and structural guards
+  - **ValueSet generation**: Type-safe const arrays with union types and type guards
+  - **Profile classes**: Extension accessors, serialization, validation, and Zod schemas
   - Multiple output modes (interface, class, class_with_builder)
   - Customizable naming conventions and output directory
   - Default output to `./generated` directory
@@ -29,11 +31,11 @@ InkGen is designed to bridge the gap between FHIR specifications and practical S
 - ✅ **Performance Instrumentation**: Criterion benchmarks with `just bench` recipe for regression detection
 - ✅ **Directory Diff Tooling**: Compare generated outputs with unified diff format and file filtering
 - ✅ **Comprehensive Documentation**: README enhancements, CONTRIBUTING.md guide, and architecture documentation
+- ✅ **Snapshot Testing**: Deterministic output verification with `insta` for regression prevention
 
 ### Upcoming Features
 - Template lint command for overlay validation
 - Additional language backends
-- Value set integration
 - Release automation and documentation site
 
 See [Roadmap](docs/book/src/roadmap.md) for planned features and timeline.
@@ -156,10 +158,19 @@ inkgen generate typescript                  # emit TypeScript into target/inkgen
 
 - **Resource Interfaces**: Type-safe TypeScript interfaces for all FHIR resources
 - **Nested Types**: BackboneElement types generated as separate exported interfaces
+- **ValueSets**: Type-safe const arrays with union types, type guards, and code definitions
+  - Closed types for Required/Extensible bindings
+  - Open types (with `| (string & {})`) for Preferred/Example bindings
+  - Complete metadata including display names and definitions
+- **Profile Classes**: Classes extending base resources with:
+  - Extension accessors (typed, raw, or both)
+  - Serialization methods (toJson, toObject)
+  - Validation methods (fromJson, fromObject)
+  - Zod schemas for runtime validation
+  - Fixed value constraints and must-support elements
 - **Mode Selection**: Choose between `interface` (default), `class`, or `class_with_builder` output
 - **Naming Conventions**: Support for PascalCase, camelCase, and snake_case field naming
 - **Structural Guards**: Optional type guard functions for runtime validation
-- **Profiles**: Generate profile interfaces that extend base resources with constraints
 - **Deterministic Output**: Using IndexMap for consistent, sortable output
 
 #### CLI Options
@@ -180,7 +191,17 @@ mode = "interface"                  # interface, class, or class_with_builder
 naming_convention = "pascal"        # pascal, camel, or snake
 structural_guards = true            # emit type guard functions
 generate_profiles = true            # emit profile constraints
+generate_valuesets = true           # emit valueset types
+max_valueset_codes = 100            # skip large valuesets (optional)
 output_structure = "flat"           # flat or by_package
+
+# Profile method configuration
+[languages.typescript.profile_methods]
+extension_accessors = true          # generate extension getter/setter methods
+extension_style = "both"            # "typed", "raw", or "both"
+serialization = true                # generate toJson/toObject methods
+validation = true                   # generate fromJson/fromObject methods
+generate_zod_schemas = true         # generate Zod schemas for profiles
 ```
 
 ### Shell Completions

@@ -23,16 +23,13 @@ mod terminology;
 pub use backends::{BackendRegistry, LanguageBackend};
 pub use cache::{InstallMode, PackageCache, PackageCacheConfig};
 pub use config::{
-    sanitize_package_name, FilterMode, InkgenConfig, LanguagesSection, PackageEntry,
-    TypescriptLanguageConfig,
+    FilterMode, InkgenConfig, LanguagesSection, PackageEntry, TypescriptLanguageConfig,
+    sanitize_package_name,
 };
 pub use dependencies::DependencyAnalyzer;
 pub use error::{CoreError, CoreResult};
 pub use generator::LanguageGenerator;
 pub use lineage::{ProfileAncestor, ProfileChain, merge_element_snapshots, resolve_full_chain};
-pub use template_helpers::{
-    ImportPathFunction, PackageFolderFunction, calculate_relative_import,
-};
 pub use package::{
     ArtifactDescriptor, ArtifactKind, PackageDescriptor, PackageId, PackageInventory,
     PackageRequest, PackageSource, StructureKind, StructureSummary,
@@ -41,6 +38,7 @@ pub use services::{
     BaseStructureService, PackageResolver, StructureDefinitionProvider, StructureFilter,
     StructureProviderConfig,
 };
+pub use template_helpers::{ImportPathFunction, PackageFolderFunction, calculate_relative_import};
 pub use terminology::{
     ResolvedValueSet, ValueSetCache, extract_codes_from_valueset, should_generate_valueset,
 };

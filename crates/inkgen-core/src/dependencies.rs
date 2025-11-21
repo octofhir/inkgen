@@ -252,17 +252,9 @@ impl DependencyAnalyzer {
     /// A tuple of (total packages, total resources, total cross-package dependencies).
     #[must_use]
     pub fn statistics(&self) -> (usize, usize, usize) {
-        let total_packages = self
-            .url_to_package
-            .values()
-            .collect::<HashSet<_>>()
-            .len();
+        let total_packages = self.url_to_package.values().collect::<HashSet<_>>().len();
         let total_resources = self.url_to_package.len();
-        let total_dependencies = self
-            .dependencies
-            .values()
-            .map(HashSet::len)
-            .sum();
+        let total_dependencies = self.dependencies.values().map(HashSet::len).sum();
 
         (total_packages, total_resources, total_dependencies)
     }
@@ -271,7 +263,10 @@ impl DependencyAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{ElementCardinality, ElementDefinition, ElementMax, ElementType, ProfileLineage, ResourceKind};
+    use crate::ir::{
+        ElementCardinality, ElementDefinition, ElementMax, ElementType, ProfileLineage,
+        ResourceKind,
+    };
 
     fn create_test_resource(url: &str, base_def: Option<String>) -> ResourceDefinition {
         ResourceDefinition {
@@ -512,10 +507,8 @@ mod tests {
         );
 
         // Create a resource that references another resource in the SAME package
-        let mut resource = create_test_resource(
-            "http://hl7.org/fhir/StructureDefinition/Patient",
-            None,
-        );
+        let mut resource =
+            create_test_resource("http://hl7.org/fhir/StructureDefinition/Patient", None);
         resource.elements = vec![create_element_with_type(
             "http://hl7.org/fhir/StructureDefinition/HumanName",
         )];
@@ -523,7 +516,12 @@ mod tests {
         analyzer.analyze(&resource, "hl7.fhir.r4.core");
 
         // Should have no cross-package dependencies
-        assert!(analyzer.get_dependencies("hl7.fhir.r4.core").is_none()
-            || analyzer.get_dependencies("hl7.fhir.r4.core").unwrap().is_empty());
+        assert!(
+            analyzer.get_dependencies("hl7.fhir.r4.core").is_none()
+                || analyzer
+                    .get_dependencies("hl7.fhir.r4.core")
+                    .unwrap()
+                    .is_empty()
+        );
     }
 }

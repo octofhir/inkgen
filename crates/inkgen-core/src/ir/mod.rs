@@ -1,5 +1,11 @@
+pub mod profile;
+
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+
+pub use profile::{
+    ExtensionValueType, FixedValue, MustSupportElement, ProfileDefinition, ProfileExtension,
+};
 
 /// Kind of StructureDefinition represented by the IR.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

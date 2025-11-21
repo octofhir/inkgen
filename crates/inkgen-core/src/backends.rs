@@ -5,8 +5,8 @@
 
 use std::collections::HashMap;
 
-use crate::generator::LanguageGenerator;
 use crate::StructureDefinitionProvider;
+use crate::generator::LanguageGenerator;
 
 /// Registry for managing language backends.
 ///
@@ -280,11 +280,7 @@ mod tests {
         assert_eq!(registry.len(), 0);
 
         // Register a backend
-        let backend = Box::new(MockBackend::new(
-            "typescript",
-            "TypeScript generator",
-            "ts",
-        ));
+        let backend = Box::new(MockBackend::new("typescript", "TypeScript generator", "ts"));
         registry.register(backend);
 
         // Check registration

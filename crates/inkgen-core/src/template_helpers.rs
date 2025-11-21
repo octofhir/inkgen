@@ -199,7 +199,10 @@ mod tests {
         let func = ImportPathFunction;
         let mut args = HashMap::new();
 
-        args.insert("from".to_string(), Value::String("observation.ts".to_string()));
+        args.insert(
+            "from".to_string(),
+            Value::String("observation.ts".to_string()),
+        );
         args.insert("to".to_string(), Value::String("patient.ts".to_string()));
         let result = func.call(&args).unwrap();
         assert_eq!(result, Value::String("./patient".to_string()));

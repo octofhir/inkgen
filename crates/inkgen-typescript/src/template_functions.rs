@@ -217,7 +217,10 @@ mod tests {
         let result = func.call(&args).unwrap();
         assert_eq!(result, Value::String("FhirString".to_string()));
 
-        args.insert("fhir_type".to_string(), Value::String("Patient".to_string()));
+        args.insert(
+            "fhir_type".to_string(),
+            Value::String("Patient".to_string()),
+        );
         let result = func.call(&args).unwrap();
         assert_eq!(result, Value::String("Patient".to_string()));
     }
