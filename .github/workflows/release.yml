@@ -115,13 +115,60 @@ jobs:
           cargo check --workspace
           cargo test --workspace --lib
 
-      - name: Commit version bump
+      - name: Generate changelog
+        if: ${{ !inputs.dry_run }}
+        id: changelog
+        run: |
+          cargo install git-cliff --locked
+          NEW_VERSION="${{ steps.new_version.outputs.new_version }}"
+
+          # Check if this is the first release (no previous tags)
+          TAG_COUNT=$(git tag -l 'v*' | wc -l)
+
+          if [ "$TAG_COUNT" -eq 0 ]; then
+            # First release - generate initial changelog
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "All notable changes to this project will be documented in this file." >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "## [v$NEW_VERSION] - $(date +%Y-%m-%d)" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "Initial release of InkGen - FHIR code generator." >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "### Features" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            git log --oneline --no-merges | head -20 | sed 's/^[a-f0-9]* /- /' >> CHANGELOG.md
+          else
+            # Subsequent releases - use git-cliff to update full changelog
+            git-cliff --output CHANGELOG.md || {
+              # Fallback if git-cliff fails
+              echo "## [v$NEW_VERSION] - $(date +%Y-%m-%d)" > /tmp/new_changes.md
+              echo "" >> /tmp/new_changes.md
+              echo "### Changes" >> /tmp/new_changes.md
+              echo "" >> /tmp/new_changes.md
+              git log --oneline --no-merges $(git describe --tags --abbrev=0)..HEAD | sed 's/^[a-f0-9]* /- /' >> /tmp/new_changes.md
+              echo "" >> /tmp/new_changes.md
+
+              # Prepend to existing changelog or create new
+              if [ -f CHANGELOG.md ]; then
+                cat /tmp/new_changes.md CHANGELOG.md > /tmp/full_changelog.md
+                mv /tmp/full_changelog.md CHANGELOG.md
+              else
+                mv /tmp/new_changes.md CHANGELOG.md
+              fi
+            }
+          fi
+
+          echo "Generated changelog:"
+          head -50 CHANGELOG.md
+
+      - name: Commit version bump and changelog
         if: ${{ !inputs.dry_run }}
         run: |
           NEW_VERSION="${{ steps.new_version.outputs.new_version }}"
-          git add Cargo.toml
-          git commit -m "chore: bump version to $NEW_VERSION"
-          echo "Committed version bump"
+          git add Cargo.toml CHANGELOG.md
+          git commit -m "chore: release v$NEW_VERSION"
+          echo "Committed version bump and changelog"
 
       - name: Create and push tag
         if: ${{ !inputs.dry_run }}
@@ -131,42 +178,13 @@ jobs:
           git push origin main --follow-tags
           echo "Pushed tag v$NEW_VERSION"
 
-      - name: Generate changelog
-        if: ${{ !inputs.dry_run && inputs.create_release }}
-        id: changelog
-        run: |
-          cargo install git-cliff --locked
-          NEW_VERSION="${{ steps.new_version.outputs.new_version }}"
-
-          # Check if this is the first release (no previous tags)
-          TAG_COUNT=$(git tag -l 'v*' | wc -l)
-
-          if [ "$TAG_COUNT" -le 1 ]; then
-            echo "# Release v$NEW_VERSION" > /tmp/CHANGELOG.md
-            echo "" >> /tmp/CHANGELOG.md
-            echo "Initial release of InkGen - FHIR code generator." >> /tmp/CHANGELOG.md
-            echo "" >> /tmp/CHANGELOG.md
-            echo "## Features" >> /tmp/CHANGELOG.md
-            git log --oneline --no-merges | head -20 | sed 's/^/- /' >> /tmp/CHANGELOG.md
-          else
-            git-cliff --latest --strip header > /tmp/CHANGELOG.md || {
-              echo "# Release v$NEW_VERSION" > /tmp/CHANGELOG.md
-              echo "" >> /tmp/CHANGELOG.md
-              echo "## Changes" >> /tmp/CHANGELOG.md
-              git log --oneline --no-merges $(git describe --tags --abbrev=0 HEAD^)..HEAD | sed 's/^/- /' >> /tmp/CHANGELOG.md
-            }
-          fi
-
-          echo "Generated changelog:"
-          cat /tmp/CHANGELOG.md
-
       - name: Create GitHub Release
         if: ${{ !inputs.dry_run && inputs.create_release }}
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ steps.new_version.outputs.new_version }}
           name: Release v${{ steps.new_version.outputs.new_version }}
-          body_path: /tmp/CHANGELOG.md
+          body_path: CHANGELOG.md
           draft: false
           prerelease: false
         env:
