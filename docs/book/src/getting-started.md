@@ -6,28 +6,25 @@ This guide walks you through installing and using InkGen for the first time.
 
 ### Prerequisites
 
-- Rust 1.70+ (check with `rustc --version`)
-- For TypeScript generation: Node.js and npm (optional, for using generated code)
+- Rust stable toolchain (edition 2024 support)
+- [`just`](https://github.com/casey/just) command runner (recommended)
 
-### Using Cargo (Recommended)
+### From GitHub (Source)
 
-Install InkGen directly from crates.io:
-
-```bash
-cargo install inkgen-cli
-```
-
-This installs the `inkgen` command globally.
-
-### From Source
-
-Clone and build the repository:
+InkGen is currently available via GitHub. Clone and build the repository:
 
 ```bash
 git clone https://github.com/octofhir/inkgen.git
 cd inkgen
 cargo build --release -p inkgen-cli
 ./target/release/inkgen --version
+```
+
+For development workflows, install `just` and bootstrap:
+
+```bash
+cargo install just
+just bootstrap
 ```
 
 ## First Steps

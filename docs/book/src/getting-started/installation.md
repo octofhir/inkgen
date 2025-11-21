@@ -4,35 +4,35 @@
 
 Before installing InkGen, ensure you have the following installed:
 
-- **Node.js** (version 18 or higher)
-- **npm** or **yarn** package manager
-- **Rust** (for development; optional for end users)
+- **Rust** stable toolchain (edition 2024 support)
+- **[just](https://github.com/casey/just)** command runner (recommended for development)
 
 ## Installation Steps
 
-### From npm
+### From GitHub (Source)
 
-The easiest way to install InkGen is via npm:
-
-```bash
-npm install @octofhir/inkgen
-```
-
-Or with yarn:
-
-```bash
-yarn add @octofhir/inkgen
-```
-
-### From Source
-
-To install InkGen from source for development:
+InkGen is currently available via GitHub. Clone and build the repository:
 
 ```bash
 git clone https://github.com/octofhir/inkgen.git
 cd inkgen
-npm install
-npm run build
+cargo build --release -p inkgen-cli
+```
+
+The binary will be at `./target/release/inkgen`.
+
+### Install just (Recommended)
+
+For development workflows, install the `just` command runner:
+
+```bash
+cargo install just
+```
+
+Then bootstrap the project:
+
+```bash
+just bootstrap
 ```
 
 ## Verification
@@ -40,11 +40,17 @@ npm run build
 To verify the installation was successful:
 
 ```bash
-npx inkgen --version
+./target/release/inkgen --version
+```
+
+Or if you added the binary to your PATH:
+
+```bash
+inkgen --version
 ```
 
 You should see the version number of InkGen.
 
 ## Next Steps
 
-After installation, check out the [Quick Start](./quickstart.md) guide to get started with your first FHIR profile.
+After installation, check out the [Quick Start](./quickstart.md) guide to get started with your first FHIR code generation.
