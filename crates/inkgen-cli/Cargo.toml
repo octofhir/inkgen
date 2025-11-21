@@ -1,8 +1,16 @@
 [package]
 name = "inkgen-cli"
-version = "0.1.0"
-edition = "2024"
-publish = false
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "FHIR code generator CLI - Generate type-safe SDKs from FHIR specifications"
+readme = "README.md"
+
+[[bin]]
+name = "inkgen"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
