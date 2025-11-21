@@ -4,7 +4,7 @@ use std::path::Path;
 use tempfile::tempdir;
 
 fn cli_command() -> Command {
-    Command::new(assert_cmd::cargo::cargo_bin!("inkgen-cli"))
+    Command::new(assert_cmd::cargo::cargo_bin!("inkgen"))
 }
 
 #[test]
