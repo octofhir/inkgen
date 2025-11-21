@@ -1,0 +1,470 @@
+---
+source: crates/inkgen-core/tests/base_structures.rs
+expression: "to_value(definition).expect(\"serialize\")"
+---
+{
+  "date": "2019-11-01T09:29:23+11:00",
+  "description": "Base StructureDefinition for HumanName Type: A human's name with the ability to identify parts and usage.",
+  "elements": [
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "children": [
+        {
+          "additional_fields": {},
+          "binding": null,
+          "cardinality": {
+            "max": "unbounded",
+            "min": 0
+          },
+          "comment": "There can be no stigma associated with the use of extensions by any application, project, or standard - regardless of the institution or jurisdiction that uses or defines the extensions.  The use of extensions is what allows the FHIR specification to retain a core level of simplicity for everyone.",
+          "content_reference": null,
+          "default_value": null,
+          "definition": "May be used to represent additional information that is not part of the basic definition of the element. To make the use of extensions safe and manageable, there is a strict set of governance  applied to the definition and use of extensions. Though any implementer can define an extension, there is a set of requirements that SHALL be met as part of the definition of the extension.",
+          "depth": 1,
+          "example_values": [],
+          "extension": [],
+          "fixed": null,
+          "id": "HumanName.extension",
+          "invariants": [
+            "ele-1",
+            "ext-1"
+          ],
+          "is_backbone": false,
+          "is_summary": false,
+          "must_support": false,
+          "parent_path": "HumanName",
+          "path": "HumanName.extension",
+          "pattern": null,
+          "requirements": null,
+          "short": "Additional content defined by implementations",
+          "slice_name": null,
+          "slicing": {
+            "discriminators": [
+              {
+                "discriminator_type": "value",
+                "kind": "value",
+                "path": "url"
+              }
+            ],
+            "ordered": false,
+            "rules": "open"
+          },
+          "types": [
+            {
+              "aggregation": [],
+              "code": "Extension",
+              "profiles": [],
+              "target_profiles": [],
+              "versioning": null
+            }
+          ]
+        },
+        {
+          "additional_fields": {},
+          "binding": null,
+          "cardinality": {
+            "max": {
+              "finite": 1
+            },
+            "min": 0
+          },
+          "comment": "Family Name may be decomposed into specific parts using extensions (de, nl, es related cultures).",
+          "content_reference": null,
+          "default_value": null,
+          "definition": "The part of a name that links to the genealogy. In some cultures (e.g. Eritrea) the family name of a son is the first name of his father.",
+          "depth": 1,
+          "example_values": [],
+          "extension": [],
+          "fixed": null,
+          "id": "HumanName.family",
+          "invariants": [
+            "ele-1"
+          ],
+          "is_backbone": false,
+          "is_summary": true,
+          "must_support": false,
+          "parent_path": "HumanName",
+          "path": "HumanName.family",
+          "pattern": null,
+          "requirements": null,
+          "short": "Family name (often called 'Surname')",
+          "slice_name": null,
+          "slicing": null,
+          "types": [
+            {
+              "aggregation": [],
+              "code": "string",
+              "profiles": [],
+              "target_profiles": [],
+              "versioning": null
+            }
+          ]
+        },
+        {
+          "additional_fields": {},
+          "binding": null,
+          "cardinality": {
+            "max": "unbounded",
+            "min": 0
+          },
+          "comment": "If only initials are recorded, they may be used in place of the full name parts. Initials may be separated into multiple given names but often aren't due to paractical limitations.  This element is not called \"first name\" since given names do not always come first.",
+          "content_reference": null,
+          "default_value": null,
+          "definition": "Given name.",
+          "depth": 1,
+          "example_values": [],
+          "extension": [],
+          "fixed": null,
+          "id": "HumanName.given",
+          "invariants": [
+            "ele-1"
+          ],
+          "is_backbone": false,
+          "is_summary": true,
+          "must_support": false,
+          "parent_path": "HumanName",
+          "path": "HumanName.given",
+          "pattern": null,
+          "requirements": null,
+          "short": "Given names (not always 'first'). Includes middle names",
+          "slice_name": null,
+          "slicing": null,
+          "types": [
+            {
+              "aggregation": [],
+              "code": "string",
+              "profiles": [],
+              "target_profiles": [],
+              "versioning": null
+            }
+          ]
+        },
+        {
+          "additional_fields": {},
+          "binding": null,
+          "cardinality": {
+            "max": {
+              "finite": 1
+            },
+            "min": 0
+          },
+          "comment": null,
+          "content_reference": null,
+          "default_value": null,
+          "definition": "Unique id for the element within a resource (for internal references). This may be any string value that does not contain spaces.",
+          "depth": 1,
+          "example_values": [],
+          "extension": [],
+          "fixed": null,
+          "id": "HumanName.id",
+          "invariants": [],
+          "is_backbone": false,
+          "is_summary": false,
+          "must_support": false,
+          "parent_path": "HumanName",
+          "path": "HumanName.id",
+          "pattern": null,
+          "requirements": null,
+          "short": "Unique id for inter-element referencing",
+          "slice_name": null,
+          "slicing": null,
+          "types": [
+            {
+              "aggregation": [],
+              "code": "http://hl7.org/fhirpath/System.String",
+              "profiles": [],
+              "target_profiles": [],
+              "versioning": null
+            }
+          ]
+        },
+        {
+          "additional_fields": {},
+          "binding": null,
+          "cardinality": {
+            "max": {
+              "finite": 1
+            },
+            "min": 0
+          },
+          "comment": null,
+          "content_reference": null,
+          "default_value": null,
+          "definition": "Indicates the period of time when this name was valid for the named person.",
+          "depth": 1,
+          "example_values": [],
+          "extension": [],
+          "fixed": null,
+          "id": "HumanName.period",
+          "invariants": [
+            "ele-1"
+          ],
+          "is_backbone": false,
+          "is_summary": true,
+          "must_support": false,
+          "parent_path": "HumanName",
+          "path": "HumanName.period",
+          "pattern": null,
+          "requirements": "Allows names to be placed in historical context.",
+          "short": "Time period when name was/is in use",
+          "slice_name": null,
+          "slicing": null,
+          "types": [
+            {
+              "aggregation": [],
+              "code": "Period",
+              "profiles": [],
+              "target_profiles": [],
+              "versioning": null
+            }
+          ]
+        },
+        {
+          "additional_fields": {},
+          "binding": null,
+          "cardinality": {
+            "max": "unbounded",
+            "min": 0
+          },
+          "comment": null,
+          "content_reference": null,
+          "default_value": null,
+          "definition": "Part of the name that is acquired as a title due to academic, legal, employment or nobility status, etc. and that appears at the start of the name.",
+          "depth": 1,
+          "example_values": [],
+          "extension": [],
+          "fixed": null,
+          "id": "HumanName.prefix",
+          "invariants": [
+            "ele-1"
+          ],
+          "is_backbone": false,
+          "is_summary": true,
+          "must_support": false,
+          "parent_path": "HumanName",
+          "path": "HumanName.prefix",
+          "pattern": null,
+          "requirements": null,
+          "short": "Parts that come before the name",
+          "slice_name": null,
+          "slicing": null,
+          "types": [
+            {
+              "aggregation": [],
+              "code": "string",
+              "profiles": [],
+              "target_profiles": [],
+              "versioning": null
+            }
+          ]
+        },
+        {
+          "additional_fields": {},
+          "binding": null,
+          "cardinality": {
+            "max": "unbounded",
+            "min": 0
+          },
+          "comment": null,
+          "content_reference": null,
+          "default_value": null,
+          "definition": "Part of the name that is acquired as a title due to academic, legal, employment or nobility status, etc. and that appears at the end of the name.",
+          "depth": 1,
+          "example_values": [],
+          "extension": [],
+          "fixed": null,
+          "id": "HumanName.suffix",
+          "invariants": [
+            "ele-1"
+          ],
+          "is_backbone": false,
+          "is_summary": true,
+          "must_support": false,
+          "parent_path": "HumanName",
+          "path": "HumanName.suffix",
+          "pattern": null,
+          "requirements": null,
+          "short": "Parts that come after the name",
+          "slice_name": null,
+          "slicing": null,
+          "types": [
+            {
+              "aggregation": [],
+              "code": "string",
+              "profiles": [],
+              "target_profiles": [],
+              "versioning": null
+            }
+          ]
+        },
+        {
+          "additional_fields": {},
+          "binding": null,
+          "cardinality": {
+            "max": {
+              "finite": 1
+            },
+            "min": 0
+          },
+          "comment": "Can provide both a text representation and parts. Applications updating a name SHALL ensure that when both text and parts are present,  no content is included in the text that isn't found in a part.",
+          "content_reference": null,
+          "default_value": null,
+          "definition": "Specifies the entire name as it should be displayed e.g. on an application UI. This may be provided instead of or as well as the specific parts.",
+          "depth": 1,
+          "example_values": [],
+          "extension": [],
+          "fixed": null,
+          "id": "HumanName.text",
+          "invariants": [
+            "ele-1"
+          ],
+          "is_backbone": false,
+          "is_summary": true,
+          "must_support": false,
+          "parent_path": "HumanName",
+          "path": "HumanName.text",
+          "pattern": null,
+          "requirements": "A renderable, unencoded form.",
+          "short": "Text representation of the full name",
+          "slice_name": null,
+          "slicing": null,
+          "types": [
+            {
+              "aggregation": [],
+              "code": "string",
+              "profiles": [],
+              "target_profiles": [],
+              "versioning": null
+            }
+          ]
+        },
+        {
+          "additional_fields": {},
+          "binding": {
+            "additional": {
+              "extension": [
+                {
+                  "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+                  "valueString": "NameUse"
+                }
+              ]
+            },
+            "description": "The use of a human name.",
+            "strength": "required",
+            "value_set": "http://hl7.org/fhir/ValueSet/name-use|4.0.1"
+          },
+          "cardinality": {
+            "max": {
+              "finite": 1
+            },
+            "min": 0
+          },
+          "comment": "Applications can assume that a name is current unless it explicitly says that it is temporary or old.",
+          "content_reference": null,
+          "default_value": null,
+          "definition": "Identifies the purpose for this name.",
+          "depth": 1,
+          "example_values": [],
+          "extension": [],
+          "fixed": null,
+          "id": "HumanName.use",
+          "invariants": [
+            "ele-1"
+          ],
+          "is_backbone": false,
+          "is_summary": true,
+          "must_support": false,
+          "parent_path": "HumanName",
+          "path": "HumanName.use",
+          "pattern": null,
+          "requirements": "Allows the appropriate name for a particular context of use to be selected from among a set of names.",
+          "short": "usual | official | temp | nickname | anonymous | old | maiden",
+          "slice_name": null,
+          "slicing": null,
+          "types": [
+            {
+              "aggregation": [],
+              "code": "code",
+              "profiles": [],
+              "target_profiles": [],
+              "versioning": null
+            }
+          ]
+        }
+      ],
+      "comment": "Names may be changed, or repudiated, or people may have different names in different contexts. Names may be divided into parts of different type that have variable significance depending on context, though the division into parts does not always matter. With personal names, the different parts might or might not be imbued with some implicit meaning; various cultures associate different importance with the name parts and the degree to which systems must care about name parts around the world varies widely.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "A human's name with the ability to identify parts and usage.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-normative-version",
+          "value": "4.0.0"
+        },
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+          "value": "normative"
+        }
+      ],
+      "fixed": null,
+      "id": "HumanName",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": true,
+      "is_summary": false,
+      "must_support": false,
+      "path": "HumanName",
+      "pattern": null,
+      "requirements": null,
+      "short": "Name of a human - parts and usage",
+      "slice_name": null,
+      "slicing": null,
+      "types": []
+    }
+  ],
+  "extensions": [],
+  "fhir_type": "HumanName",
+  "id": "HumanName",
+  "invariants": [
+    {
+      "additional": {
+        "source": "http://hl7.org/fhir/StructureDefinition/Element"
+      },
+      "expression": "hasValue() or (children().count() > id.count())",
+      "human": "All FHIR elements must have a @value or children",
+      "key": "ele-1",
+      "severity": "error",
+      "xpath": "@value|f:*|h:div"
+    },
+    {
+      "additional": {
+        "source": "http://hl7.org/fhir/StructureDefinition/Extension"
+      },
+      "expression": "extension.exists() != value.exists()",
+      "human": "Must have either extensions or value[x], not both",
+      "key": "ext-1",
+      "severity": "error",
+      "xpath": "exists(f:extension)!=exists(f:*[starts-with(local-name(.), \"value\")])"
+    }
+  ],
+  "kind": "complex_type",
+  "lineage": {
+    "base_definition": "http://hl7.org/fhir/StructureDefinition/Element",
+    "base_id": "Element",
+    "derivation": "specialization",
+    "type_name": "HumanName"
+  },
+  "name": "HumanName",
+  "status": "active",
+  "title": null,
+  "url": "http://hl7.org/fhir/StructureDefinition/HumanName",
+  "version": "4.0.1"
+}

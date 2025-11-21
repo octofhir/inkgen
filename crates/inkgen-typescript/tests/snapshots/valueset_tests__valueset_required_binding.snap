@@ -1,0 +1,40 @@
+---
+source: crates/inkgen-typescript/tests/valueset_tests.rs
+expression: generated
+---
+/**
+ * Account Status
+ *
+ * Indicates whether the account is available to be used
+ * @see http://hl7.org/fhir/ValueSet/account-status
+ */
+export const AccountStatusValues = ["active", "inactive", "entered-in-error"] as const;
+
+export type AccountStatus = typeof AccountStatusValues[number];
+
+/**
+ * Type guard for AccountStatus
+ */
+export function isAccountStatus(value: string): value is AccountStatus {
+  return AccountStatusValues.includes(value as any);
+}
+
+/**
+ * Code definitions
+ */
+export const AccountStatusDefinitions = {
+  "active": {
+    code: "active",
+    display: "Active",
+    definition: "The account is active and in use",
+  },
+  "inactive": {
+    code: "inactive",
+    display: "Inactive",
+    definition: "The account is not active",
+  },
+  "entered-in-error": {
+    code: "entered-in-error",
+    display: "Entered in Error",
+  }
+} as const;

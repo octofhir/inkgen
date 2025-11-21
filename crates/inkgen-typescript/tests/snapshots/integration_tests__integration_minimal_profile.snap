@@ -1,0 +1,25 @@
+---
+source: crates/inkgen-typescript/tests/integration_tests.rs
+expression: generated
+---
+/**
+ * Minimal Profile
+ *
+ * A minimal profile for testing
+ * @profile http://example.org/StructureDefinition/minimal
+ */
+export class MinimalProfile extends Patient {
+  /** Profile URL for runtime validation */
+  readonly __profile = 'http://example.org/StructureDefinition/minimal';
+
+  // Must-support elements (required by profile)
+  /** Required by profile: Patient.identifier */
+  declare identifier: NonNullable<Patient['identifier']>;
+}
+
+/**
+ * Type guard to check if a value is a MinimalProfile
+ */
+export function isMinimalProfile(value: Patient): value is MinimalProfile {
+  return '__profile' in value && value.__profile === 'http://example.org/StructureDefinition/minimal';
+}

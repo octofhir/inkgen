@@ -1,0 +1,88 @@
+---
+source: crates/inkgen-typescript/tests/profile_tests.rs
+expression: generated
+---
+import type { Extension } from "./types";
+
+/**
+ * US Core Patient Profile
+ *
+ * Defines constraints and extensions on the Patient resource
+ * @profile http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient
+ */
+export class USCorePatient extends Patient {
+  /** Profile URL for runtime validation */
+  readonly __profile = 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient';
+
+  // Must-support elements (required by profile)
+  /** Required by profile: Patient.identifier */
+  declare identifier: NonNullable<Patient['identifier']>;
+
+  // Extension accessors
+  /**
+   * Get the ComplexExtension extension value
+   * A complex extension with nested sub-extensions
+   * @see http://example.org/StructureDefinition/complex-extension
+   */
+  get complex(): Extension | undefined {
+    const ext = this.extension?.find(e => e.url === 'http://example.org/StructureDefinition/complex-extension');
+    return ext;
+  }
+
+  /**
+   * Set the ComplexExtension extension value
+   * A complex extension with nested sub-extensions
+   * @see http://example.org/StructureDefinition/complex-extension
+   */
+  set complex(value: Extension | undefined) {
+    if (!this.extension) {
+      this.extension = [];
+    }
+    const existingIndex = this.extension.findIndex(e => e.url === 'http://example.org/StructureDefinition/complex-extension');
+    const newExt = value ? { ...value, url: 'http://example.org/StructureDefinition/complex-extension' } : undefined;
+    if (existingIndex >= 0) {
+      if (newExt) {
+        this.extension[existingIndex] = newExt;
+      } else {
+        this.extension.splice(existingIndex, 1);
+      }
+    } else if (newExt) {
+      this.extension.push(newExt);
+    }
+  }
+
+  /**
+   * Get the raw ComplexExtension Extension object
+   * @see http://example.org/StructureDefinition/complex-extension
+   */
+  get complexExtension(): Extension | undefined {
+    return this.extension?.find(e => e.url === 'http://example.org/StructureDefinition/complex-extension');
+  }
+
+  /**
+   * Set the raw ComplexExtension Extension object
+   * @see http://example.org/StructureDefinition/complex-extension
+   */
+  set complexExtension(value: Extension | undefined) {
+    if (!this.extension) {
+      this.extension = [];
+    }
+    const existingIndex = this.extension.findIndex(e => e.url === 'http://example.org/StructureDefinition/complex-extension');
+    if (existingIndex >= 0) {
+      if (value) {
+        this.extension[existingIndex] = value;
+      } else {
+        this.extension.splice(existingIndex, 1);
+      }
+    } else if (value) {
+      this.extension.push(value);
+    }
+  }
+}
+
+/**
+ * Type guard to check if a value is a USCorePatient
+ */
+export function isUSCorePatient(value: Patient): value is USCorePatient {
+  return '__profile' in value && value.__profile === 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient';
+}

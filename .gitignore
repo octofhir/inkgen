@@ -17,10 +17,6 @@ Thumbs.db
 *.orig
 *.rej
 
-# Test artifacts
-/tests/snapshots/
-**/tests/snapshots/
-
 # Temporary files
 *.tmp
 *.temp

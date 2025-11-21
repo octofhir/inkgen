@@ -1,0 +1,68 @@
+---
+source: crates/inkgen-typescript/tests/integration_tests.rs
+expression: generated
+---
+/**
+ * US Core Patient Profile
+ *
+ * The US Core Patient Profile meets the U.S. Core Data for Interoperability (USCDI) requirements
+ * @profile http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient
+ */
+export class USCorePatientProfile extends Patient {
+  /** Profile URL for runtime validation */
+  readonly __profile = 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient';
+
+  // Fixed value constraints
+  /** Fixed value: true */
+  declare active: true;
+
+  // Must-support elements (required by profile)
+  /** Required by profile: Patient.identifier */
+  declare identifier: NonNullable<Patient['identifier']>;
+  /** Required by profile: Patient.name */
+  declare name: NonNullable<Patient['name']>;
+  /** Required by profile: Patient.gender */
+  declare gender: NonNullable<Patient['gender']>;
+
+  /**
+   * Serialize to JSON string
+   * @param pretty Whether to pretty-print the JSON
+   */
+  toJson(pretty?: boolean): string {
+    return pretty ? JSON.stringify(this, null, 2) : JSON.stringify(this);
+  }
+
+  /**
+   * Convert to plain object (strips __profile metadata)
+   */
+  toObject(): Patient {
+    const { __profile, ...rest } = this;
+    return rest as Patient;
+  }
+
+  /**
+   * Create instance from JSON string with validation
+   * @param json JSON string to parse
+   * @throws {z.ZodError} if validation fails
+   */
+  static fromJson(json: string): USCorePatientProfile {
+    const parsed = JSON.parse(json);
+    return USCorePatientProfile.fromObject(parsed);
+  }
+
+  /**
+   * Create instance from object with validation
+   * @param obj Object to validate
+   * @throws {z.ZodError} if validation fails
+   */
+  static fromObject(obj: unknown): USCorePatientProfile {
+    return Object.assign(new USCorePatientProfile(), obj);
+  }
+}
+
+/**
+ * Type guard to check if a value is a USCorePatientProfile
+ */
+export function isUSCorePatientProfile(value: Patient): value is USCorePatientProfile {
+  return '__profile' in value && value.__profile === 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient';
+}
