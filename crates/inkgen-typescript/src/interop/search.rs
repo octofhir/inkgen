@@ -4,6 +4,7 @@
 //! with type-safe parameter interfaces and URL builders.
 
 use serde::Serialize;
+use std::collections::BTreeSet;
 
 /// Configuration for search helper generation
 #[derive(Debug, Clone, Serialize)]
@@ -12,8 +13,6 @@ pub struct SearchConfig {
     pub interfaces: bool,
     /// Generate URL builder functions
     pub url_builders: bool,
-    /// Generate parameter validators
-    pub validators: bool,
     /// Generate advanced search features (_include types, _has, _filter, enhanced chaining)
     pub advanced_search: bool,
 }
@@ -23,7 +22,6 @@ impl Default for SearchConfig {
         Self {
             interfaces: true,
             url_builders: true,
-            validators: true,
             advanced_search: true,
         }
     }
@@ -52,8 +50,6 @@ pub struct SearchHelpers {
     pub has_interfaces: bool,
     /// Whether to generate URL builders
     pub has_url_builders: bool,
-    /// Whether to generate validators
-    pub has_validators: bool,
     /// Whether to generate advanced search features
     pub has_advanced_search: bool,
 }
@@ -81,7 +77,6 @@ impl SearchHelpers {
             fhir_version,
             has_interfaces: config.interfaces,
             has_url_builders: config.url_builders,
-            has_validators: config.validators,
             has_advanced_search: config.advanced_search,
         }
     }
@@ -682,91 +677,6 @@ export function build{}SearchUrl(
         )
     }
 
-    /// Generate search parameter validator
-    ///
-    /// Creates:
-    /// ```typescript
-    /// export function validatePatientSearchParams(
-    ///   params: PatientSearchParams
-    /// ): { valid: boolean; errors: string[] } {
-    ///   const errors: string[] = [];
-    ///   // Validation logic
-    ///   return { valid: errors.length === 0, errors };
-    /// }
-    /// ```
-    pub fn generate_validator(&self, resource_type: &str) -> String {
-        format!(
-            r#"/**
- * Validate {} search parameters
- * @param params - Search parameters to validate
- * @returns Validation result with errors if any
- */
-export function validate{}SearchParams(
-  params: {}SearchParams
-): {{ valid: boolean; errors: string[] }} {{
-  const errors: string[] = [];
-
-  // Validate _count is positive
-  if (params._count !== undefined && params._count < 0) {{
-    errors.push('_count must be non-negative');
-  }}
-
-  // Validate _offset is non-negative
-  if (params._offset !== undefined && params._offset < 0) {{
-    errors.push('_offset must be non-negative');
-  }}
-
-  // Validate _summary has valid value
-  if (params._summary !== undefined) {{
-    const validSummary = ['true', 'text', 'data', 'count', 'false'];
-    if (!validSummary.includes(params._summary)) {{
-      errors.push(`_summary must be one of: ${{validSummary.join(', ')}}`);
-    }}
-  }}
-
-  // Validate SearchParamValue objects
-  Object.entries(params).forEach(([key, value]) => {{
-    if (value !== undefined && value !== null && typeof value === 'object' && !Array.isArray(value)) {{
-      // Check if it's a SearchParamValue object
-      const paramValue = value as {{ value?: string; modifier?: string; comparator?: string }};
-
-      if ('value' in paramValue || 'modifier' in paramValue || 'comparator' in paramValue) {{
-        // Validate SearchParamValue structure
-        if (!paramValue.value) {{
-          errors.push(`Search parameter '${{key}}' has invalid structure: missing 'value' field`);
-        }}
-
-        // Cannot have both modifier and comparator
-        if (paramValue.modifier && paramValue.comparator) {{
-          errors.push(`Search parameter '${{key}}' cannot have both modifier and comparator`);
-        }}
-      }}
-    }} else if (Array.isArray(value)) {{
-      // Validate array elements
-      value.forEach((item, idx) => {{
-        if (typeof item === 'object' && item !== null) {{
-          const paramValue = item as {{ value?: string; modifier?: string; comparator?: string }};
-
-          if ('value' in paramValue || 'modifier' in paramValue || 'comparator' in paramValue) {{
-            if (!paramValue.value) {{
-              errors.push(`Search parameter '${{key}}[${{idx}}]' has invalid structure: missing 'value' field`);
-            }}
-
-            if (paramValue.modifier && paramValue.comparator) {{
-              errors.push(`Search parameter '${{key}}[${{idx}}]' cannot have both modifier and comparator`);
-            }}
-          }}
-        }}
-      }});
-    }}
-  }});
-
-  return {{ valid: errors.length === 0, errors }};
-}}"#,
-            resource_type, resource_type, resource_type
-        )
-    }
-
     /// Generate utility functions for search
     pub fn generate_utilities() -> String {
         r#"/**
@@ -874,7 +784,211 @@ export function buildSearchQuery(params: Record<string, any>): string {
         .to_string()
     }
 
-    /// Generate all search helper code
+    /// Generate all search helper code split into multiple files
+    /// Returns a map of file paths (relative to search directory) to file contents
+    pub fn generate_all_split(&self) -> std::collections::HashMap<String, String> {
+        use std::collections::{BTreeSet, HashMap};
+
+        let mut files = HashMap::new();
+
+        // Collect all unique resource types from search parameters
+        let mut all_resource_types: BTreeSet<String> = BTreeSet::new();
+        for sp in &self.search_parameters {
+            for base in &sp.base {
+                all_resource_types.insert(base.clone());
+            }
+        }
+
+        // 1. Generate common.ts - Common types and parameters
+        files.insert(
+            "common.ts".to_string(),
+            self.generate_common_file(),
+        );
+
+        // 2. Generate types.ts - Include/RevInclude type definitions (if advanced search)
+        if self.has_advanced_search && self.has_interfaces {
+            let types_content = self.generate_types_file(&all_resource_types);
+            if !types_content.is_empty() {
+                files.insert("types.ts".to_string(), types_content);
+            }
+        }
+
+        // 3. Generate interfaces.ts - All SearchParams interfaces
+        if self.has_interfaces {
+            files.insert(
+                "interfaces.ts".to_string(),
+                self.generate_interfaces_file(&all_resource_types),
+            );
+        }
+
+        // 4. Generate builders.ts - All URL builder functions
+        if self.has_url_builders {
+            files.insert(
+                "builders.ts".to_string(),
+                self.generate_builders_file(&all_resource_types),
+            );
+        }
+
+        // 5. Generate index.ts - Re-exports all symbols
+        files.insert(
+            "index.ts".to_string(),
+            self.generate_index_file(),
+        );
+
+        files
+    }
+
+    /// Generate common.ts - Common types, modifiers, comparators, and CommonSearchParams
+    fn generate_common_file(&self) -> String {
+        let parts = vec![
+            "// FHIR Search Parameters - Common Types and Parameters".to_string(),
+            "// Auto-generated by InkGen - do not edit manually".to_string(),
+            "".to_string(),
+            self.generate_common_parameters(),
+            "".to_string(),
+            Self::generate_utilities(),
+        ];
+
+        parts.join("\n")
+    }
+
+    /// Generate types.ts - Include/RevInclude type definitions
+    fn generate_types_file(&self, all_resource_types: &BTreeSet<String>) -> String {
+        let mut parts = vec![
+            "// FHIR Search Parameters - Include/RevInclude Type Definitions".to_string(),
+            "// Auto-generated by InkGen - do not edit manually".to_string(),
+            "".to_string(),
+            "// Type imports".to_string(),
+            "import type { SearchParamValue, IncludeModifier } from './common';".to_string(),
+            "".to_string(),
+        ];
+
+        for resource_type in all_resource_types {
+            let (include_defs, _) = self.generate_include_type(resource_type);
+            if !include_defs.is_empty() {
+                parts.push(include_defs);
+            }
+            let (revinclude_defs, _) = self.generate_revinclude_type(resource_type);
+            if !revinclude_defs.is_empty() {
+                parts.push(revinclude_defs);
+            }
+        }
+
+        if parts.len() <= 6 {
+            // Only headers, no actual content
+            return String::new();
+        }
+
+        parts.join("\n")
+    }
+
+    /// Generate interfaces.ts - All SearchParams interfaces
+    fn generate_interfaces_file(&self, all_resource_types: &BTreeSet<String>) -> String {
+        let mut parts = vec![
+            "// FHIR Search Parameters - Resource-Specific Interfaces".to_string(),
+            "// Auto-generated by InkGen - do not edit manually".to_string(),
+            "".to_string(),
+            "// Type imports".to_string(),
+            "import type { CommonSearchParams, SearchParamValue } from './common';".to_string(),
+        ];
+
+        // Import modifiers/comparators
+        parts.push("import type {".to_string());
+        parts.push("  StringModifier, TokenModifier, ReferenceModifier, UriModifier,".to_string());
+        parts.push("  DateComparator, NumberComparator, QuantityComparator".to_string());
+        parts.push("} from './common';".to_string());
+
+        // Import include/revinclude types if advanced search is enabled
+        if self.has_advanced_search {
+            parts.push("".to_string());
+            parts.push("// Import include/revinclude types".to_string());
+            let mut type_imports = vec![];
+            for resource_type in all_resource_types {
+                // Check if this resource has include types
+                let (include_defs, _) = self.generate_include_type(resource_type);
+                if !include_defs.is_empty() {
+                    type_imports.push(format!("  {}Include, {}ReferenceParams", resource_type, resource_type));
+                }
+                let (revinclude_defs, _) = self.generate_revinclude_type(resource_type);
+                if !revinclude_defs.is_empty() {
+                    type_imports.push(format!("  {}RevInclude", resource_type));
+                }
+            }
+            if !type_imports.is_empty() {
+                parts.push("import type {".to_string());
+                parts.push(type_imports.join(",\n"));
+                parts.push("} from './types';".to_string());
+            }
+        }
+
+        parts.push("".to_string());
+
+        // Generate all interfaces
+        for resource_type in all_resource_types {
+            parts.push(self.generate_search_interface(resource_type));
+            parts.push("".to_string());
+        }
+
+        parts.join("\n")
+    }
+
+    /// Generate builders.ts - All URL builder functions
+    fn generate_builders_file(&self, all_resource_types: &BTreeSet<String>) -> String {
+        let mut parts = vec![
+            "// FHIR Search Parameters - URL Builders".to_string(),
+            "// Auto-generated by InkGen - do not edit manually".to_string(),
+            "".to_string(),
+            "// Type imports".to_string(),
+        ];
+
+        // Build import list
+        let interface_imports: Vec<String> = all_resource_types
+            .iter()
+            .map(|rt| format!("  {}SearchParams", rt))
+            .collect();
+
+        parts.push("import type {".to_string());
+        parts.push(interface_imports.join(",\n"));
+        parts.push("} from './interfaces';".to_string());
+        parts.push("import { appendSearchParam } from './common';".to_string());
+        parts.push("".to_string());
+
+        // Generate all URL builders
+        for resource_type in all_resource_types {
+            parts.push(self.generate_url_builder(resource_type));
+            parts.push("".to_string());
+        }
+
+        parts.join("\n")
+    }
+
+    /// Generate index.ts - Re-exports all symbols
+    fn generate_index_file(&self) -> String {
+        let mut parts = vec![
+            "// FHIR Search Parameters - Main Index".to_string(),
+            "// Auto-generated by InkGen - do not edit manually".to_string(),
+            "".to_string(),
+            "// Re-export everything from all modules".to_string(),
+            "export * from './common';".to_string(),
+        ];
+
+        if self.has_advanced_search && self.has_interfaces {
+            parts.push("export * from './types';".to_string());
+        }
+
+        if self.has_interfaces {
+            parts.push("export * from './interfaces';".to_string());
+        }
+
+        if self.has_url_builders {
+            parts.push("export * from './builders';".to_string());
+        }
+
+        parts.join("\n")
+    }
+
+    /// Generate all search helper code (legacy single-file method)
+    /// Kept for backward compatibility with tests
     pub fn generate_all(&self) -> String {
         use std::collections::BTreeSet;
 
@@ -920,13 +1034,6 @@ export function buildSearchQuery(params: Record<string, any>): string {
             }
         }
 
-        if self.has_validators {
-            parts.push("\n// Parameter validators".to_string());
-            for resource_type in &all_resource_types {
-                parts.push(self.generate_validator(resource_type));
-            }
-        }
-
         // Always include utilities
         parts.push("\n// Utility functions".to_string());
         parts.push(Self::generate_utilities());
@@ -944,7 +1051,7 @@ mod tests {
         let config = SearchConfig::default();
         assert!(config.interfaces);
         assert!(config.url_builders);
-        assert!(config.validators);
+        assert!(config.advanced_search);
     }
 
     #[test]
@@ -1013,17 +1120,6 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_validator() {
-        let config = SearchConfig::default();
-        let helpers = SearchHelpers::new(vec!["Patient".to_string()], vec![], &config);
-
-        let code = helpers.generate_validator("Patient");
-        assert!(code.contains("validatePatientSearchParams"));
-        assert!(code.contains("valid: boolean"));
-        assert!(code.contains("errors: string[]"));
-    }
-
-    #[test]
     fn test_generate_utilities() {
         let code = SearchHelpers::generate_utilities();
         assert!(code.contains("parseSearchParams"));
@@ -1075,10 +1171,6 @@ mod tests {
         // Should contain URL builders
         assert!(code.contains("buildPatientSearchUrl"));
         assert!(code.contains("buildObservationSearchUrl"));
-
-        // Should contain validators
-        assert!(code.contains("validatePatientSearchParams"));
-        assert!(code.contains("validateObservationSearchParams"));
 
         // Should contain utilities
         assert!(code.contains("parseSearchParams"));
@@ -1241,24 +1333,6 @@ mod tests {
         assert!(code.contains("'subject.name'"));
         assert!(code.contains("'subject.identifier'"));
         assert!(code.contains("'subject._id'"));
-    }
-
-    #[test]
-    fn test_validator_with_search_param_value() {
-        let config = SearchConfig::default();
-        let helpers = SearchHelpers::new(vec!["Patient".to_string()], vec![], &config);
-        let code = helpers.generate_validator("Patient");
-
-        // Should validate SearchParamValue structure
-        assert!(code.contains("'value' in paramValue"));
-        assert!(code.contains("missing 'value' field"));
-
-        // Should check for conflicting modifier/comparator
-        assert!(code.contains("paramValue.modifier && paramValue.comparator"));
-        assert!(code.contains("cannot have both modifier and comparator"));
-
-        // Should handle arrays
-        assert!(code.contains("Array.isArray(value)"));
     }
 
     #[test]

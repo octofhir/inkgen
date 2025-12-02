@@ -1319,7 +1319,35 @@ fn write_package(package: &PackageOutput) -> Result<()> {
                 config,
             );
             if generator.is_enabled() {
-                let interop_code = generator.generate_all(config);
+                // Generate main interop.ts with references, dates, and bundles (but not search)
+                let mut interop_code = generator.generate_without_search(config);
+
+                // Generate search parameters in separate directory if enabled
+                if config.search_config.interfaces || config.search_config.url_builders {
+                    let search_dir = utils_dir.join("search");
+                    fs::create_dir_all(&search_dir)
+                        .with_context(|| format!("failed to create search directory {}", search_dir.display()))?;
+
+                    let search_helpers = interop::search::SearchHelpers::new(
+                        package.resource_types.clone(),
+                        package.search_parameters.clone(),
+                        &config.search_config,
+                    );
+
+                    // Generate split files
+                    let search_files = search_helpers.generate_all_split();
+                    for (file_name, content) in search_files {
+                        let file_path = search_dir.join(&file_name);
+                        fs::write(&file_path, content)
+                            .with_context(|| format!("failed to write search/{}", file_name))?;
+                    }
+
+                    // Add re-export from search directory
+                    interop_code.push_str("\n\n// Re-export search parameters from separate directory\n");
+                    interop_code.push_str("export * from './search';\n");
+                }
+
+                // Write main interop.ts
                 fs::write(utils_dir.join("interop.ts"), interop_code)
                     .with_context(|| "failed to write utils/interop.ts")?;
             }
