@@ -189,19 +189,26 @@ Update `inkgen.toml` to customize TypeScript generation:
 [languages.typescript]
 mode = "interface"                  # interface, class, or class_with_builder
 naming_convention = "pascal"        # pascal, camel, or snake
-structural_guards = true            # emit type guard functions
-generate_profiles = true            # emit profile constraints
-generate_valuesets = true           # emit valueset types
-max_valueset_codes = 100            # skip large valuesets (optional)
 output_structure = "flat"           # flat or by_package
+output_dir = "./generated"         # optional custom output dir
 
-# Profile method configuration
+# All features (profiles, ValueSets, guards, Zod, etc.) are enabled by default.
+# Uncomment the options below to opt out of specific features.
+# structural_guards = false
+# generate_profiles = false
+# generate_valuesets = false
+# profile_classes = false
+# zod_schemas = false
+
+# Optional: enable stronger primitive typing
+branded_primitives = true
+
+# Profile method configuration (defaults shown)
 [languages.typescript.profile_methods]
-extension_accessors = true          # generate extension getter/setter methods
+extension_accessors = true
 extension_style = "both"            # "typed", "raw", or "both"
-serialization = true                # generate toJson/toObject methods
-validation = true                   # generate fromJson/fromObject methods
-generate_zod_schemas = true         # generate Zod schemas for profiles
+serialization = true
+validation = true
 ```
 
 ### Shell Completions

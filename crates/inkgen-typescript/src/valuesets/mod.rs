@@ -3,6 +3,9 @@
 //! This module provides utilities for generating TypeScript const arrays and
 //! type unions from FHIR ValueSet resources with configurable size limits.
 
+pub mod helpers;
+pub mod metadata;
+
 use inkgen_core::{extract_codes_from_valueset, should_generate_valueset};
 use serde::Serialize;
 use serde_json::Value;

@@ -35,18 +35,19 @@ mode = "interface"
 # Options: "pascal" (PascalCase, default), "camel" (camelCase), "snake" (snake_case)
 naming_convention = "pascal"
 
-# Emit type guard functions for structural validation
-structural_guards = true
-
-# Generate profile constraint interfaces
-generate_profiles = true
-
 # Output directory structure
 # Options: "flat" (all files in one directory), "by_package" (organized by package)
 output_structure = "flat"
 
 # Optional: specify output directory (relative to project root)
 # output_dir = "src/fhir"
+
+# Features are enabled by default; set to false to opt out.
+# structural_guards = false
+# generate_profiles = false
+# generate_valuesets = false
+# profile_classes = false
+# zod_schemas = false
 ```
 
 ## Usage
@@ -79,6 +80,8 @@ let config = TypescriptGeneratorConfig {
     structural_guards: true,
     output_structure: OutputStructure::Flat,
     output_dir: PathBuf::from("./src/fhir"),
+    generate_profiles: true,
+    generate_valuesets: true,
 };
 
 let generator = TypescriptGenerator::new(config);

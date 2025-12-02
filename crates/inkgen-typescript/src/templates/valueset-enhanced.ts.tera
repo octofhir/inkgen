@@ -1,0 +1,139 @@
+{# Enhanced ValueSet template with metadata and helper functions #}
+{%- if valueset.title or valueset.description %}
+/**
+{%- if valueset.title %}
+ * {{ valueset.title }}
+{%- endif %}
+{%- if valueset.description %}
+{%- if valueset.title %}
+ *
+{%- endif %}
+ * {{ valueset.description }}
+{%- endif %}
+ * @see {{ valueset.canonical_url }}
+ */
+{%- endif %}
+
+{# Values array #}
+export const {{ valueset.type_name }}Values = [{{ valueset.codes_str }}] as const;
+
+{# Type alias (open or closed) #}
+{%- if valueset.is_closed %}
+export type {{ valueset.type_name }} = typeof {{ valueset.type_name }}Values[number];
+{%- else %}
+// Open valueset - allows custom codes
+export type {{ valueset.type_name }} = typeof {{ valueset.type_name }}Values[number] | (string & {});
+{%- endif %}
+
+{# Type guard function #}
+/**
+ * Type guard for {{ valueset.type_name }}
+ */
+export function is{{ valueset.type_name }}(value: string): value is {{ valueset.type_name }} {
+  return {{ valueset.type_name }}Values.includes(value as any);
+}
+
+{# Enhanced metadata with definitions and comments #}
+{%- if valueset.has_metadata %}
+
+/**
+ * Metadata for {{ valueset.type_name }} codes
+ * Includes display names, definitions, and code system information
+ */
+export const {{ valueset.type_name }}Metadata = {
+{%- if valueset.system_url %}
+  system: "{{ valueset.system_url }}",
+{%- endif %}
+  codes: {
+{%- for code in valueset.enhanced_codes %}
+    "{{ code.code }}": {
+      code: "{{ code.code }}",
+{%- if code.display %}
+      display: "{{ code.display }}",
+{%- endif %}
+{%- if code.definition %}
+      definition: "{{ code.definition }}",
+{%- endif %}
+{%- if code.comments and code.comments | length > 0 %}
+      comments: [{{ code.comments | map(attribute="value") | map(attribute="quote") | join(sep=", ") }}],
+{%- endif %}
+    },
+{%- endfor %}
+  }
+} as const;
+{%- endif %}
+
+{# Coding factory function #}
+{%- if valueset.has_helpers and valueset.system_url %}
+
+/**
+ * Create a Coding for {{ valueset.type_name }} ValueSet
+ * @param code - The code value
+ * @param display - Optional display text (uses metadata if not provided)
+ * @returns A Coding object
+ */
+export function create{{ valueset.type_name }}Coding(
+  code: {{ valueset.type_name }},
+  display?: string
+): Coding {
+{%- if valueset.has_metadata %}
+  const meta = {{ valueset.type_name }}Metadata.codes[code];
+  return {
+    system: "{{ valueset.system_url }}",
+    code,
+    display: display ?? meta?.display,
+  };
+{%- else %}
+  return {
+    system: "{{ valueset.system_url }}",
+    code,
+    display,
+  };
+{%- endif %}
+}
+
+/**
+ * Create a CodeableConcept for {{ valueset.type_name }} ValueSet
+ * @param code - The code value
+ * @param text - Optional text description
+ * @returns A CodeableConcept object
+ */
+export function create{{ valueset.type_name }}CodeableConcept(
+  code: {{ valueset.type_name }},
+  text?: string
+): CodeableConcept {
+  return {
+    coding: [create{{ valueset.type_name }}Coding(code)],
+    text,
+  };
+}
+
+/**
+ * Validate if a Coding belongs to the {{ valueset.type_name }} ValueSet
+ * @param coding - The Coding to validate
+ * @returns true if the Coding is valid for this ValueSet
+ */
+export function isValid{{ valueset.type_name }}Coding(coding: Coding): boolean {
+  return (
+    coding.system === "{{ valueset.system_url }}" &&
+    !!coding.code &&
+    is{{ valueset.type_name }}(coding.code)
+  );
+}
+
+/**
+ * Extract {{ valueset.type_name }} code from a CodeableConcept
+ * @param concept - The CodeableConcept to extract from
+ * @returns The code if found and valid, undefined otherwise
+ */
+export function extract{{ valueset.type_name }}(
+  concept: CodeableConcept
+): {{ valueset.type_name }} | undefined {
+  const coding = concept.coding?.find(c =>
+    c.system === "{{ valueset.system_url }}"
+  );
+  return coding?.code && is{{ valueset.type_name }}(coding.code)
+    ? coding.code
+    : undefined;
+}
+{%- endif %}

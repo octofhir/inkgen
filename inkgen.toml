@@ -4,29 +4,35 @@
 name = "hl7.fhir.r4.core"
 version = "4.0.1"
 folder = "r4-core"
-filter = "include"
-include_resources = ["Patient", "Observation"]  # Only these RESOURCES
+# filter = "include"
+# include_resources = ["Patient", "Observation"]  # Only these RESOURCES
 # Complex types and primitives are ALWAYS generated
 
 [languages.typescript]
-# Basic generation settings
 mode = "interface"
-structural_guards = true
-naming_convention = "PascalCase"
 output_structure = "by_package"
 output_dir = "generated"
+# All TypeScript features (profiles, ValueSets, guards, Zod, etc.) are now enabled by default.
+# Uncomment only the options you want to disable.
+# structural_guards = false
+# generate_profiles = false
+# generate_valuesets = false
+# profile_classes = false
+# zod_schemas = false
 
-# Profile generation (Task 09)
-profile_classes = true        # Generate profile classes instead of interfaces
-profile_methods = true        # Include extension accessor methods in profile classes
-
-# Runtime validation (Task 10)
-zod_schemas = true           # Generate Zod schemas for runtime validation
-zod_colocated = true         # Co-locate Zod schemas with types (same file)
-
-# Type safety (Task 12)
 branded_primitives = true    # Use branded types for FHIR primitives (compile-time safety)
 
-# Note: The following features are enabled automatically (no config needed):
-# - Profile chain resolution (Task 11): Recursively resolves profile ancestry
-# - Slicing integration (Task 13): Generates discriminated unions for sliced elements
+# Interoperability Helpers
+generate_interop = true
+interop_typed_references = true
+interop_date_helpers = true
+interop_bundle_traversal = true
+interop_search_helpers = true
+
+# Advanced Search Parameters (NEW!)
+# Generates type-safe search parameter interfaces with:
+# - Dynamic _include/_revinclude with template literal types
+# - _has reverse chaining (e.g., '_has:Observation:subject:code')
+# - _filter parameter for FHIRPath-like queries
+# - Enhanced chained parameters based on actual target resources
+interop_search_advanced = true  # Enable ALL advanced search features

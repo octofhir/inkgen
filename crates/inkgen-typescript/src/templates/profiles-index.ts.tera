@@ -1,0 +1,11 @@
+{%- for profile in profiles %}
+{%- if profile.value_exports | length > 0 %}
+export { {{ profile.value_exports | join(sep=", ") }} } from "./{{ profile.file_stem }}";
+{%- endif %}
+{%- if profile.type_exports | length > 0 %}
+export type { {{ profile.type_exports | join(sep=", ") }} } from "./{{ profile.file_stem }}";
+{%- endif %}
+{%- if profile.value_exports | length > 0 or profile.type_exports | length > 0 %}
+
+{%- endif %}
+{%- endfor %}

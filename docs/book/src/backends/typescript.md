@@ -58,19 +58,21 @@ Configure TypeScript output in `inkgen.toml`:
 output_dir = "./generated"
 mode = "interface"                  # interface, class, or class_with_builder
 naming_convention = "pascal"        # pascal, camel, or snake
-structural_guards = true            # generate type guard functions
-generate_profiles = true            # generate profile types
-generate_valuesets = true           # generate valueset types
-max_valueset_codes = 100            # skip large valuesets (optional)
 output_structure = "flat"           # flat or by_package
 
-# Profile method configuration
+# All features are enabled by default; set to false to opt out.
+# structural_guards = false
+# generate_profiles = false
+# generate_valuesets = false
+# profile_classes = false
+# zod_schemas = false
+
+# Profile method configuration (defaults shown)
 [languages.typescript.profile_methods]
-extension_accessors = true          # generate extension getter/setter methods
+extension_accessors = true
 extension_style = "both"            # "typed", "raw", or "both"
-serialization = true                # generate toJson/toObject methods
-validation = true                   # generate fromJson/fromObject methods
-generate_zod_schemas = true         # generate Zod schemas for profiles
+serialization = true
+validation = true
 ```
 
 ## Configuration Options
@@ -94,7 +96,7 @@ generate_zod_schemas = true         # generate Zod schemas for profiles
 | `extension_style` | string | "both" | Extension accessor style: "typed", "raw", or "both" |
 | `serialization` | boolean | true | Generate toJson/toObject methods |
 | `validation` | boolean | true | Generate fromJson/fromObject methods |
-| `generate_zod_schemas` | boolean | true | Generate Zod schemas for runtime validation |
+| `zod_schemas` | boolean | true | Generate Zod schemas for runtime validation |
 
 ## CLI Options
 
@@ -427,7 +429,7 @@ Control which methods are generated:
 extension_accessors = false     # Disable extension accessors
 serialization = false           # Disable toJson/toObject
 validation = false              # Disable fromJson/fromObject
-generate_zod_schemas = false    # Disable Zod schema generation
+zod_schemas = false    # Disable Zod schema generation
 ```
 
 **Minimal Configuration** (only type constraints):

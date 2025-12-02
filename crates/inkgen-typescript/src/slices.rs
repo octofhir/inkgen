@@ -289,7 +289,7 @@ fn to_pascal_case(input: &str) -> String {
 }
 
 /// Generate union type name from element path.
-fn slice_union_type_name(path: &str) -> String {
+pub fn slice_union_type_name(path: &str) -> String {
     // Convert "Extension.extension" to "ExtensionSlice"
     let parts: Vec<&str> = path.split('.').collect();
     if parts.len() > 1 {

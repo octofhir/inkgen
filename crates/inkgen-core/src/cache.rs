@@ -17,6 +17,7 @@ use crate::package::{
     ArtifactDescriptor, PackageDescriptor, PackageId, PackageInventory, PackageRequest,
     PackageSource, StructureKind, StructureSummary,
 };
+use crate::search::SearchParameterInfo;
 
 /// Installation mode for requested packages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -454,6 +455,81 @@ impl PackageCache {
             status,
             package: package.clone(),
         }
+    }
+
+    /// Load SearchParameter resources from a package.
+    ///
+    /// This method queries the canonical manager for all SearchParameter resources
+    /// in the specified package and parses them into `SearchParameterInfo` structures.
+    ///
+    /// # Arguments
+    ///
+    /// * `package_id` - The package ID to load search parameters from
+    ///
+    /// # Returns
+    ///
+    /// Returns a vector of successfully parsed SearchParameter resources.
+    /// Invalid or unparseable SearchParameters are skipped with a warning.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let cache = PackageCache::builder().build().await?;
+    /// let package_id = PackageId::from_str("hl7.fhir.r4.core@4.0.1")?;
+    /// let search_params = cache.load_search_parameters(&package_id).await?;
+    /// println!("Loaded {} search parameters", search_params.len());
+    /// ```
+    pub async fn load_search_parameters(
+        &self,
+        package_id: &PackageId,
+    ) -> CoreResult<Vec<SearchParameterInfo>> {
+        let manager = self.manager().await?;
+        let package_spec = package_id.as_str();
+
+        // Collect all resources from the package
+        let resources = self.collect_package_resources(&manager, &package_spec).await?;
+
+        // Filter for SearchParameter resources and parse them
+        let mut search_params = Vec::new();
+        let mut parse_errors = 0;
+
+        for resource_match in resources {
+            if resource_match.resource.resource_type != "SearchParameter" {
+                continue;
+            }
+
+            match SearchParameterInfo::from_json(&resource_match.resource.content) {
+                Ok(param) => search_params.push(param),
+                Err(err) => {
+                    parse_errors += 1;
+                    tracing::warn!(
+                        "Failed to parse SearchParameter from {}: {}",
+                        resource_match
+                            .resource
+                            .file_path
+                            .to_string_lossy(),
+                        err
+                    );
+                }
+            }
+        }
+
+        if parse_errors > 0 {
+            tracing::info!(
+                "Loaded {} search parameters from {} ({} parse errors)",
+                search_params.len(),
+                package_spec,
+                parse_errors
+            );
+        } else {
+            tracing::debug!(
+                "Loaded {} search parameters from {}",
+                search_params.len(),
+                package_spec
+            );
+        }
+
+        Ok(search_params)
     }
 }
 

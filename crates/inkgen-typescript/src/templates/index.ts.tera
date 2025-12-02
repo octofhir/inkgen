@@ -1,6 +1,22 @@
 {%- for structure in structures %}
-export * from "./{{ structure.file_stem }}";
-{%- endfor %}
-{%- if has_profiles %}
-export * from "./profiles";
+{%- if structure.value_exports | length > 0 %}
+export { {{ structure.value_exports | join(sep=", ") }} } from "./{{ structure.file_stem }}";
 {%- endif %}
+{%- if structure.type_exports | length > 0 %}
+export type { {{ structure.type_exports | join(sep=", ") }} } from "./{{ structure.file_stem }}";
+{%- endif %}
+{%- if structure.value_exports | length > 0 or structure.type_exports | length > 0 %}
+
+{%- endif %}
+{%- endfor %}
+{%- for profile in profiles %}
+{%- if profile.value_exports | length > 0 %}
+export { {{ profile.value_exports | join(sep=", ") }} } from "./profiles/{{ profile.file_stem }}";
+{%- endif %}
+{%- if profile.type_exports | length > 0 %}
+export type { {{ profile.type_exports | join(sep=", ") }} } from "./profiles/{{ profile.file_stem }}";
+{%- endif %}
+{%- if profile.value_exports | length > 0 or profile.type_exports | length > 0 %}
+
+{%- endif %}
+{%- endfor %}

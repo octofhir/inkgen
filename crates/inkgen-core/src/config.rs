@@ -120,7 +120,7 @@ pub struct TypescriptLanguageConfig {
     #[serde(default = "default_mode")]
     pub mode: String,
 
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub structural_guards: bool,
 
     #[serde(default = "default_naming")]
@@ -157,16 +157,16 @@ pub struct TypescriptLanguageConfig {
     #[serde(default)]
     pub overlays: Vec<String>,
 
-    /// Generate profile classes instead of interfaces (default: false)
-    #[serde(default)]
+    /// Generate profile classes instead of interfaces (default: true)
+    #[serde(default = "default_true")]
     pub profile_classes: bool,
 
     /// Profile method generation configuration
     #[serde(default)]
     pub profile_methods: ProfileMethodConfig,
 
-    /// Generate Zod schemas for runtime validation (default: false)
-    #[serde(default)]
+    /// Generate Zod schemas for runtime validation (default: true)
+    #[serde(default = "default_true")]
     pub zod_schemas: bool,
 
     /// Co-locate Zod schemas in same file as types (default: true)
@@ -177,6 +177,84 @@ pub struct TypescriptLanguageConfig {
     /// Generate branded primitive types for type-level safety (default: false)
     #[serde(default)]
     pub branded_primitives: bool,
+
+    // === Feature 1: Import Optimization ===
+    /// Tree-shaking level: "none" | "basic" | "aggressive" (default: "none")
+    #[serde(default = "default_tree_shaking")]
+    pub tree_shaking: String,
+
+    /// Import style: "named" | "namespace" (default: "named")
+    #[serde(default = "default_import_style")]
+    pub import_style: String,
+
+    /// Lazy load validation schemas (default: false)
+    #[serde(default)]
+    pub lazy_schemas: bool,
+
+    // === Feature 2: ValueSet Enhancements ===
+    /// Generate rich metadata for ValueSets (definitions, comments, system URLs) (default: false)
+    #[serde(default)]
+    pub valueset_metadata: bool,
+
+    /// Generate Coding/CodeableConcept helper factories (default: false)
+    #[serde(default)]
+    pub valueset_helpers: bool,
+
+    /// Link ValueSets to CodeSystem resources for enhanced metadata (default: false)
+    #[serde(default)]
+    pub valueset_codesystem_link: bool,
+
+    // === Feature 3: Profile Architecture ===
+    /// Profile generation mode: "class" | "mixin" | "builder" | "functional" (default: "class")
+    #[serde(default = "default_profile_mode")]
+    pub profile_mode: String,
+
+    /// Export profile constraints as external metadata objects (default: false)
+    #[serde(default)]
+    pub profile_constraints_external: bool,
+
+    /// Extension helper style: "bound" | "standalone" | "both" (default: "bound")
+    #[serde(default = "default_profile_extension_helpers")]
+    pub profile_extension_helpers: String,
+
+    // === Feature 4: Validation Backend ===
+    /// Validation backend: "zod" | "json-schema" | "superstruct" | "io-ts" | "arktype" | "none" (default: "zod")
+    #[serde(default = "default_validation_backend")]
+    pub validation_backend: String,
+
+    /// Generate modular per-element validators (default: false)
+    #[serde(default)]
+    pub validation_modular: bool,
+
+    // === Feature 5: Interop Utilities ===
+    /// Generate interop utilities (default: false)
+    #[serde(default)]
+    pub generate_interop: bool,
+
+    /// Generate typed Reference<T> helpers (default: false)
+    #[serde(default)]
+    pub interop_typed_references: bool,
+
+    /// Generate FHIR date parsing/formatting utilities (default: false)
+    #[serde(default)]
+    pub interop_date_helpers: bool,
+
+    /// Generate Bundle traversal utilities (default: false)
+    #[serde(default)]
+    pub interop_bundle_traversal: bool,
+
+    /// Generate search parameter helpers (default: false)
+    #[serde(default)]
+    pub interop_search_helpers: bool,
+
+    /// Enable advanced search parameters (dynamic _include, _has, _filter, enhanced chaining) (default: false)
+    #[serde(default)]
+    pub interop_search_advanced: bool,
+
+    // === Feature 6: Developer Experience ===
+    /// Add tree-shaking hints for bundlers (default: false)
+    #[serde(default)]
+    pub bundler_hints: bool,
 }
 
 fn default_mode() -> String {
@@ -197,6 +275,26 @@ fn default_true() -> bool {
 
 fn default_max_valueset_size() -> usize {
     50
+}
+
+fn default_tree_shaking() -> String {
+    "none".to_string()
+}
+
+fn default_import_style() -> String {
+    "named".to_string()
+}
+
+fn default_profile_mode() -> String {
+    "class".to_string()
+}
+
+fn default_profile_extension_helpers() -> String {
+    "bound".to_string()
+}
+
+fn default_validation_backend() -> String {
+    "zod".to_string()
 }
 
 impl PackageEntry {
@@ -453,6 +551,39 @@ mod tests {
         );
         assert!(ts_config.profile_methods.serialization);
         assert!(ts_config.profile_methods.validation);
+    }
+
+    #[test]
+    fn test_typescript_config_opt_out_defaults() {
+        let toml_config = r#"
+            [languages.typescript]
+        "#;
+        let config: InkgenConfig = toml::from_str(toml_config).unwrap();
+        let ts_config = config.typescript_config().unwrap();
+        assert!(ts_config.structural_guards);
+        assert!(ts_config.profile_classes);
+        assert!(ts_config.zod_schemas);
+        assert!(ts_config.generate_profiles);
+        assert!(ts_config.generate_valuesets);
+    }
+
+    #[test]
+    fn test_typescript_config_can_disable_features() {
+        let toml_config = r#"
+            [languages.typescript]
+            structural_guards = false
+            profile_classes = false
+            zod_schemas = false
+            generate_profiles = false
+            generate_valuesets = false
+        "#;
+        let config: InkgenConfig = toml::from_str(toml_config).unwrap();
+        let ts_config = config.typescript_config().unwrap();
+        assert!(!ts_config.structural_guards);
+        assert!(!ts_config.profile_classes);
+        assert!(!ts_config.zod_schemas);
+        assert!(!ts_config.generate_profiles);
+        assert!(!ts_config.generate_valuesets);
     }
 
     #[test]

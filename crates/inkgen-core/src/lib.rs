@@ -16,6 +16,7 @@ pub mod ir;
 mod lineage;
 mod package;
 mod profile;
+pub mod search;
 mod services;
 pub mod template_helpers;
 mod terminology;
@@ -34,6 +35,7 @@ pub use package::{
     ArtifactDescriptor, ArtifactKind, PackageDescriptor, PackageId, PackageInventory,
     PackageRequest, PackageSource, StructureKind, StructureSummary,
 };
+pub use search::SearchParameterInfo;
 pub use services::{
     BaseStructureService, PackageResolver, StructureDefinitionProvider, StructureFilter,
     StructureProviderConfig,

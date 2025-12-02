@@ -156,20 +156,20 @@ struct DiffArgs {
     context: usize,
 }
 const DEFAULT_CONFIG_TEMPLATE: &str = r#"# InkGen Configuration File
-# By default, all resources from packages are generated
 
 [[packages]]
 name = "hl7.fhir.r4.core"
 version = "4.0.1"
 
-[tree_shaking]
-allowed_resources = ["Patient", "Observation", "Practitioner", "Organization"]
-
 [languages.typescript]
-mode = "class_with_builder"
-structural_guards = true
-naming_convention = "PascalCase"
-output_structure = "flat"
+# All TypeScript features are enabled by default.
+# Uncomment the options below to customize or opt out.
+# output_dir = "generated"
+# structural_guards = false        # Disable runtime type guards
+# generate_profiles = false        # Skip profile classes/interfaces
+# generate_valuesets = false       # Skip ValueSet helpers
+# profile_classes = false          # Generate interfaces instead of classes for profiles
+# zod_schemas = false              # Skip Zod schema generation
 "#;
 
 #[tokio::main]

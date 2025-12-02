@@ -21,6 +21,8 @@ pub use config::{GenerationMode, NamingConvention, OutputStructure, TypescriptGe
 pub use imports::TypeRegistry;
 
 pub mod extensions;
+pub mod imports;
+pub mod interop;
 pub mod invariants;
 pub mod nested;
 pub mod overlays;
@@ -29,6 +31,7 @@ pub mod profiles;
 pub mod slices;
 pub mod template_functions;
 pub mod terminology_helpers;
+pub mod validation;
 pub mod valuesets;
 pub mod zod;
 
@@ -94,6 +97,8 @@ mod config {
         pub naming: NamingConvention,
         pub output_structure: OutputStructure,
         pub output_dir: PathBuf,
+        pub generate_profiles: bool,
+        pub generate_valuesets: bool,
         /// Mapping of package IDs to their folder names (for by_package output structure)
         pub package_folders: HashMap<PackageId, String>,
         /// Mapping of package IDs to their filter settings (for per-package filtering)
@@ -114,6 +119,13 @@ mod config {
         pub zod_colocated: bool,
         /// Generate branded primitive types for type-level safety
         pub branded_primitives: bool,
+        // Interop utilities
+        pub generate_interop: bool,
+        pub interop_typed_references: bool,
+        pub interop_date_helpers: bool,
+        pub interop_bundle_traversal: bool,
+        pub interop_search_helpers: bool,
+        pub interop_search_advanced: bool,
     }
 
     impl std::fmt::Debug for TypescriptGeneratorConfig {
@@ -124,6 +136,8 @@ mod config {
                 .field("naming", &self.naming)
                 .field("output_structure", &self.output_structure)
                 .field("output_dir", &self.output_dir)
+                .field("generate_profiles", &self.generate_profiles)
+                .field("generate_valuesets", &self.generate_valuesets)
                 .field("package_folders", &self.package_folders)
                 .field("package_filters", &self.package_filters)
                 .field("dependency_analyzer", &self.dependency_analyzer)
@@ -166,22 +180,68 @@ mod config {
             let structural_guards = section
                 .as_ref()
                 .map(|s| s.structural_guards)
-                .unwrap_or(false);
+                .unwrap_or(true);
 
-            let profile_classes = section.as_ref().map(|s| s.profile_classes).unwrap_or(false);
+            let profile_classes = section
+                .as_ref()
+                .map(|s| s.profile_classes)
+                .unwrap_or(true);
 
             let profile_methods = section
                 .as_ref()
                 .map(|s| s.profile_methods.clone())
                 .unwrap_or_default();
 
-            let zod_schemas = section.as_ref().map(|s| s.zod_schemas).unwrap_or(false);
+            let zod_schemas = section
+                .as_ref()
+                .map(|s| s.zod_schemas)
+                .unwrap_or(true);
 
             let zod_colocated = section.as_ref().map(|s| s.zod_colocated).unwrap_or(true);
 
             let branded_primitives = section
                 .as_ref()
                 .map(|s| s.branded_primitives)
+                .unwrap_or(false);
+
+            let generate_profiles = section
+                .as_ref()
+                .map(|s| s.generate_profiles)
+                .unwrap_or(true);
+
+            let generate_valuesets = section
+                .as_ref()
+                .map(|s| s.generate_valuesets)
+                .unwrap_or(true);
+
+            let generate_interop = section
+                .as_ref()
+                .map(|s| s.generate_interop)
+                .unwrap_or(false);
+
+            let interop_typed_references = section
+                .as_ref()
+                .map(|s| s.interop_typed_references)
+                .unwrap_or(false);
+
+            let interop_date_helpers = section
+                .as_ref()
+                .map(|s| s.interop_date_helpers)
+                .unwrap_or(false);
+
+            let interop_bundle_traversal = section
+                .as_ref()
+                .map(|s| s.interop_bundle_traversal)
+                .unwrap_or(false);
+
+            let interop_search_helpers = section
+                .as_ref()
+                .map(|s| s.interop_search_helpers)
+                .unwrap_or(false);
+
+            let interop_search_advanced = section
+                .as_ref()
+                .map(|s| s.interop_search_advanced)
                 .unwrap_or(false);
 
             let mut output_dir = override_output
@@ -201,6 +261,8 @@ mod config {
                 naming,
                 output_structure,
                 output_dir,
+                generate_profiles,
+                generate_valuesets,
                 package_folders,
                 package_filters,
                 dependency_analyzer,
@@ -211,115 +273,17 @@ mod config {
                 zod_schemas,
                 zod_colocated,
                 branded_primitives,
+                generate_interop,
+                interop_typed_references,
+                interop_date_helpers,
+                interop_bundle_traversal,
+                interop_search_helpers,
+                interop_search_advanced,
             }
         }
     }
 }
 
-mod imports {
-    use std::collections::HashMap;
-
-    /// Global registry tracking all types across all packages.
-    /// Used for resolving cross-package imports.
-    #[derive(Debug, Clone, Default)]
-    pub struct TypeRegistry {
-        /// Map type_name → (package_folder, file_stem)
-        types: HashMap<String, TypeInfo>,
-    }
-
-    #[derive(Debug, Clone)]
-    struct TypeInfo {
-        package_folder: String,
-        file_stem: String,
-    }
-
-    impl TypeRegistry {
-        pub fn new() -> Self {
-            Self {
-                types: HashMap::new(),
-            }
-        }
-
-        /// Register a type with its package and file location
-        pub fn register(&mut self, type_name: String, package_folder: String, file_stem: String) {
-            self.types.insert(
-                type_name,
-                TypeInfo {
-                    package_folder,
-                    file_stem,
-                },
-            );
-        }
-
-        /// Look up where a type is defined
-        pub fn get(&self, type_name: &str) -> Option<(&str, &str)> {
-            self.types
-                .get(type_name)
-                .map(|info| (info.package_folder.as_str(), info.file_stem.as_str()))
-        }
-
-        /// Check if a type is registered
-        pub fn contains(&self, type_name: &str) -> bool {
-            self.types.contains_key(type_name)
-        }
-    }
-
-    /// Calculate relative import path between packages or within the same package.
-    ///
-    /// # Arguments
-    ///
-    /// * `from_package_folder` - Source package folder (e.g., "r4-core" or "us-core")
-    /// * `from_subfolder` - Subfolder within source package (e.g., "profiles" or "")
-    /// * `to_package_folder` - Target package folder
-    /// * `to_file_stem` - Target file stem (without .ts extension)
-    ///
-    /// # Returns
-    ///
-    /// Import path (e.g., "./patient" or "../../r4-core/patient")
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// // Same package, no subfolders
-    /// // from: r4-core/observation.ts  to: r4-core/patient.ts
-    /// // result: "./patient"
-    ///
-    /// // Same package, from subfolder
-    /// // from: r4-core/profiles/us-core-patient.ts  to: r4-core/patient.ts
-    /// // result: "../patient"
-    ///
-    /// // Cross-package
-    /// // from: us-core/profiles/us-core-patient.ts  to: r4-core/patient.ts
-    /// // result: "../../r4-core/patient"
-    /// ```
-    pub fn calculate_import_path(
-        from_package_folder: &str,
-        from_subfolder: &str,
-        to_package_folder: &str,
-        to_file_stem: &str,
-    ) -> String {
-        if from_package_folder == to_package_folder {
-            // Same package - calculate relative path
-            if from_subfolder.is_empty() {
-                // Same package, no subfolder navigation needed
-                format!("./{}", to_file_stem)
-            } else {
-                // Navigate up from subfolder
-                format!("../{}", to_file_stem)
-            }
-        } else {
-            // Cross-package import
-            let depth = if from_subfolder.is_empty() {
-                1 // Just the package folder
-            } else {
-                2 // Package folder + subfolder
-            };
-
-            let up_path = "../".repeat(depth);
-            format!("{}{}/{}", up_path, to_package_folder, to_file_stem)
-        }
-    }
-}
 
 mod naming {
     pub fn pascal_case(value: &str) -> String {
@@ -687,6 +651,10 @@ struct RenderStructure {
     /// Detected slices for discriminated unions
     #[serde(skip_serializing_if = "Vec::is_empty")]
     slices: Vec<slices::SlicePattern>,
+    /// Named type-only exports for barrel files
+    type_exports: Vec<String>,
+    /// Named value exports for barrel files
+    value_exports: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -703,6 +671,8 @@ struct ProfileOutput {
     file_name: String,
     file_stem: String,
     typescript_code: String,
+    type_exports: Vec<String>,
+    value_exports: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -714,6 +684,11 @@ struct PackageOutput {
     extensions: IndexMap<String, extensions::RenderExtension>,
     branded_primitives: bool,
     zod_schemas: bool,
+    // Interop utilities
+    generate_interop: bool,
+    interop_config: Option<interop::InteropConfig>,
+    resource_types: Vec<String>,
+    search_parameters: Vec<inkgen_core::SearchParameterInfo>,
 }
 
 #[derive(Debug, Clone)]
@@ -1004,14 +979,37 @@ where
         })?;
 
         // Phase 0: Generate ValueSets/Codes before structures
-        let (valueset_count, valueset_url_to_type) =
-            self.generate_valuesets(&package_dir, descriptor).await?;
+        let (valueset_count, valueset_url_to_type) = if self.config.generate_valuesets {
+            self.generate_valuesets(&package_dir, descriptor).await?
+        } else {
+            (0, HashMap::new())
+        };
         if valueset_count > 0 {
             info!(
                 "Phase 0: ValueSets - Generated {} code files",
                 valueset_count
             );
         }
+
+        // Load SearchParameter resources for interop generation
+        let search_parameters = if self.config.interop_search_helpers {
+            if let Some(cache) = &self.config.package_cache {
+                match cache.load_search_parameters(&descriptor.id).await {
+                    Ok(params) => {
+                        info!("Loaded {} search parameters for interop", params.len());
+                        params
+                    }
+                    Err(err) => {
+                        warn!("Failed to load search parameters: {}", err);
+                        Vec::new()
+                    }
+                }
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
 
         // Log phase breakdown for visibility
         let (mut primitives, mut complex, mut logical, mut resources, mut profiles) =
@@ -1096,6 +1094,22 @@ where
             name_to_stem.insert(type_name, stem);
         }
 
+        // Collect resource types for interop generation (only BaseResource kinds)
+        let resource_types: Vec<String> = entries
+            .iter()
+            .filter_map(|(summary, definition)| {
+                // Only include actual FHIR resources that can be reference targets
+                if summary.kind == StructureKind::BaseResource {
+                    let type_name = naming::pascal_case(
+                        summary.type_code.as_deref().unwrap_or(&definition.id),
+                    );
+                    Some(type_name)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         // Phase 2: Generate structures using the complete name mapping
         let mut structures = Vec::new();
         let mut profiles = Vec::new();
@@ -1126,6 +1140,9 @@ where
                     .is_some_and(|base_id| base_id != &definition.id);
 
             if is_profile {
+                if !self.config.generate_profiles {
+                    continue;
+                }
                 // Generate profile
                 if let Some(profile_info) =
                     profiles::ProfileInfo::from_resource_definition(&definition)
@@ -1144,11 +1161,37 @@ where
                     let profile_file_stem = format!("profile-{}", file_stem);
                     let profile_file_name = format!("{}.ts", profile_file_stem);
                     let profile_type_name = profile_info.type_name.clone();
+
+                    let mut profile_type_exports = Vec::new();
+                    let mut profile_value_exports = Vec::new();
+
+                    if self.config.profile_classes {
+                        profile_value_exports.push(profile_info.type_name.clone());
+                    } else {
+                        profile_type_exports.push(profile_info.type_name.clone());
+                    }
+
+                    profile_value_exports.push(format!("is{}", profile_info.type_name));
+
+                    if self.config.zod_schemas {
+                        profile_value_exports.push(format!(
+                            "{}Schema",
+                            profile_info.type_name
+                        ));
+                    }
+
+                    profile_type_exports.sort();
+                    profile_type_exports.dedup();
+                    profile_value_exports.sort();
+                    profile_value_exports.dedup();
+
                     profiles.push(ProfileOutput {
                         type_name: profile_info.type_name,
                         file_name: profile_file_name,
                         file_stem: profile_file_stem,
                         typescript_code: ts_code,
+                        type_exports: profile_type_exports,
+                        value_exports: profile_value_exports,
                     });
                     info!("Generated profile: {}", profile_type_name);
                 }
@@ -1179,6 +1222,25 @@ where
             }
         }
 
+        // Build interop config if enabled
+        let (generate_interop, interop_config) = if self.config.generate_interop {
+            let search_config = interop::search::SearchConfig {
+                advanced_search: self.config.interop_search_advanced,
+                ..Default::default()
+            };
+            let config = interop::InteropConfig {
+                typed_references: self.config.interop_typed_references,
+                date_helpers: self.config.interop_date_helpers,
+                bundle_traversal: self.config.interop_bundle_traversal,
+                search_helpers: self.config.interop_search_helpers,
+                search_config,
+                ..Default::default()
+            };
+            (true, Some(config))
+        } else {
+            (false, None)
+        };
+
         let package_output = PackageOutput {
             path: package_dir.clone(),
             structures,
@@ -1187,6 +1249,10 @@ where
             extensions: all_extensions,
             branded_primitives: self.config.branded_primitives,
             zod_schemas: self.config.zod_schemas,
+            generate_interop,
+            interop_config,
+            resource_types,
+            search_parameters,
         };
 
         write_package(&package_output)?;
@@ -1244,6 +1310,22 @@ fn write_package(package: &PackageOutput) -> Result<()> {
     fs::write(utils_dir.join("extensions.ts"), utils_content)
         .with_context(|| "failed to write utils/extensions.ts")?;
 
+    // Write interop utilities if enabled
+    if package.generate_interop {
+        if let Some(config) = &package.interop_config {
+            let generator = interop::InteropGenerator::new(
+                package.resource_types.clone(),
+                package.search_parameters.clone(),
+                config,
+            );
+            if generator.is_enabled() {
+                let interop_code = generator.generate_all(config);
+                fs::write(utils_dir.join("interop.ts"), interop_code)
+                    .with_context(|| "failed to write utils/interop.ts")?;
+            }
+        }
+    }
+
     // Create profiles subdirectory if there are profiles
     if !package.profiles.is_empty() {
         let profiles_dir = package.path.join("profiles");
@@ -1262,19 +1344,18 @@ fn write_package(package: &PackageOutput) -> Result<()> {
         }
 
         // Generate profiles/index.ts barrel export
-        let mut profile_exports = String::new();
-        for profile in &package.profiles {
-            let stem = &profile.file_stem;
-            profile_exports.push_str(&format!("export * from './{}';\n", stem));
-        }
-        fs::write(profiles_dir.join("index.ts"), profile_exports)
+        let mut profile_index_context = TeraContext::new();
+        profile_index_context.insert("profiles", &package.profiles);
+        let profile_index =
+            templates::render("profiles-index.ts.tera", &profile_index_context)?;
+        fs::write(profiles_dir.join("index.ts"), profile_index)
             .with_context(|| "failed to write profiles/index.ts")?;
     }
 
     // Write main index with all exports
     let mut context = TeraContext::new();
     context.insert("structures", &package.structures);
-    context.insert("has_profiles", &!package.profiles.is_empty());
+    context.insert("profiles", &package.profiles);
     let index_content = templates::render("index.ts.tera", &context)?;
     fs::write(package.path.join("index.ts"), index_content)?;
     Ok(())
@@ -1668,6 +1749,50 @@ fn build_render_structure(
     // Detect slices for discriminated unions
     let slices = slices::detect_slices(definition);
 
+    // Compute barrel exports for this structure
+    let mut type_exports = Vec::new();
+    let mut value_exports = Vec::new();
+
+    if emit_interface {
+        type_exports.push(type_name.to_string());
+    }
+
+    if emit_class {
+        value_exports.push(class_name.clone());
+    }
+
+    if config.structural_guards {
+        value_exports.push(format!("is{}", type_name));
+    }
+
+    if generate_zod_schema {
+        value_exports.push(format!("{}Schema", type_name));
+        type_exports.push(format!("{}Validated", type_name));
+        value_exports.push(format!("parse{}", type_name));
+    }
+
+    for nested in &nested_types {
+        type_exports.push(nested.type_name.clone());
+        if generate_zod_schema {
+            value_exports.push(format!("{}Schema", nested.type_name));
+            type_exports.push(format!("{}Validated", nested.type_name));
+        }
+    }
+
+    for pattern in &slices {
+        let union_name = slices::slice_union_type_name(&pattern.path);
+        type_exports.push(union_name);
+        for slice in &pattern.slices {
+            let guard_name = format!("is{}Slice", naming::pascal_case(&slice.name));
+            value_exports.push(guard_name);
+        }
+    }
+
+    type_exports.sort();
+    type_exports.dedup();
+    value_exports.sort();
+    value_exports.dedup();
+
     RenderStructure {
         type_name: type_name.to_string(),
         class_name,
@@ -1694,6 +1819,8 @@ fn build_render_structure(
         generate_zod_schema,
         zod_fields,
         slices,
+        type_exports,
+        value_exports,
     }
 }
 
@@ -2083,6 +2210,8 @@ mod tests {
             naming: NamingConvention::PascalCase,
             output_structure: OutputStructure::Flat,
             output_dir: temp.path().to_path_buf(),
+            generate_profiles: true,
+            generate_valuesets: true,
             package_folders: HashMap::new(),
             package_filters: HashMap::new(),
             dependency_analyzer: None,
@@ -2093,6 +2222,12 @@ mod tests {
             zod_schemas: false,
             zod_colocated: true,
             branded_primitives: false,
+            generate_interop: false,
+            interop_typed_references: false,
+            interop_date_helpers: false,
+            interop_bundle_traversal: false,
+            interop_search_helpers: false,
+            interop_search_advanced: false,
         };
         let generator = TypescriptGenerator::new(config.clone());
         generator
@@ -2120,7 +2255,7 @@ mod tests {
         let index_file = fs::read_to_string(package_dir.join("index.ts")).expect("read index.ts");
 
         assert!(
-            index_file.contains("export * from"),
+            index_file.contains("export") && index_file.contains("from"),
             "Index file should export from modules"
         );
 
