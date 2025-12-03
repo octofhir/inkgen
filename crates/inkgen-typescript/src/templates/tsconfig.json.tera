@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "lib": ["ES2020"],
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "declaration": false,
+    "types": []
+  },
+  "include": [
+{%- for package in packages %}
+    "{{ package }}/**/*.ts"{% if not loop.last %},{% endif %}
+{%- endfor %}
+  ],
+  "exclude": ["node_modules", "dist"]
+}

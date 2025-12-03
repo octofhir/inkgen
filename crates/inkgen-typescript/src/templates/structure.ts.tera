@@ -7,7 +7,11 @@ import type { {{ structure.primitive_imports | join(sep=", ") }} } from "./primi
 {% endif -%}
 {%- if structure.imports | length > 0 %}
 {% for import in structure.imports -%}
+{%- if import.is_type_only %}
 import type { {{ import.types | join(sep=", ") }} } from "{{ import.path }}";
+{%- else %}
+import { {{ import.types | join(sep=", ") }} } from "{{ import.path }}";
+{%- endif %}
 {% endfor -%}
 
 {%- endif %}
@@ -90,11 +94,12 @@ export function is{{ structure.type_name }}(input: unknown): input is {{ structu
     return false;
   }
 
-  // Check resourceType for FHIR resources
+{%- if structure.resource_type_guard %}
   const obj = input as any;
   if (obj.resourceType !== undefined && obj.resourceType !== "{{ structure.type_name }}") {
     return false;
   }
+{%- endif %}
 
   return true;
 }

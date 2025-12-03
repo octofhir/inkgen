@@ -6,6 +6,7 @@
 pub mod helpers;
 pub mod metadata;
 
+use self::metadata::EnhancedCodeInfo;
 use inkgen_core::{extract_codes_from_valueset, should_generate_valueset};
 use serde::Serialize;
 use serde_json::Value;
@@ -121,6 +122,20 @@ impl ValueSetInfo {
     /// Helper method to get just the code values
     pub fn codes(&self) -> Vec<String> {
         self.code_info.iter().map(|c| c.code.clone()).collect()
+    }
+
+    /// Apply enhanced metadata to fill in missing display/definition information.
+    pub fn apply_enhanced_metadata(&mut self, enhanced: &[EnhancedCodeInfo]) {
+        for code in &mut self.code_info {
+            if let Some(extra) = enhanced.iter().find(|c| c.code == code.code) {
+                if code.display.is_none() {
+                    code.display = extra.display.clone();
+                }
+                if code.definition.is_none() {
+                    code.definition = extra.definition.clone();
+                }
+            }
+        }
     }
 
     /// Generates TypeScript code for this value set.
@@ -589,5 +604,36 @@ mod tests {
         assert!(output.contains("\"inactive\": {"));
         assert!(output.contains("display: \"Inactive\","));
         assert!(!output.contains("definition: \"Inactive\",")); // inactive has no definition
+    }
+
+    #[test]
+    fn test_apply_enhanced_metadata() {
+        let mut info = ValueSetInfo {
+            type_name: "Status".to_string(),
+            canonical_url: "http://example.org/ValueSet/status".to_string(),
+            code_info: vec![CodeInfo {
+                code: "active".to_string(),
+                display: None,
+                definition: None,
+            }],
+            title: None,
+            description: None,
+            binding_strength: None,
+        };
+
+        let enhanced = vec![EnhancedCodeInfo {
+            code: "active".to_string(),
+            display: Some("Active".to_string()),
+            definition: Some("Active definition".to_string()),
+            comments: vec![],
+        }];
+
+        info.apply_enhanced_metadata(&enhanced);
+
+        assert_eq!(info.code_info[0].display, Some("Active".to_string()));
+        assert_eq!(
+            info.code_info[0].definition,
+            Some("Active definition".to_string())
+        );
     }
 }

@@ -44,6 +44,8 @@ pub struct ValueSetHelpers {
     pub has_validation: bool,
     /// Whether to generate extraction helpers
     pub has_extraction: bool,
+    /// Whether metadata constants are available for display fallbacks
+    pub has_metadata: bool,
 }
 
 impl ValueSetHelpers {
@@ -53,7 +55,12 @@ impl ValueSetHelpers {
     /// * `type_name` - The TypeScript type name for the ValueSet
     /// * `system_url` - The CodeSystem URL
     /// * `config` - Configuration for which helpers to generate
-    pub fn new(type_name: String, system_url: String, config: &HelperConfig) -> Self {
+    pub fn new(
+        type_name: String,
+        system_url: String,
+        config: &HelperConfig,
+        has_metadata: bool,
+    ) -> Self {
         Self {
             type_name,
             system_url,
@@ -61,6 +68,7 @@ impl ValueSetHelpers {
             has_codeable_concept_factory: config.codeable_concept_factories,
             has_validation: config.validation_helpers,
             has_extraction: config.extraction_helpers,
+            has_metadata,
         }
     }
 
@@ -81,8 +89,9 @@ impl ValueSetHelpers {
     /// }
     /// ```
     pub fn coding_factory_code(&self) -> String {
-        format!(
-            r#"/**
+        if self.has_metadata {
+            return format!(
+                r#"/**
  * Create a Coding for {} ValueSet
  * @param code - The code value
  * @param display - Optional display text (uses metadata if not provided)
@@ -99,11 +108,28 @@ export function create{}Coding(
     display: display ?? meta?.display,
   }};
 }}"#,
-            self.type_name,
-            self.type_name,
-            self.type_name,
-            self.type_name,
-            self.system_url
+                self.type_name, self.type_name, self.type_name, self.type_name, self.system_url
+            );
+        }
+
+        format!(
+            r#"/**
+ * Create a Coding for {} ValueSet
+ * @param code - The code value
+ * @param display - Optional display text
+ * @returns A Coding object
+ */
+export function create{}Coding(
+  code: {},
+  display?: string
+): Coding {{
+  return {{
+    system: "{}",
+    code,
+    display,
+  }};
+}}"#,
+            self.type_name, self.type_name, self.type_name, self.system_url
         )
     }
 
@@ -204,11 +230,7 @@ export function extract{}(
     ? coding.code
     : undefined;
 }}"#,
-            self.type_name,
-            self.type_name,
-            self.type_name,
-            self.system_url,
-            self.type_name
+            self.type_name, self.type_name, self.type_name, self.system_url, self.type_name
         )
     }
 
@@ -257,6 +279,7 @@ mod tests {
             "AdministrativeGender".to_string(),
             "http://hl7.org/fhir/administrative-gender".to_string(),
             &config,
+            true,
         );
 
         assert_eq!(helpers.type_name, "AdministrativeGender");
@@ -275,6 +298,7 @@ mod tests {
             "AdministrativeGender".to_string(),
             "http://hl7.org/fhir/administrative-gender".to_string(),
             &config,
+            true,
         );
 
         let code = helpers.coding_factory_code();
@@ -283,6 +307,24 @@ mod tests {
         assert!(code.contains("code: AdministrativeGender"));
         assert!(code.contains("Coding"));
         assert!(code.contains("http://hl7.org/fhir/administrative-gender"));
+        assert!(code.contains("Metadata"));
+    }
+
+    #[test]
+    fn test_coding_factory_without_metadata() {
+        let config = HelperConfig::default();
+        let helpers = ValueSetHelpers::new(
+            "AdministrativeGender".to_string(),
+            "http://hl7.org/fhir/administrative-gender".to_string(),
+            &config,
+            false,
+        );
+
+        let code = helpers.coding_factory_code();
+
+        assert!(code.contains("createAdministrativeGenderCoding"));
+        assert!(!code.contains("Metadata"));
+        assert!(code.contains("display,"));
     }
 
     #[test]
@@ -292,6 +334,7 @@ mod tests {
             "AdministrativeGender".to_string(),
             "http://hl7.org/fhir/administrative-gender".to_string(),
             &config,
+            true,
         );
 
         let code = helpers.codeable_concept_factory_code();
@@ -308,6 +351,7 @@ mod tests {
             "AdministrativeGender".to_string(),
             "http://hl7.org/fhir/administrative-gender".to_string(),
             &config,
+            true,
         );
 
         let code = helpers.validation_helper_code();
@@ -324,6 +368,7 @@ mod tests {
             "AdministrativeGender".to_string(),
             "http://hl7.org/fhir/administrative-gender".to_string(),
             &config,
+            true,
         );
 
         let code = helpers.extraction_helper_code();
@@ -340,6 +385,7 @@ mod tests {
             "TestValueSet".to_string(),
             "http://example.org/test".to_string(),
             &config,
+            true,
         );
 
         let all_code = helpers.generate_all_helpers();
@@ -364,6 +410,7 @@ mod tests {
             "TestValueSet".to_string(),
             "http://example.org/test".to_string(),
             &config,
+            true,
         );
 
         let code = helpers.generate_all_helpers();

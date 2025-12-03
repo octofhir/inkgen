@@ -54,6 +54,36 @@ pub struct SearchHelpers {
     pub has_advanced_search: bool,
 }
 
+/// Template context for rendering search helpers
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchTemplateContext {
+    pub fhir_version: FhirVersion,
+    pub has_interfaces: bool,
+    pub has_url_builders: bool,
+    pub has_advanced_search: bool,
+    pub resources: Vec<SearchResourceContext>,
+}
+
+/// Per-resource context for template rendering
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchResourceContext {
+    pub resource_type: String,
+    pub parameters: Vec<SearchParameterContext>,
+}
+
+/// Individual search parameter context
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchParameterContext {
+    pub code: String,
+    pub param_type: String,
+    pub description: String,
+    pub modifier_type: String,
+    pub comparator_type: String,
+    pub type_expr: String,
+    pub optional: bool,
+    pub needs_quotes: bool, // True if code contains special characters (e.g., dash)
+}
+
 impl SearchHelpers {
     /// Creates search helpers for a set of resource types
     pub fn new(
@@ -150,7 +180,8 @@ impl SearchHelpers {
         }
 
         // Collect ALL reference parameters for this resource
-        let ref_params: Vec<&inkgen_core::SearchParameterInfo> = self.search_parameters
+        let ref_params: Vec<&inkgen_core::SearchParameterInfo> = self
+            .search_parameters
             .iter()
             .filter(|sp| sp.applies_to(resource_type) && sp.param_type == "reference")
             .collect();
@@ -176,9 +207,7 @@ impl SearchHelpers {
         let type_name = format!("{}Include", resource_type);
         let type_def = format!(
             "export type {} = `{}:${{{}}}`;",
-            type_name,
-            resource_type,
-            param_union_name
+            type_name, resource_type, param_union_name
         );
 
         // Support both R4 and R5 styles
@@ -193,7 +222,10 @@ impl SearchHelpers {
             format!("{} | Array<{}>", type_name, type_name)
         };
 
-        (format!("{}\n{}", param_union_def, type_def), use_in_interface)
+        (
+            format!("{}\n{}", param_union_def, type_def),
+            use_in_interface,
+        )
     }
 
     /// Generate typed _revinclude union for a resource
@@ -273,16 +305,17 @@ impl SearchHelpers {
                             continue;
                         }
 
-                        let has_param_name = format!(
-                            "'_has:{}:{}:{}'",
-                            base_resource, sp.code, ref_param.code
-                        );
+                        let has_param_name =
+                            format!("'_has:{}:{}:{}'", base_resource, sp.code, ref_param.code);
 
                         let modifier_type = self.get_modifier_type(&ref_param.param_type);
                         let comparator_type = self.get_comparator_type(&ref_param.param_type);
 
                         let type_expr = if modifier_type != "never" || comparator_type != "never" {
-                            format!("string | SearchParamValue<{}, {}>", modifier_type, comparator_type)
+                            format!(
+                                "string | SearchParamValue<{}, {}>",
+                                modifier_type, comparator_type
+                            )
                         } else {
                             "string | SearchParamValue<never, never>".to_string()
                         };
@@ -312,7 +345,9 @@ impl SearchHelpers {
         // Generate modifier types based on FHIR version
         let token_modifiers = match self.fhir_version {
             FhirVersion::R4 => "'not' | 'text' | 'in' | 'not-in' | 'below' | 'above'",
-            FhirVersion::R5 => "'not' | 'text' | 'in' | 'not-in' | 'below' | 'above' | 'code-text' | 'text-advanced'",
+            FhirVersion::R5 => {
+                "'not' | 'text' | 'in' | 'not-in' | 'below' | 'above' | 'code-text' | 'text-advanced'"
+            }
         };
 
         let reference_modifiers = match self.fhir_version {
@@ -327,7 +362,9 @@ impl SearchHelpers {
 
         let include_type = match self.fhir_version {
             FhirVersion::R4 => "string | string[]",
-            FhirVersion::R5 => "SearchParamValue<IncludeModifier, never> | Array<SearchParamValue<IncludeModifier, never>>",
+            FhirVersion::R5 => {
+                "SearchParamValue<IncludeModifier, never> | Array<SearchParamValue<IncludeModifier, never>>"
+            }
         };
 
         let filter_param = if self.has_advanced_search {
@@ -444,7 +481,8 @@ export interface CommonSearchParams {{
                 params_map.entry(sp.code.clone()).or_insert(sp);
             }
             // Expand DomainResource/Resource parameters to all concrete resources
-            else if (sp.base.contains(&"DomainResource".to_string()) || sp.base.contains(&"Resource".to_string()))
+            else if (sp.base.contains(&"DomainResource".to_string())
+                || sp.base.contains(&"Resource".to_string()))
                 && !["Resource", "DomainResource"].contains(&resource_type)
             {
                 params_map.entry(sp.code.clone()).or_insert(sp);
@@ -469,10 +507,23 @@ export interface {}SearchParams extends CommonSearchParams {{"#,
         // List of common parameters that are already in CommonSearchParams
         // These should NOT be duplicated in resource-specific interfaces
         let common_params = [
-            "_id", "_lastUpdated", "_profile", "_security", "_tag",
-            "_text", "_content", "_include", "_revinclude", "_sort",
-            "_count", "_offset", "_summary", "_elements", "_filter",
-            "_query", "_source"  // Also common in R4
+            "_id",
+            "_lastUpdated",
+            "_profile",
+            "_security",
+            "_tag",
+            "_text",
+            "_content",
+            "_include",
+            "_revinclude",
+            "_sort",
+            "_count",
+            "_offset",
+            "_summary",
+            "_elements",
+            "_filter",
+            "_query",
+            "_source", // Also common in R4
         ];
 
         for param in &params {
@@ -486,7 +537,10 @@ export interface {}SearchParams extends CommonSearchParams {{"#,
 
             // Build type expression - allow both plain string and SearchParamValue
             let type_expr = if modifier_type != "never" || comparator_type != "never" {
-                format!("string | SearchParamValue<{}, {}>", modifier_type, comparator_type)
+                format!(
+                    "string | SearchParamValue<{}, {}>",
+                    modifier_type, comparator_type
+                )
             } else {
                 // For types that don't support modifiers/comparators, still allow plain string or object
                 match param.param_type.as_str() {
@@ -539,7 +593,8 @@ export interface {}SearchParams extends CommonSearchParams {{"#,
         }
 
         // Add chaining support for reference parameters
-        let reference_params: Vec<_> = params.iter()
+        let reference_params: Vec<_> = params
+            .iter()
             .filter(|p| p.param_type == "reference" && !p.target.is_empty())
             .collect();
 
@@ -565,24 +620,25 @@ export interface {}SearchParams extends CommonSearchParams {{"#,
                             }
 
                             let modifier_type = self.get_modifier_type(&target_param.param_type);
-                            let comparator_type = self.get_comparator_type(&target_param.param_type);
+                            let comparator_type =
+                                self.get_comparator_type(&target_param.param_type);
 
-                            let type_expr = if modifier_type != "never" || comparator_type != "never" {
-                                format!("string | SearchParamValue<{}, {}>", modifier_type, comparator_type)
-                            } else {
-                                "string | SearchParamValue<never, never>".to_string()
-                            };
+                            let type_expr =
+                                if modifier_type != "never" || comparator_type != "never" {
+                                    format!(
+                                        "string | SearchParamValue<{}, {}>",
+                                        modifier_type, comparator_type
+                                    )
+                                } else {
+                                    "string | SearchParamValue<never, never>".to_string()
+                                };
 
                             // Basic chain: refParam.targetParam
                             let param_desc = Self::clean_description(&param.description);
                             let target_desc = Self::clean_description(&target_param.description);
                             interface.push_str(&format!(
                                 "\n  /** {}: {} (chained) */\n  '{}.{}'?: {};",
-                                param_desc,
-                                target_desc,
-                                param.code,
-                                target_param.code,
-                                type_expr
+                                param_desc, target_desc, param.code, target_param.code, type_expr
                             ));
 
                             // R5: Also generate type-specific chains for multi-target references
@@ -784,14 +840,11 @@ export function buildSearchQuery(params: Record<string, any>): string {
         .to_string()
     }
 
-    /// Generate all search helper code split into multiple files
-    /// Returns a map of file paths (relative to search directory) to file contents
-    pub fn generate_all_split(&self) -> std::collections::HashMap<String, String> {
-        use std::collections::{BTreeSet, HashMap};
+    /// Build template context for rendering search templates
+    pub fn build_template_context(&self) -> SearchTemplateContext {
+        use std::collections::BTreeSet;
 
-        let mut files = HashMap::new();
-
-        // Collect all unique resource types from search parameters
+        // Collect all unique resource types
         let mut all_resource_types: BTreeSet<String> = BTreeSet::new();
         for sp in &self.search_parameters {
             for base in &sp.base {
@@ -799,60 +852,176 @@ export function buildSearchQuery(params: Record<string, any>): string {
             }
         }
 
-        // 1. Generate common.ts - Common types and parameters
+        // Build context for each resource
+        let resources = all_resource_types
+            .iter()
+            .map(|rt| self.build_resource_context(rt))
+            .collect();
+
+        SearchTemplateContext {
+            fhir_version: self.fhir_version,
+            has_interfaces: self.has_interfaces,
+            has_url_builders: self.has_url_builders,
+            has_advanced_search: self.has_advanced_search,
+            resources,
+        }
+    }
+
+    /// Build context for a single resource's search parameters
+    fn build_resource_context(&self, resource_type: &str) -> SearchResourceContext {
+        use std::collections::HashMap;
+
+        // Filter search parameters for this resource type and deduplicate by code
+        let mut params_map: HashMap<String, &inkgen_core::SearchParameterInfo> = HashMap::new();
+
+        for sp in self.search_parameters.iter() {
+            // Direct match
+            if sp.applies_to(resource_type) {
+                params_map.entry(sp.code.clone()).or_insert(sp);
+            }
+            // Expand DomainResource/Resource parameters to all concrete resources
+            else if (sp.base.contains(&"DomainResource".to_string())
+                || sp.base.contains(&"Resource".to_string()))
+                && !["Resource", "DomainResource"].contains(&resource_type)
+            {
+                params_map.entry(sp.code.clone()).or_insert(sp);
+            }
+        }
+
+        // Sort parameters by code for deterministic output
+        let mut params: Vec<_> = params_map.values().collect();
+        params.sort_by_key(|p| &p.code);
+
+        // List of common parameters already in CommonSearchParams
+        let common_params = [
+            "_id",
+            "_lastUpdated",
+            "_profile",
+            "_security",
+            "_tag",
+            "_text",
+            "_content",
+            "_include",
+            "_revinclude",
+            "_sort",
+            "_count",
+            "_offset",
+            "_summary",
+            "_elements",
+            "_filter",
+            "_query",
+            "_source",
+        ];
+
+        // Build parameter contexts
+        let parameters = params
+            .iter()
+            .filter(|p| !common_params.contains(&p.code.as_str()))
+            .map(|param| {
+                let modifier_type = self.get_modifier_type(&param.param_type);
+                let comparator_type = self.get_comparator_type(&param.param_type);
+
+                // Build type expression
+                let type_expr = if modifier_type != "never" || comparator_type != "never" {
+                    format!(
+                        "string | SearchParamValue<{}, {}>",
+                        modifier_type, comparator_type
+                    )
+                } else {
+                    match param.param_type.as_str() {
+                        "number" => {
+                            "string | SearchParamValue<never, NumberComparator>".to_string()
+                        }
+                        _ => "string | SearchParamValue<never, never>".to_string(),
+                    }
+                };
+
+                SearchParameterContext {
+                    code: param.code.clone(),
+                    param_type: param.param_type.clone(),
+                    description: Self::clean_description(&param.description),
+                    modifier_type: modifier_type.to_string(),
+                    comparator_type: comparator_type.to_string(),
+                    type_expr,
+                    optional: true, // All search params are optional
+                    needs_quotes: param.code.contains('-'), // Quote if contains dash
+                }
+            })
+            .collect();
+
+        SearchResourceContext {
+            resource_type: resource_type.to_string(),
+            parameters,
+        }
+    }
+
+    /// Generate all search helper code split into multiple files using templates
+    /// Returns a map of file paths (relative to search directory) to file contents
+    pub fn generate_all_split(&self) -> std::collections::HashMap<String, String> {
+        use std::collections::HashMap;
+
+        let mut files = HashMap::new();
+
+        // Build template context
+        let context = self.build_template_context();
+        let mut tera_context = tera::Context::new();
+        tera_context.insert("context", &context);
+
+        // 1. Generate common.ts - Common types, modifiers, comparators, utilities
         files.insert(
             "common.ts".to_string(),
-            self.generate_common_file(),
+            crate::templates::render("search-common.ts.tera", &tera_context)
+                .expect("Failed to render search-common.ts.tera"),
         );
 
         // 2. Generate types.ts - Include/RevInclude type definitions (if advanced search)
+        // NOTE: For now, types.ts uses the old generation method for complex include/revinclude logic
+        // Future enhancement: Move to template-based generation
         if self.has_advanced_search && self.has_interfaces {
+            use std::collections::BTreeSet;
+            let mut all_resource_types: BTreeSet<String> = BTreeSet::new();
+            for sp in &self.search_parameters {
+                for base in &sp.base {
+                    all_resource_types.insert(base.clone());
+                }
+            }
             let types_content = self.generate_types_file(&all_resource_types);
             if !types_content.is_empty() {
                 files.insert("types.ts".to_string(), types_content);
             }
         }
 
-        // 3. Generate interfaces.ts - All SearchParams interfaces
+        // 3. Generate interfaces.ts - All SearchParams interfaces + ResourceSearchParamsMap
         if self.has_interfaces {
             files.insert(
                 "interfaces.ts".to_string(),
-                self.generate_interfaces_file(&all_resource_types),
+                crate::templates::render("search-interfaces.ts.tera", &tera_context)
+                    .expect("Failed to render search-interfaces.ts.tera"),
             );
         }
 
-        // 4. Generate builders.ts - All URL builder functions
+        // 4. Generate builders.ts - Generic buildSearchUrl function (NO per-resource wrappers!)
         if self.has_url_builders {
             files.insert(
                 "builders.ts".to_string(),
-                self.generate_builders_file(&all_resource_types),
+                crate::templates::render("search-builders.ts.tera", &tera_context)
+                    .expect("Failed to render search-builders.ts.tera"),
             );
         }
 
         // 5. Generate index.ts - Re-exports all symbols
         files.insert(
             "index.ts".to_string(),
-            self.generate_index_file(),
+            crate::templates::render("search-index.ts.tera", &tera_context)
+                .expect("Failed to render search-index.ts.tera"),
         );
 
         files
     }
 
-    /// Generate common.ts - Common types, modifiers, comparators, and CommonSearchParams
-    fn generate_common_file(&self) -> String {
-        let parts = vec![
-            "// FHIR Search Parameters - Common Types and Parameters".to_string(),
-            "// Auto-generated by InkGen - do not edit manually".to_string(),
-            "".to_string(),
-            self.generate_common_parameters(),
-            "".to_string(),
-            Self::generate_utilities(),
-        ];
-
-        parts.join("\n")
-    }
-
     /// Generate types.ts - Include/RevInclude type definitions
+    /// NOTE: This uses manual generation due to complexity of include/revinclude logic
+    /// Future enhancement: Move to template-based generation
     fn generate_types_file(&self, all_resource_types: &BTreeSet<String>) -> String {
         let mut parts = vec![
             "// FHIR Search Parameters - Include/RevInclude Type Definitions".to_string(),
@@ -877,111 +1046,6 @@ export function buildSearchQuery(params: Record<string, any>): string {
         if parts.len() <= 6 {
             // Only headers, no actual content
             return String::new();
-        }
-
-        parts.join("\n")
-    }
-
-    /// Generate interfaces.ts - All SearchParams interfaces
-    fn generate_interfaces_file(&self, all_resource_types: &BTreeSet<String>) -> String {
-        let mut parts = vec![
-            "// FHIR Search Parameters - Resource-Specific Interfaces".to_string(),
-            "// Auto-generated by InkGen - do not edit manually".to_string(),
-            "".to_string(),
-            "// Type imports".to_string(),
-            "import type { CommonSearchParams, SearchParamValue } from './common';".to_string(),
-        ];
-
-        // Import modifiers/comparators
-        parts.push("import type {".to_string());
-        parts.push("  StringModifier, TokenModifier, ReferenceModifier, UriModifier,".to_string());
-        parts.push("  DateComparator, NumberComparator, QuantityComparator".to_string());
-        parts.push("} from './common';".to_string());
-
-        // Import include/revinclude types if advanced search is enabled
-        if self.has_advanced_search {
-            parts.push("".to_string());
-            parts.push("// Import include/revinclude types".to_string());
-            let mut type_imports = vec![];
-            for resource_type in all_resource_types {
-                // Check if this resource has include types
-                let (include_defs, _) = self.generate_include_type(resource_type);
-                if !include_defs.is_empty() {
-                    type_imports.push(format!("  {}Include, {}ReferenceParams", resource_type, resource_type));
-                }
-                let (revinclude_defs, _) = self.generate_revinclude_type(resource_type);
-                if !revinclude_defs.is_empty() {
-                    type_imports.push(format!("  {}RevInclude", resource_type));
-                }
-            }
-            if !type_imports.is_empty() {
-                parts.push("import type {".to_string());
-                parts.push(type_imports.join(",\n"));
-                parts.push("} from './types';".to_string());
-            }
-        }
-
-        parts.push("".to_string());
-
-        // Generate all interfaces
-        for resource_type in all_resource_types {
-            parts.push(self.generate_search_interface(resource_type));
-            parts.push("".to_string());
-        }
-
-        parts.join("\n")
-    }
-
-    /// Generate builders.ts - All URL builder functions
-    fn generate_builders_file(&self, all_resource_types: &BTreeSet<String>) -> String {
-        let mut parts = vec![
-            "// FHIR Search Parameters - URL Builders".to_string(),
-            "// Auto-generated by InkGen - do not edit manually".to_string(),
-            "".to_string(),
-            "// Type imports".to_string(),
-        ];
-
-        // Build import list
-        let interface_imports: Vec<String> = all_resource_types
-            .iter()
-            .map(|rt| format!("  {}SearchParams", rt))
-            .collect();
-
-        parts.push("import type {".to_string());
-        parts.push(interface_imports.join(",\n"));
-        parts.push("} from './interfaces';".to_string());
-        parts.push("import { appendSearchParam } from './common';".to_string());
-        parts.push("".to_string());
-
-        // Generate all URL builders
-        for resource_type in all_resource_types {
-            parts.push(self.generate_url_builder(resource_type));
-            parts.push("".to_string());
-        }
-
-        parts.join("\n")
-    }
-
-    /// Generate index.ts - Re-exports all symbols
-    fn generate_index_file(&self) -> String {
-        let mut parts = vec![
-            "// FHIR Search Parameters - Main Index".to_string(),
-            "// Auto-generated by InkGen - do not edit manually".to_string(),
-            "".to_string(),
-            "// Re-export everything from all modules".to_string(),
-            "export * from './common';".to_string(),
-        ];
-
-        if self.has_advanced_search && self.has_interfaces {
-            parts.push("export * from './types';".to_string());
-        }
-
-        if self.has_interfaces {
-            parts.push("export * from './interfaces';".to_string());
-        }
-
-        if self.has_url_builders {
-            parts.push("export * from './builders';".to_string());
         }
 
         parts.join("\n")
@@ -1086,7 +1150,8 @@ mod tests {
             "base": ["Patient"],
             "type": "date",
             "description": "The patient's date of birth"
-        })).unwrap();
+        }))
+        .unwrap();
 
         let gender_param = SearchParameterInfo::from_json(&json!({
             "resourceType": "SearchParameter",
@@ -1094,7 +1159,8 @@ mod tests {
             "base": ["Patient"],
             "type": "token",
             "description": "Gender of the patient"
-        })).unwrap();
+        }))
+        .unwrap();
 
         let search_params = vec![name_param, birthdate_param, gender_param];
         let helpers = SearchHelpers::new(vec!["Patient".to_string()], search_params, &config);
@@ -1141,7 +1207,8 @@ mod tests {
             "base": ["Patient"],
             "type": "string",
             "description": "Patient name"
-        })).unwrap();
+        }))
+        .unwrap();
 
         let obs_code = SearchParameterInfo::from_json(&json!({
             "resourceType": "SearchParameter",
@@ -1149,7 +1216,8 @@ mod tests {
             "base": ["Observation"],
             "type": "token",
             "description": "Observation code"
-        })).unwrap();
+        }))
+        .unwrap();
 
         let search_params = vec![patient_name, obs_code];
 
@@ -1185,7 +1253,11 @@ mod tests {
 
         // R4B should have 12 modifiers
         assert!(code.contains("type StringModifier = 'exact' | 'contains'"));
-        assert!(code.contains("type TokenModifier = 'not' | 'text' | 'in' | 'not-in' | 'below' | 'above'"));
+        assert!(
+            code.contains(
+                "type TokenModifier = 'not' | 'text' | 'in' | 'not-in' | 'below' | 'above'"
+            )
+        );
         assert!(code.contains("type ReferenceModifier = 'identifier'"));
         assert!(code.contains("type UriModifier = 'below' | 'above'"));
 
@@ -1222,7 +1294,8 @@ mod tests {
             "base": ["DomainResource"],
             "type": "string",
             "description": "Search on the narrative of the resource"
-        })).unwrap();
+        }))
+        .unwrap();
 
         let search_params = vec![text_param];
         let helpers = SearchHelpers::new(
@@ -1234,10 +1307,16 @@ mod tests {
         // _text is a common parameter, so it should NOT appear in resource-specific interfaces
         // (it's already in CommonSearchParams which Patient/Observation extend)
         let patient_code = helpers.generate_search_interface("Patient");
-        assert!(!patient_code.contains("_text?:"), "Common param _text should not be duplicated in Patient interface");
+        assert!(
+            !patient_code.contains("_text?:"),
+            "Common param _text should not be duplicated in Patient interface"
+        );
 
         let observation_code = helpers.generate_search_interface("Observation");
-        assert!(!observation_code.contains("_text?:"), "Common param _text should not be duplicated in Observation interface");
+        assert!(
+            !observation_code.contains("_text?:"),
+            "Common param _text should not be duplicated in Observation interface"
+        );
     }
 
     #[test]
@@ -1296,7 +1375,8 @@ mod tests {
             "type": "reference",
             "description": "The subject that the observation is about",
             "target": ["Patient", "Group", "Device", "Location"]
-        })).unwrap();
+        }))
+        .unwrap();
 
         // Add Patient search parameters for enhanced chaining
         let patient_name = SearchParameterInfo::from_json(&json!({
@@ -1313,7 +1393,8 @@ mod tests {
             "base": ["Patient"],
             "type": "token",
             "description": "A patient identifier"
-        })).unwrap();
+        }))
+        .unwrap();
 
         let patient_id = SearchParameterInfo::from_json(&json!({
             "resourceType": "SearchParameter",
@@ -1321,7 +1402,8 @@ mod tests {
             "base": ["Patient"],
             "type": "token",
             "description": "Logical id of this artifact"
-        })).unwrap();
+        }))
+        .unwrap();
 
         let search_params = vec![subject_param, patient_name, patient_identifier, patient_id];
         let helpers = SearchHelpers::new(vec!["Observation".to_string()], search_params, &config);
@@ -1341,7 +1423,9 @@ mod tests {
 
         // Should have parseComparator function
         assert!(code.contains("export function parseComparator"));
-        assert!(code.contains("comparator?: DateComparator | NumberComparator | QuantityComparator"));
+        assert!(
+            code.contains("comparator?: DateComparator | NumberComparator | QuantityComparator")
+        );
 
         // Should parse comparator prefixes
         assert!(code.contains("match(/^(eq|ne|gt|lt|ge|le|sa|eb|ap)(.+)$/"));
@@ -1396,7 +1480,10 @@ mod tests {
         // Test comparator mappings
         assert_eq!(helpers.get_comparator_type("date"), "DateComparator");
         assert_eq!(helpers.get_comparator_type("number"), "NumberComparator");
-        assert_eq!(helpers.get_comparator_type("quantity"), "QuantityComparator");
+        assert_eq!(
+            helpers.get_comparator_type("quantity"),
+            "QuantityComparator"
+        );
         assert_eq!(helpers.get_comparator_type("string"), "never");
         assert_eq!(helpers.get_comparator_type("token"), "never");
     }

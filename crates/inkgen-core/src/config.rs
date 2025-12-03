@@ -192,16 +192,16 @@ pub struct TypescriptLanguageConfig {
     pub lazy_schemas: bool,
 
     // === Feature 2: ValueSet Enhancements ===
-    /// Generate rich metadata for ValueSets (definitions, comments, system URLs) (default: false)
-    #[serde(default)]
+    /// Generate rich metadata for ValueSets (definitions, comments, system URLs) (default: true)
+    #[serde(default = "default_true")]
     pub valueset_metadata: bool,
 
-    /// Generate Coding/CodeableConcept helper factories (default: false)
-    #[serde(default)]
+    /// Generate Coding/CodeableConcept helper factories (default: true)
+    #[serde(default = "default_true")]
     pub valueset_helpers: bool,
 
-    /// Link ValueSets to CodeSystem resources for enhanced metadata (default: false)
-    #[serde(default)]
+    /// Link ValueSets to CodeSystem resources for enhanced metadata (default: true)
+    #[serde(default = "default_true")]
     pub valueset_codesystem_link: bool,
 
     // === Feature 3: Profile Architecture ===
@@ -255,6 +255,31 @@ pub struct TypescriptLanguageConfig {
     /// Add tree-shaking hints for bundlers (default: false)
     #[serde(default)]
     pub bundler_hints: bool,
+
+    // === Project Files Configuration ===
+    /// Configuration for generated project files (package.json, tsconfig.json)
+    #[serde(default)]
+    pub config: ProjectFilesConfig,
+}
+
+/// Configuration for generated project files (package.json, tsconfig.json)
+/// Use this to disable generation when integrating into existing projects
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct ProjectFilesConfig {
+    /// Generate package.json file (default: true)
+    pub generate_package_json: bool,
+    /// Generate tsconfig.json file (default: true)
+    pub generate_tsconfig: bool,
+}
+
+impl Default for ProjectFilesConfig {
+    fn default() -> Self {
+        Self {
+            generate_package_json: true,
+            generate_tsconfig: true,
+        }
+    }
 }
 
 fn default_mode() -> String {

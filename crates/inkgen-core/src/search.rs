@@ -128,10 +128,7 @@ impl SearchParameterInfo {
             })
             .unwrap_or_default();
 
-        let url = content
-            .get("url")
-            .and_then(Value::as_str)
-            .map(String::from);
+        let url = content.get("url").and_then(Value::as_str).map(String::from);
 
         Ok(Self {
             code,
@@ -205,10 +202,7 @@ mod tests {
         assert_eq!(info.base, vec!["Observation"]);
         assert_eq!(info.param_type, "reference");
         assert!(info.is_reference());
-        assert_eq!(
-            info.target,
-            vec!["Patient", "Group", "Device", "Location"]
-        );
+        assert_eq!(info.target, vec!["Patient", "Group", "Device", "Location"]);
     }
 
     #[test]
@@ -223,10 +217,7 @@ mod tests {
 
         let info = SearchParameterInfo::from_json(&json).unwrap();
         assert_eq!(info.code, "identifier");
-        assert_eq!(
-            info.base,
-            vec!["Patient", "Practitioner", "Organization"]
-        );
+        assert_eq!(info.base, vec!["Patient", "Practitioner", "Organization"]);
         assert_eq!(info.param_type, "token");
         assert!(info.applies_to("Patient"));
         assert!(info.applies_to("Practitioner"));
@@ -245,10 +236,12 @@ mod tests {
 
         let result = SearchParameterInfo::from_json(&json);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Missing 'code' field"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Missing 'code' field")
+        );
     }
 
     #[test]
@@ -262,10 +255,12 @@ mod tests {
 
         let result = SearchParameterInfo::from_json(&json);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Expected SearchParameter"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Expected SearchParameter")
+        );
     }
 
     #[test]

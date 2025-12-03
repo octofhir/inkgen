@@ -24,8 +24,8 @@ mod terminology;
 pub use backends::{BackendRegistry, LanguageBackend};
 pub use cache::{InstallMode, PackageCache, PackageCacheConfig};
 pub use config::{
-    FilterMode, InkgenConfig, LanguagesSection, PackageEntry, TypescriptLanguageConfig,
-    sanitize_package_name,
+    FilterMode, InkgenConfig, LanguagesSection, PackageEntry, ProjectFilesConfig,
+    TypescriptLanguageConfig, sanitize_package_name,
 };
 pub use dependencies::DependencyAnalyzer;
 pub use error::{CoreError, CoreResult};

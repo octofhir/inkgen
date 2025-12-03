@@ -487,7 +487,9 @@ impl PackageCache {
         let package_spec = package_id.as_str();
 
         // Collect all resources from the package
-        let resources = self.collect_package_resources(&manager, &package_spec).await?;
+        let resources = self
+            .collect_package_resources(&manager, &package_spec)
+            .await?;
 
         // Filter for SearchParameter resources and parse them
         let mut search_params = Vec::new();
@@ -504,10 +506,7 @@ impl PackageCache {
                     parse_errors += 1;
                     tracing::warn!(
                         "Failed to parse SearchParameter from {}: {}",
-                        resource_match
-                            .resource
-                            .file_path
-                            .to_string_lossy(),
+                        resource_match.resource.file_path.to_string_lossy(),
                         err
                     );
                 }

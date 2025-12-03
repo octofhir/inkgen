@@ -103,10 +103,8 @@ impl InteropGenerator {
         // Generate typed references
         if self.has_references {
             parts.push("\n// ========== Typed References ==========".to_string());
-            let ref_helpers = ReferenceHelpers::new(
-                self.resource_types.clone(),
-                &config.reference_config,
-            );
+            let ref_helpers =
+                ReferenceHelpers::new(self.resource_types.clone(), &config.reference_config);
             parts.push(ref_helpers.generate_all());
         }
 
@@ -154,10 +152,8 @@ impl InteropGenerator {
         // Generate typed references
         if self.has_references {
             parts.push("\n// ========== Typed References ==========".to_string());
-            let ref_helpers = ReferenceHelpers::new(
-                self.resource_types.clone(),
-                &config.reference_config,
-            );
+            let ref_helpers =
+                ReferenceHelpers::new(self.resource_types.clone(), &config.reference_config);
             parts.push(ref_helpers.generate_all());
         }
 
@@ -291,7 +287,8 @@ mod tests {
             "base": ["Patient"],
             "type": "string",
             "description": "Patient name"
-        })).unwrap();
+        }))
+        .unwrap();
 
         let search_params = vec![patient_param];
         let generator = InteropGenerator::new(resource_types, search_params, &config);

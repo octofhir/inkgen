@@ -5,6 +5,9 @@
 
 use indexmap::IndexMap;
 use serde_json::Value;
+use std::fmt::Write;
+
+use super::escape_string;
 
 /// Enhanced code information with CodeSystem metadata
 #[derive(Debug, Clone)]
@@ -205,6 +208,75 @@ pub fn infer_codesystem_url_from_valueset(valueset_url: &str) -> Option<String> 
     None
 }
 
+/// Render a TypeScript metadata block for a ValueSet.
+pub fn render_metadata_block(
+    type_name: &str,
+    canonical_url: &str,
+    system_url: Option<&str>,
+    case_sensitive: Option<bool>,
+    codes: &[EnhancedCodeInfo],
+) -> Option<String> {
+    if codes.is_empty() {
+        return None;
+    }
+
+    let mut output = String::new();
+
+    writeln!(
+        output,
+        "/**\n * Metadata for {} codes\n * Includes display names, definitions, and code system information\n */",
+        type_name
+    )
+    .ok()?;
+    writeln!(output, "export const {}Metadata = {{", type_name).ok()?;
+    writeln!(output, "  canonical: \"{}\",", escape_string(canonical_url)).ok()?;
+
+    if let Some(system_url) = system_url {
+        writeln!(output, "  system: \"{}\",", escape_string(system_url)).ok()?;
+    }
+
+    if let Some(case_sensitive) = case_sensitive {
+        writeln!(output, "  caseSensitive: {},", case_sensitive).ok()?;
+    }
+
+    output.push_str("  codes: {\n");
+
+    for code in codes {
+        writeln!(output, "    \"{}\": {{", escape_string(&code.code)).ok()?;
+        writeln!(output, "      code: \"{}\",", escape_string(&code.code)).ok()?;
+
+        if let Some(display) = &code.display {
+            writeln!(output, "      display: \"{}\",", escape_string(display)).ok()?;
+        }
+
+        if let Some(definition) = &code.definition {
+            writeln!(
+                output,
+                "      definition: \"{}\",",
+                escape_string(definition)
+            )
+            .ok()?;
+        }
+
+        if !code.comments.is_empty() {
+            output.push_str("      comments: [");
+            for (idx, comment) in code.comments.iter().enumerate() {
+                if idx > 0 {
+                    output.push_str(", ");
+                }
+                write!(output, "\"{}\"", escape_string(comment)).ok()?;
+            }
+            output.push_str("],\n");
+        }
+
+        output.push_str("    },\n");
+    }
+
+    output.push_str("  }\n} as const;\n");
+
+    Some(output)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -334,5 +406,31 @@ mod tests {
             inferred,
             Some("http://hl7.org/fhir/administrative-gender".to_string())
         );
+    }
+
+    #[test]
+    fn test_render_metadata_block() {
+        let codes = vec![EnhancedCodeInfo {
+            code: "active".to_string(),
+            display: Some("Active".to_string()),
+            definition: Some("The thing is active.".to_string()),
+            comments: vec!["First comment".to_string(), "Second comment".to_string()],
+        }];
+
+        let rendered = render_metadata_block(
+            "TestStatus",
+            "http://example.org/ValueSet/test",
+            Some("http://example.org/CodeSystem/test"),
+            Some(true),
+            &codes,
+        )
+        .expect("metadata rendered");
+
+        assert!(rendered.contains("export const TestStatusMetadata"));
+        assert!(rendered.contains("canonical: \"http://example.org/ValueSet/test\""));
+        assert!(rendered.contains("system: \"http://example.org/CodeSystem/test\""));
+        assert!(rendered.contains("caseSensitive: true"));
+        assert!(rendered.contains("\"active\""));
+        assert!(rendered.contains("comments: [\"First comment\", \"Second comment\"]"));
     }
 }

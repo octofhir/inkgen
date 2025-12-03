@@ -5,6 +5,8 @@
 
 use inkgen_core::ir::{ElementCardinality, ElementDefinition, ElementMax};
 
+use crate::naming;
+
 /// Information about a Zod schema including the schema expression and type references.
 #[derive(Debug, Clone)]
 pub struct ZodSchemaInfo {
@@ -146,8 +148,19 @@ pub fn apply_cardinality(
 
 /// Generate Zod schema for an element with type tracking.
 pub fn element_to_zod_schema_info(element: &ElementDefinition) -> Option<ZodSchemaInfo> {
-    // Skip elements without types
+    // Handle elements that reference other definitions via contentReference
     if element.types.is_empty() {
+        if let Some(reference) = &element.content_reference {
+            let reference_name = reference.trim_start_matches('#');
+            let type_name = naming::pascal_case(reference_name);
+            let base_info = ZodSchemaInfo {
+                schema: format!("z.lazy(() => {}Schema)", type_name),
+                type_refs: vec![type_name],
+            };
+
+            let schema_info = apply_cardinality(base_info, &element.cardinality);
+            return Some(schema_info);
+        }
         return None;
     }
 

@@ -125,8 +125,16 @@ mod tests {
     fn test_type_registry() {
         let mut registry = TypeRegistry::new();
 
-        registry.register("Patient".to_string(), "r4-core".to_string(), "patient".to_string());
-        registry.register("Observation".to_string(), "r4-core".to_string(), "observation".to_string());
+        registry.register(
+            "Patient".to_string(),
+            "r4-core".to_string(),
+            "patient".to_string(),
+        );
+        registry.register(
+            "Observation".to_string(),
+            "r4-core".to_string(),
+            "observation".to_string(),
+        );
 
         assert!(registry.contains("Patient"));
         assert!(registry.contains("Observation"));

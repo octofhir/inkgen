@@ -69,7 +69,7 @@ export type TypedReference<T extends string> = Reference & {
   reference: `${T}/${string}`;
   type?: T;
 };"#
-            .to_string()
+        .to_string()
     }
 
     /// Generate type guard for a specific resource type
@@ -307,7 +307,7 @@ mod tests {
         let structures = vec![
             "Patient".to_string(),
             "Observation".to_string(),
-            "HumanName".to_string(), // Not a resource
+            "HumanName".to_string(),       // Not a resource
             "CodeableConcept".to_string(), // Not a resource
             "BackboneElement".to_string(), // Not a resource
         ];
