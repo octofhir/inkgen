@@ -178,7 +178,7 @@ impl ArtifactDescriptor {
 }
 
 /// Classification for StructureDefinitions in inventory listings.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StructureKind {
     BaseResource,

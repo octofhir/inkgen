@@ -10,6 +10,8 @@ export type ReferenceModifier = {% if context.fhir_version == "R5" %}'identifier
 export type UriModifier = 'below' | 'above';
 {%- if context.fhir_version == "R5" %}
 export type IncludeModifier = 'iterate';
+{%- else %}
+export type IncludeModifier = never;
 {%- endif %}
 
 /**
@@ -134,7 +136,7 @@ export function parseSearchParams(queryString: string): Record<string, string | 
   const params = new URLSearchParams(queryString);
   const result: Record<string, string | string[]> = {};
 
-  params.forEach((value, key) => {
+  params.forEach((value: string, key: string) => {
     // Extract modifier if present (e.g., "name:exact" -> key="name", modifier="exact")
     const [paramKey, modifier] = key.includes(':') ? key.split(':', 2) : [key, undefined];
 

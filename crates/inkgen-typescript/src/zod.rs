@@ -89,8 +89,8 @@ pub fn fhir_to_zod_type(fhir_type: &str) -> ZodSchemaInfo {
         // XHTML
         "xhtml" => ("z.string()".to_string(), false),
 
-        // Complex types - reference their schemas
-        _ => (format!("{}Schema", normalized), true),
+        // Complex types - use z.lazy() to handle potential circular dependencies
+        _ => (format!("z.lazy(() => {}Schema)", normalized), true),
     };
 
     ZodSchemaInfo {

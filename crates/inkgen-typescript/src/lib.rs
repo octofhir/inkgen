@@ -12,9 +12,9 @@ use inkgen_core::ir::{
     Derivation, ElementDefinition, ElementMax, ElementType, ResourceDefinition, ResourceKind,
 };
 use inkgen_core::{
-    DependencyAnalyzer, LanguageBackend, LanguageGenerator, PackageCache, PackageDescriptor,
-    PackageId, StructureDefinitionProvider, StructureFilter, StructureKind,
-    StructureProviderConfig, StructureSummary, TypescriptLanguageConfig,
+    CanonicalTypeMap, DependencyAnalyzer, FhirTypeRegistry, LanguageBackend, LanguageGenerator,
+    PackageCache, PackageDescriptor, PackageId, StructureDefinitionProvider, StructureFilter,
+    StructureKind, StructureProviderConfig, StructureSummary, TypescriptLanguageConfig,
 };
 use once_cell::sync::Lazy;
 use serde::Serialize;
@@ -419,12 +419,21 @@ mod naming {
     fn split_tokens(value: &str) -> Vec<String> {
         let mut tokens = Vec::new();
         let mut current = String::new();
+        let mut prev_was_lower = false;
+
         for ch in value.chars() {
             if ch.is_alphanumeric() {
+                // Split on camelCase boundary (lowercase followed by uppercase)
+                if prev_was_lower && ch.is_ascii_uppercase() && !current.is_empty() {
+                    tokens.push(current.clone());
+                    current.clear();
+                }
                 current.push(ch);
+                prev_was_lower = ch.is_ascii_lowercase();
             } else if !current.is_empty() {
                 tokens.push(current.clone());
                 current.clear();
+                prev_was_lower = false;
             }
         }
         if !current.is_empty() {
@@ -752,6 +761,8 @@ struct RenderNestedType {
     type_name: String,
     description: Option<String>,
     fields: Vec<RenderField>,
+    /// Whether this nested type has self-referential fields (needs z.lazy for recursion)
+    is_recursive: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -792,6 +803,10 @@ struct RenderStructure {
     generate_zod_schema: bool,
     /// Zod schema fields
     zod_fields: Vec<ZodSchemaField>,
+    /// Whether the Zod schema has self-referential fields (needs explicit type annotation)
+    is_recursive_schema: bool,
+    /// Whether branded primitives are enabled (affects recursive schema type annotations)
+    branded_primitives: bool,
     /// Detected slices for discriminated unions
     #[serde(skip_serializing_if = "Vec::is_empty")]
     slices: Vec<slices::SlicePattern>,
@@ -1032,6 +1047,16 @@ impl TypescriptGenerator {
                                                 file_stem("CodeableConcept")
                                             ));
                                         }
+                                        // Import branded primitives for helper function return types
+                                        if self.config.branded_primitives
+                                            && (helpers.has_coding_factory
+                                                || helpers.has_codeable_concept_factory)
+                                        {
+                                            helper_imports.push(format!(
+                                                "import type {{ FhirUri, FhirCode, FhirString }} from \"../{}\";",
+                                                file_stem("primitives")
+                                            ));
+                                        }
                                         let block = helpers.generate_all_helpers();
                                         if block.trim().is_empty() {
                                             None
@@ -1098,76 +1123,71 @@ impl TypescriptGenerator {
     }
 
     fn structure_type_name(summary: &StructureSummary, definition: &ResourceDefinition) -> String {
-        naming::pascal_case(summary.type_code.as_deref().unwrap_or(&definition.id))
+        // For profiles, use definition.id to avoid claiming the base type name
+        // (e.g., 11179-objectClass has type_code "Extension" but shouldn't be called "Extension")
+        let is_profile_like = summary.kind == StructureKind::Profile
+            || summary
+                .type_code
+                .as_deref()
+                .is_some_and(|tc| tc != &definition.id && !definition.id.eq_ignore_ascii_case(tc));
+
+        if is_profile_like {
+            naming::pascal_case(&definition.id)
+        } else {
+            naming::pascal_case(summary.type_code.as_deref().unwrap_or(&definition.id))
+        }
     }
 
+    /// Ensures all complex types discovered in the FHIR packages are available for generation.
+    ///
+    /// Uses the FhirTypeRegistry to dynamically discover complex types from loaded packages,
+    /// eliminating the need for a hardcoded list of core types.
     async fn ensure_core_types<S>(
         &self,
         service: &S,
         descriptor: &PackageDescriptor,
+        fhir_registry: &FhirTypeRegistry,
         entries: &mut Vec<(StructureSummary, ResourceDefinition)>,
     ) -> Result<()>
     where
         S: StructureDefinitionProvider + Sync + Send,
     {
-        const CORE_COMPLEX_TYPES: &[&str] = &[
-            "Address",
-            "Age",
-            "Annotation",
-            "Attachment",
-            "BackboneElement",
-            "CodeableConcept",
-            "Coding",
-            "ContactDetail",
-            "ContactPoint",
-            "Contributor",
-            "Count",
-            "DataRequirement",
-            "Distance",
-            "Dosage",
-            "Duration",
-            "Element",
-            "ElementDefinition",
-            "Extension",
-            "HumanName",
-            "Identifier",
-            "MarketingStatus",
-            "Meta",
-            "Money",
-            "Narrative",
-            "ParameterDefinition",
-            "Period",
-            "Population",
-            "ProdCharacteristic",
-            "ProductShelfLife",
-            "Quantity",
-            "Range",
-            "Ratio",
-            "Reference",
-            "RelatedArtifact",
-            "SampledData",
-            "Signature",
-            "SimpleQuantity",
-            "SubstanceAmount",
-            "Timing",
-            "TriggerDefinition",
-            "UsageContext",
-            "DomainResource",
-            "Resource",
-        ];
-
         let mut existing_types: HashSet<String> = entries
             .iter()
             .map(|(summary, definition)| Self::structure_type_name(summary, definition))
             .collect();
 
         let mut added = 0usize;
-        for type_name in CORE_COMPLEX_TYPES {
-            if existing_types.contains(*type_name) {
+
+        // Iterate over ALL types discovered from the registry (complex types, primitives, base resources)
+        // No hardcoded lists - everything comes from the registry which is built from packages
+        let types_to_ensure: HashSet<&str> = fhir_registry
+            .complex_types()
+            .chain(fhir_registry.primitives())
+            .chain(fhir_registry.base_resources())
+            .collect();
+
+        for type_name in types_to_ensure {
+            if existing_types.contains(type_name) {
+                if type_name == "Extension" || type_name == "Quantity" {
+                    warn!("ensure_core_types: Skipping '{}' - already in existing_types", type_name);
+                }
                 continue;
             }
 
-            let canonical = format!("http://hl7.org/fhir/StructureDefinition/{}", type_name);
+            // Get the canonical URL from the registry
+            let canonical = match fhir_registry.get_url(type_name) {
+                Some(url) => url.to_string(),
+                None => {
+                    // Fallback to constructing URL if not in registry
+                    let url = format!("http://hl7.org/fhir/StructureDefinition/{}", type_name);
+                    debug!("Type '{}' not in registry, using fallback URL: {}", type_name, url);
+                    url
+                }
+            };
+
+            debug!("ensure_core_types: Attempting to load type '{}' from {}", type_name, canonical);
+
             match service.load_structure(&canonical).await {
                 Ok(definition) => {
                     let kind = match definition.kind {
@@ -1194,6 +1214,10 @@ impl TypescriptGenerator {
                     existing_types.insert(type_name.to_string());
                     entries.push((summary, definition));
                     added += 1;
+
+                    if type_name == "Extension" || type_name == "Quantity" {
+                        info!("ensure_core_types: Successfully loaded '{}'", type_name);
+                    }
                 }
                 Err(err) => {
                     warn!(
@@ -1278,6 +1302,38 @@ where
     ) -> Result<()> {
         let filter = StructureFilter::from_config(provider_config);
         let summaries = service.list_structures(&filter).await?;
+
+        // Build CanonicalTypeMap from the canonical manager - single source of truth for all types
+        let canonical_type_map = if let Some(cache) = &self.config.package_cache {
+            let manager = cache.manager().await?;
+            CanonicalTypeMap::from_manager(&manager).await?
+        } else {
+            warn!("No package cache available - type resolution may be incomplete");
+            CanonicalTypeMap::new()
+        };
+        info!(
+            "Built CanonicalTypeMap with {} types from canonical manager",
+            canonical_type_map.len()
+        );
+
+        // Build FhirTypeRegistry from ALL summaries to discover available types
+        let fhir_registry = FhirTypeRegistry::from_summaries(&summaries);
+        debug!(
+            "Built FhirTypeRegistry with {} types ({} primitives, {} complex, {} base resources)",
+            fhir_registry.len(),
+            fhir_registry.primitives().count(),
+            fhir_registry.complex_types().count(),
+            fhir_registry.base_resources().count()
+        );
+
+        // Log specific types we expect to find
+        for expected in ["Period", "Reference", "HumanName", "CodeableConcept", "Resource", "DomainResource"] {
+            if fhir_registry.contains(expected) {
+                debug!("Registry contains '{}': url={:?}", expected, fhir_registry.get_url(expected));
+            } else {
+                warn!("Registry MISSING expected type '{}'", expected);
+            }
+        }
 
         let mut relevant: Vec<_> = summaries
             .into_iter()
@@ -1484,7 +1540,7 @@ where
             entries.push((summary, structure));
         }
 
-        self.ensure_core_types(service, descriptor, &mut entries)
+        self.ensure_core_types(service, descriptor, &fhir_registry, &mut entries)
             .await
             .with_context(|| {
                 format!(
@@ -1507,15 +1563,54 @@ where
         let mut name_to_file: IndexMap<String, String> = IndexMap::new();
         let mut name_to_stem: IndexMap<String, String> = IndexMap::new();
 
-        for (summary, definition) in &entries {
-            let type_name =
-                naming::pascal_case(summary.type_code.as_deref().unwrap_or(&definition.id));
+        // DEBUG: Log how many entries we have and check for Extension/Quantity
+        debug!("Building name_to_stem from {} entries", entries.len());
+        let extension_count = entries.iter().filter(|(_, d)| d.id == "Extension").count();
+        let quantity_count = entries.iter().filter(|(_, d)| d.id == "Quantity").count();
+        info!(
+            "DEBUG: entries contains {} Extension(s) and {} Quantity(s)",
+            extension_count, quantity_count
+        );
+        // Log first few entries
+        for (i, (summary, def)) in entries.iter().take(5).enumerate() {
+            debug!(
+                "Entry {}: kind={:?}, type_code={:?}, id={}",
+                i, summary.kind, summary.type_code, def.id
+            );
+        }
 
-            // Debug: Log ComplexType entries to understand what's being added
-            if summary.kind == StructureKind::ComplexType {
-                debug!(
-                    "Adding ComplexType to name_to_stem: {} (type_code: {:?}, def.id: {})",
-                    type_name, summary.type_code, definition.id
+        for (summary, definition) in &entries {
+            // For base types (ComplexType, PrimitiveType, BaseResource, Logical), use type_code as the type name
+            // For profiles (derivation=constraint), use the definition.id to avoid overwriting base type mappings
+            // (e.g., 11179-objectClass has type_code "Extension" but shouldn't overwrite Extension)
+            //
+            // Also check if type_code differs from definition.id - if they differ significantly,
+            // this is likely a profile even if kind says ComplexType (e.g., MoneyQuantity, SimpleQuantity)
+            let is_profile_like = summary.kind == StructureKind::Profile
+                || summary
+                    .type_code
+                    .as_deref()
+                    .is_some_and(|tc| tc != &definition.id && !definition.id.eq_ignore_ascii_case(tc));
+
+            let type_name = if is_profile_like {
+                // Profiles use their own id as the type name
+                naming::pascal_case(&definition.id)
+            } else {
+                naming::pascal_case(summary.type_code.as_deref().unwrap_or(&definition.id))
+            };
+
+            // Debug: Log important entries
+            if type_name == "Quantity" || type_name == "Extension" || definition.id.contains("Quantity") || definition.id.contains("Extension") {
+                info!(
+                    "name_to_stem entry: type_name={}, kind={:?}, type_code={:?}, def.id={}, is_profile_like={}, stem={}",
+                    type_name, summary.kind, summary.type_code, definition.id, is_profile_like, file_stem(&definition.id)
+                );
+            }
+            // Also log if definition.id is exactly "Extension" or "Quantity" but not caught above
+            if definition.id == "Extension" || definition.id == "Quantity" {
+                info!(
+                    "DIRECT ID MATCH: type_name={}, kind={:?}, type_code={:?}, def.id={}, is_profile_like={}",
+                    type_name, summary.kind, summary.type_code, definition.id, is_profile_like
                 );
             }
 
@@ -1526,8 +1621,18 @@ where
                 stem = format!("{stem}_{}", counter);
             }
             let file_name = format!("{stem}.ts");
-            name_to_file.insert(type_name.clone(), file_name);
-            name_to_stem.insert(type_name, stem);
+
+            // Only add if not already mapped - base types should take precedence over profiles
+            if !name_to_stem.contains_key(&type_name) {
+                name_to_file.insert(type_name.clone(), file_name);
+                name_to_stem.insert(type_name.clone(), stem);
+            } else if type_name == "Extension" || type_name == "Quantity" {
+                warn!(
+                    "Skipping duplicate type_name={} (already mapped to {})",
+                    type_name,
+                    name_to_stem.get(&type_name).unwrap_or(&"<unknown>".to_string())
+                );
+            }
         }
 
         info!(
@@ -1556,12 +1661,42 @@ where
                     name_to_stem.get(expected).unwrap()
                 );
             } else {
-                warn!(
-                    "MISSING '{}' from name_to_stem (expected ComplexType)",
-                    expected
-                );
+                // Type not in entries - look it up in CanonicalTypeMap
+                if let Some(entry) = canonical_type_map.get_by_name(expected) {
+                    info!(
+                        "Adding '{}' from CanonicalTypeMap (stem='{}', package='{}')",
+                        expected, entry.file_stem, entry.package.name
+                    );
+                    name_to_stem.insert(expected.to_string(), entry.file_stem.clone());
+                    name_to_file.insert(expected.to_string(), format!("{}.ts", entry.file_stem));
+                } else {
+                    warn!(
+                        "MISSING '{}' from both entries and CanonicalTypeMap",
+                        expected
+                    );
+                }
             }
         }
+
+        // Populate ALL types from CanonicalTypeMap that might be needed for imports
+        // This ensures all FHIR types are resolvable, even if not being generated in this package
+        // No hardcoded lists - everything comes from the canonical manager
+        for type_name in canonical_type_map.all_names() {
+            if !name_to_stem.contains_key(type_name) {
+                if let Some(entry) = canonical_type_map.get_by_name(type_name) {
+                    debug!(
+                        "Pre-populating '{}' from CanonicalTypeMap (stem='{}')",
+                        type_name, entry.file_stem
+                    );
+                    name_to_stem.insert(type_name.to_string(), entry.file_stem.clone());
+                    name_to_file.insert(type_name.to_string(), format!("{}.ts", entry.file_stem));
+                }
+            }
+        }
+        info!(
+            "Final name_to_stem has {} entries after CanonicalTypeMap population",
+            name_to_stem.len()
+        );
 
         // Collect resource types for interop generation (only BaseResource kinds)
         let resource_types: Vec<String> = entries
@@ -1705,6 +1840,29 @@ where
         } else {
             (false, None)
         };
+
+        // Deduplicate structures by file_stem - keep the last entry (most complete)
+        // This handles cases where profiles and base types share the same type_code
+        let mut seen_stems: HashSet<String> = HashSet::new();
+        let structures: Vec<_> = structures
+            .into_iter()
+            .rev() // Reverse to keep the LAST entry when deduplicating
+            .filter(|s| seen_stems.insert(s.file_stem.clone()))
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev() // Reverse back to preserve original order
+            .collect();
+
+        // Deduplicate profiles by file_stem as well
+        let mut seen_profile_stems: HashSet<String> = HashSet::new();
+        let profiles: Vec<_> = profiles
+            .into_iter()
+            .rev()
+            .filter(|p| seen_profile_stems.insert(p.file_stem.clone()))
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
 
         let package_output = PackageOutput {
             path: package_dir.clone(),
@@ -2137,10 +2295,17 @@ fn build_render_structure(
             }
         }
 
+        // Detect if this nested type uses z.lazy() (needs type annotation for TypeScript)
+        let is_recursive = nested_fields
+            .iter()
+            .filter_map(|f| f.zod_type.as_ref())
+            .any(|zod_type| zod_type.contains("z.lazy("));
+
         nested_types.push(RenderNestedType {
             type_name: nested_info.type_name,
             description: nested_info.doc_comment,
             fields: nested_fields,
+            is_recursive,
         });
     }
 
@@ -2184,6 +2349,7 @@ fn build_render_structure(
     ensure_field_dependencies(
         &fields,
         package_folder,
+        Some(type_name),
         name_to_stem,
         config.type_registry.as_ref(),
         &mut imports_map,
@@ -2192,6 +2358,7 @@ fn build_render_structure(
         ensure_field_dependencies(
             &nested.fields,
             package_folder,
+            Some(type_name),
             name_to_stem,
             config.type_registry.as_ref(),
             &mut imports_map,
@@ -2261,6 +2428,10 @@ fn build_render_structure(
     // Group imports by (package_folder, file_stem) and calculate paths
     let mut import_groups: HashMap<(String, String), Vec<String>> = HashMap::new();
     for (imported_type, (pkg_folder, stem)) in &imports_map {
+        // Skip self-imports (e.g., Extension importing Extension)
+        if imported_type == type_name {
+            continue;
+        }
         import_groups
             .entry((pkg_folder.clone(), stem.clone()))
             .or_default()
@@ -2477,14 +2648,31 @@ fn build_render_structure(
                         zod_type: schema_info.schema,
                     });
                 } else if let Some(schema_info) = crate::zod::element_to_zod_schema_info(element) {
-                    // Collect type references for schema imports
-                    for type_ref in &schema_info.type_refs {
-                        add_schema_type_ref(&mut schema_type_refs, type_ref);
-                    }
+                    // Check if this is a self-referential field (element type == current type)
+                    let is_self_reference = element.types.iter().any(|t| {
+                        let type_code = naming::pascal_case(&t.code);
+                        type_code == type_name
+                    });
+
+                    let final_schema = if is_self_reference {
+                        // Wrap in z.lazy() to handle forward reference
+                        let base_schema = format!("z.lazy(() => {}Schema)", type_name);
+                        let base_info = crate::zod::ZodSchemaInfo {
+                            schema: base_schema,
+                            type_refs: Vec::new(),
+                        };
+                        crate::zod::apply_cardinality(base_info, &element.cardinality).schema
+                    } else {
+                        // Collect type references for schema imports (not for self-references)
+                        for type_ref in &schema_info.type_refs {
+                            add_schema_type_ref(&mut schema_type_refs, type_ref);
+                        }
+                        schema_info.schema
+                    };
 
                     fields.push(ZodSchemaField {
                         name: field_name,
-                        zod_type: schema_info.schema,
+                        zod_type: final_schema,
                     });
                 }
             }
@@ -2639,6 +2827,11 @@ fn build_render_structure(
 
         let mut import_groups: HashMap<(String, String), Vec<String>> = HashMap::new();
         for (imported_type, (pkg_folder, stem)) in &imports_map {
+            // Skip self-imports (e.g., Extension importing Extension)
+            if imported_type == type_name {
+                debug!("Skipping self-import of {} in {}", imported_type, type_name);
+                continue;
+            }
             import_groups
                 .entry((pkg_folder.clone(), stem.clone()))
                 .or_default()
@@ -2744,6 +2937,12 @@ fn build_render_structure(
     value_exports.sort();
     value_exports.dedup();
 
+    // Detect if any zod_field uses z.lazy() - these need type annotation for TypeScript
+    // This includes self-references and forward references to other types
+    let is_recursive_schema = zod_fields
+        .iter()
+        .any(|field| field.zod_type.contains("z.lazy("));
+
     RenderStructure {
         type_name: type_name.to_string(),
         class_name,
@@ -2770,6 +2969,8 @@ fn build_render_structure(
         output_folder,
         generate_zod_schema,
         zod_fields,
+        is_recursive_schema,
+        branded_primitives: config.branded_primitives,
         slices,
         type_exports,
         value_exports,
@@ -2976,11 +3177,17 @@ fn map_field_with_nested_context(
 fn ensure_type_import(
     type_name: &str,
     current_package_folder: &str,
+    current_structure_name: Option<&str>,
     name_to_stem: &IndexMap<String, String>,
     type_registry: Option<&imports::TypeRegistry>,
     imports: &mut IndexMap<String, (String, String)>,
 ) {
     if type_name.starts_with("Fhir") || type_name.is_empty() {
+        return;
+    }
+
+    // Skip self-imports (a type importing itself)
+    if current_structure_name == Some(type_name) {
         return;
     }
 
@@ -3006,6 +3213,7 @@ fn ensure_type_import(
 fn ensure_field_dependencies(
     fields: &[RenderField],
     current_package_folder: &str,
+    current_structure_name: Option<&str>,
     name_to_stem: &IndexMap<String, String>,
     type_registry: Option<&imports::TypeRegistry>,
     imports: &mut IndexMap<String, (String, String)>,
@@ -3015,6 +3223,7 @@ fn ensure_field_dependencies(
             ensure_type_import(
                 dep,
                 current_package_folder,
+                current_structure_name,
                 name_to_stem,
                 type_registry,
                 imports,
@@ -3151,7 +3360,11 @@ fn map_primitive(code: &str) -> Option<&'static str> {
         return match type_name.as_str() {
             "string" => Some("FhirString"),
             "boolean" => Some("FhirBoolean"),
-            "integer" | "decimal" => Some("FhirDecimal"),
+            "integer" => Some("FhirInteger"),
+            "decimal" => Some("FhirDecimal"),
+            "date" => Some("FhirDate"),
+            "datetime" => Some("FhirDateTime"),
+            "time" => Some("FhirTime"),
             _ => None,
         };
     }

@@ -119,7 +119,7 @@ export function resolveReferenceInBundle<T extends Resource>(
     ?.map(e => e.resource)
     .find((r): r is T => {
       const entry = bundle.entry?.find(e => e.resource === r);
-      return entry?.fullUrl === refStr;
+      return (entry?.fullUrl as string) === (refStr as string);
     });
 }
 
@@ -246,7 +246,7 @@ export function addResourceToBundle(
 ): Bundle {
   const entry: BundleEntry = { resource };
   if (fullUrl) {
-    entry.fullUrl = fullUrl;
+    entry.fullUrl = fullUrl as FhirUri;
   }
 
   return {
@@ -283,7 +283,7 @@ export function removeResourceFromBundle(
         return !(resource.resourceType === resourceType && resource.id === id);
       }
 
-      return entry.fullUrl !== refStr;
+      return (entry.fullUrl as string) !== (refStr as string);
     }),
   };
 }"#

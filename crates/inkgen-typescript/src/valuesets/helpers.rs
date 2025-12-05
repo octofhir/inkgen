@@ -101,14 +101,14 @@ export function create{}Coding(
   code: {},
   display?: string
 ): Coding {{
-  const meta = {}Metadata.codes[code];
+  const meta = {}Metadata.codes[code as keyof typeof {}Metadata.codes] as {{ display?: string }} | undefined;
   return {{
-    system: "{}",
-    code,
-    display: display ?? meta?.display,
+    system: "{}" as FhirUri,
+    code: code as FhirCode | undefined,
+    display: (display ?? meta?.display) as FhirString | undefined,
   }};
 }}"#,
-                self.type_name, self.type_name, self.type_name, self.type_name, self.system_url
+                self.type_name, self.type_name, self.type_name, self.type_name, self.type_name, self.system_url
             );
         }
 
@@ -124,9 +124,9 @@ export function create{}Coding(
   display?: string
 ): Coding {{
   return {{
-    system: "{}",
-    code,
-    display,
+    system: "{}" as FhirUri,
+    code: code as FhirCode | undefined,
+    display: display as FhirString | undefined,
   }};
 }}"#,
             self.type_name, self.type_name, self.type_name, self.system_url
@@ -161,7 +161,7 @@ export function create{}CodeableConcept(
 ): CodeableConcept {{
   return {{
     coding: [create{}Coding(code)],
-    text,
+    text: text as FhirString | undefined,
   }};
 }}"#,
             self.type_name, self.type_name, self.type_name, self.type_name

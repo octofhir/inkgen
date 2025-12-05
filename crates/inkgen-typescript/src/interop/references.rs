@@ -129,10 +129,10 @@ export function createReference<T extends string>(
   display?: string
 ): TypedReference<T> {
   return {
-    reference: `${resourceType}/${id}`,
-    type: resourceType,
-    display,
-  };
+    reference: `${resourceType}/${id}` as `${T}/${string}`,
+    type: resourceType as T,
+    display: display as FhirString | undefined,
+  } as TypedReference<T>;
 }"#
         .to_string()
     }

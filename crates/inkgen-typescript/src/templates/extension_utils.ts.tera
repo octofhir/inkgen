@@ -8,7 +8,7 @@
  */
 
 import type { Extension } from '../extension';
-import type { DomainResource } from '../domainresource';
+import type { DomainResource } from '../domain-resource';
 import type { Element } from '../element';
 
 /**

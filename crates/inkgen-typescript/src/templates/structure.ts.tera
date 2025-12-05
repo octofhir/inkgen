@@ -42,7 +42,7 @@ export interface {{ nested.type_name }} {
 /**
  * Zod schema for {{ nested.type_name }}
  */
-export const {{ nested.type_name }}Schema = z.object({
+export const {{ nested.type_name }}Schema{% if nested.is_recursive %}: z.ZodType<object>{% endif %} = z.object({
 {%- for field in nested.fields %}
 {%- if field.zod_type %}
   {{ field.name }}: {{ field.zod_type }},
@@ -110,7 +110,7 @@ export function is{{ structure.type_name }}(input: unknown): input is {{ structu
 /**
  * Zod schema for {{ structure.type_name }}
  */
-export const {{ structure.type_name }}Schema = z.object({
+export const {{ structure.type_name }}Schema{% if structure.is_recursive_schema %}: z.ZodType<object>{% endif %} = z.object({
 {%- for field in structure.zod_fields %}
   {{ field.name }}: {{ field.zod_type }},
 {%- endfor %}

@@ -77,7 +77,7 @@ export function create{{ valueset.type_name }}Coding(
   display?: string
 ): Coding {
 {%- if valueset.has_metadata %}
-  const meta = {{ valueset.type_name }}Metadata.codes[code];
+  const meta = {{ valueset.type_name }}Metadata.codes[code as keyof typeof {{ valueset.type_name }}Metadata.codes] as { display?: string } | undefined;
   return {
     system: "{{ valueset.system_url }}",
     code,

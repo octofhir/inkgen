@@ -8,8 +8,10 @@
 
 pub mod backends;
 mod cache;
+pub mod canonical_map;
 pub mod config;
 pub mod dependencies;
+pub mod dependency_graph;
 mod error;
 pub mod generator;
 pub mod ir;
@@ -20,9 +22,12 @@ pub mod search;
 mod services;
 pub mod template_helpers;
 mod terminology;
+mod type_registry;
 
 pub use backends::{BackendRegistry, LanguageBackend};
 pub use cache::{InstallMode, PackageCache, PackageCacheConfig};
+pub use canonical_map::{CanonicalTypeMap, TypeEntry};
+pub use dependency_graph::TypeDependencyGraph;
 pub use config::{
     FilterMode, InkgenConfig, LanguagesSection, PackageEntry, ProjectFilesConfig,
     TypescriptLanguageConfig, sanitize_package_name,
@@ -44,3 +49,4 @@ pub use template_helpers::{ImportPathFunction, PackageFolderFunction, calculate_
 pub use terminology::{
     ResolvedValueSet, ValueSetCache, extract_codes_from_valueset, should_generate_valueset,
 };
+pub use type_registry::{FhirTypeInfo, FhirTypeRegistry};

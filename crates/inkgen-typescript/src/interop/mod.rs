@@ -198,6 +198,11 @@ impl InteropGenerator {
             imports.push("import type { Bundle, BundleEntry } from '../bundle';");
         }
 
+        // Import branded primitives for type safety in helper functions
+        if self.has_references || self.has_bundles {
+            imports.push("import type { FhirUri, FhirString } from '../primitives';");
+        }
+
         if imports.is_empty() {
             String::new()
         } else {
