@@ -65,17 +65,19 @@ export const FhirUnsignedIntSchema = z.number().int().nonnegative();
 // Regex-validated string primitives
 export const FhirIdSchema = z.string().regex(/^[A-Za-z0-9\-\.]{1,64}$/);
 export const FhirCodeSchema = z.string().regex(/^[^\s]+(\s[^\s]+)*$/);
-export const FhirDateSchema = z.string().regex(/^\d{4}(-\d{2}(-\d{2})?)?$/);
-export const FhirTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d+)?$/);
-export const FhirDateTimeSchema = z.string().datetime();
-export const FhirInstantSchema = z.string().datetime();
 
-// URI-based primitives
-export const FhirUriSchema = z.string();
-export const FhirUrlSchema = z.string().url();
-export const FhirCanonicalSchema = z.string();
+// Date/time primitives (Zod 4 top-level functions)
+export const FhirDateSchema = z.iso.date();
+export const FhirTimeSchema = z.iso.time();
+export const FhirDateTimeSchema = z.iso.datetime();
+export const FhirInstantSchema = z.iso.datetime();
+
+// URI-based primitives (Zod 4 top-level functions)
+export const FhirUriSchema = z.url();
+export const FhirUrlSchema = z.url();
+export const FhirCanonicalSchema = z.url();
 export const FhirOidSchema = z.string().regex(/^urn:oid:[0-2](\.(0|[1-9]\d*))+$/);
-export const FhirUuidSchema = z.string().uuid();
+export const FhirUuidSchema = z.uuidv4();
 
 // Text primitives
 export const FhirMarkdownSchema = z.string();

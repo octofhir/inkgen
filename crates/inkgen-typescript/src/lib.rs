@@ -22,6 +22,31 @@ use tera::{Context as TeraContext, Tera};
 use tracing::{debug, info, warn};
 
 pub use config::{GenerationMode, NamingConvention, OutputStructure, TypescriptGeneratorConfig};
+
+/// Well-known external code systems that are not included in FHIR packages.
+/// These are external terminology standards that we don't attempt to resolve.
+static EXTERNAL_CODE_SYSTEMS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    [
+        "http://unitsofmeasure.org",       // UCUM units
+        "http://loinc.org",                 // LOINC codes
+        "http://snomed.info/sct",          // SNOMED CT
+        "http://hl7.org/fhir/sid/icd-10",  // ICD-10
+        "http://hl7.org/fhir/sid/icd-9",   // ICD-9
+        "urn:ietf:bcp:47",                 // Language tags (BCP-47)
+        "urn:iso:std:iso:3166",            // Country codes (ISO 3166)
+        "urn:iso:std:iso:4217",            // Currency codes (ISO 4217)
+        "urn:iso:std:iso:11073:10101",     // Health device codes
+        "http://www.nlm.nih.gov/research/umls/rxnorm", // RxNorm
+        "http://www.ama-assn.org/go/cpt",  // CPT
+    ]
+    .into_iter()
+    .collect()
+});
+
+/// Check if a URL is an external code system that shouldn't be resolved
+fn is_external_code_system(url: &str) -> bool {
+    EXTERNAL_CODE_SYSTEMS.iter().any(|prefix| url.starts_with(prefix))
+}
 pub use imports::TypeRegistry;
 
 pub mod extensions;
@@ -970,32 +995,40 @@ impl TypescriptGenerator {
 
                                 if self.config.valueset_codesystem_link {
                                     if let Some(system) = &system_url {
-                                        match manager.resolve(system).await {
-                                            Ok(codesystem)
-                                                if codesystem.resource.resource_type
-                                                    == "CodeSystem" =>
-                                            {
-                                                let meta = metadata::load_codesystem_metadata(
-                                                    &codesystem.resource.content,
-                                                );
-                                                if system_url.is_none() {
-                                                    system_url = meta.url.clone();
+                                        // Skip external code systems - they're not in the package
+                                        if is_external_code_system(system) {
+                                            debug!(
+                                                "ValueSet {} uses external CodeSystem {}; skipping resolution",
+                                                type_name, system
+                                            );
+                                        } else {
+                                            match manager.resolve(system).await {
+                                                Ok(codesystem)
+                                                    if codesystem.resource.resource_type
+                                                        == "CodeSystem" =>
+                                                {
+                                                    let meta = metadata::load_codesystem_metadata(
+                                                        &codesystem.resource.content,
+                                                    );
+                                                    if system_url.is_none() {
+                                                        system_url = meta.url.clone();
+                                                    }
+                                                    case_sensitive = meta.case_sensitive;
+                                                    enhanced_codes =
+                                                        metadata::enhance_codes(&base_codes, &meta);
                                                 }
-                                                case_sensitive = meta.case_sensitive;
-                                                enhanced_codes =
-                                                    metadata::enhance_codes(&base_codes, &meta);
-                                            }
-                                            Ok(_) => {
-                                                warn!(
-                                                    "Resolved resource is not a CodeSystem: {}",
-                                                    system
-                                                );
-                                            }
-                                            Err(err) => {
-                                                warn!(
-                                                    "Failed to resolve CodeSystem {} for {}: {}",
-                                                    system, type_name, err
-                                                );
+                                                Ok(_) => {
+                                                    warn!(
+                                                        "Resolved resource is not a CodeSystem: {}",
+                                                        system
+                                                    );
+                                                }
+                                                Err(err) => {
+                                                    warn!(
+                                                        "Failed to resolve CodeSystem {} for {}: {}",
+                                                        system, type_name, err
+                                                    );
+                                                }
                                             }
                                         }
                                     } else {
@@ -2314,15 +2347,23 @@ fn build_render_structure(
     // Add resourceType field for Resource and Logical kinds
     // This enables runtime type discrimination in TypeScript
     use inkgen_core::ir::ResourceKind;
+    let is_abstract_base = type_name == "Resource" || type_name == "DomainResource";
     let is_resource_like = matches!(
         definition.kind,
         ResourceKind::Resource | ResourceKind::Logical
     );
     if is_resource_like {
+        // For abstract base types (Resource, DomainResource), use string type
+        // For concrete resources, use literal type for type discrimination
+        let type_expr = if is_abstract_base {
+            "string".to_string()
+        } else {
+            format!("\"{}\"", type_name)
+        };
         fields.push(RenderField {
             name: "resourceType".to_string(),
-            type_expr: format!("\"{}\"", type_name), // Literal type
-            optional: false,                         // Required field
+            type_expr,
+            optional: false, // Required field
             doc: Some("Resource type identifier".to_string()),
             must_support: false,
             zod_type: None,
@@ -2513,9 +2554,16 @@ fn build_render_structure(
             definition.kind,
             ResourceKind::Resource | ResourceKind::Logical
         ) {
+            // For abstract base types (Resource, DomainResource), use z.string()
+            // For concrete resources, use literal type for validation
+            let zod_type = if is_abstract_base {
+                "z.string()".to_string()
+            } else {
+                format!("z.literal(\"{}\")", type_name)
+            };
             fields.push(ZodSchemaField {
                 name: "resourceType".to_string(),
-                zod_type: format!("z.literal(\"{}\")", type_name),
+                zod_type,
             });
         }
 
@@ -2905,7 +2953,10 @@ fn build_render_structure(
         value_exports.push(class_name.clone());
     }
 
-    if config.structural_guards {
+    // Skip structural guards for abstract base types (Resource, DomainResource)
+    // as they don't have concrete resourceType values and type guards aren't meaningful
+    let emit_structural_guards = config.structural_guards && !is_abstract_base;
+    if emit_structural_guards {
         value_exports.push(format!("is{}", type_name));
     }
 
@@ -2954,7 +3005,7 @@ fn build_render_structure(
             .or_else(|| summary.title.clone()),
         emit_interface,
         emit_class,
-        structural_guards: config.structural_guards,
+        structural_guards: emit_structural_guards,
         resource_type_guard: is_resource_like,
         has_primitives,
         primitive_imports,

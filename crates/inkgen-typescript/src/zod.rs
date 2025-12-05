@@ -64,17 +64,18 @@ pub fn fhir_to_zod_type(fhir_type: &str) -> ZodSchemaInfo {
         "string" | "markdown" => ("z.string()".to_string(), false),
         "code" => ("z.string()".to_string(), false), // Could add enum validation
         "id" => ("z.string().regex(/^[A-Za-z0-9\\-\\.]{1,64}$/)".to_string(), false),
-        "uri" => ("z.string().url()".to_string(), false),
-        "url" => ("z.string().url()".to_string(), false),
-        "canonical" => ("z.string().url()".to_string(), false),
+        // URI/URL types - use z.url() (Zod 4 top-level function)
+        "uri" => ("z.url()".to_string(), false),
+        "url" => ("z.url()".to_string(), false),
+        "canonical" => ("z.url()".to_string(), false),
         "oid" => ("z.string().regex(/^urn:oid:[0-2](\\.(0|[1-9][0-9]*))+$/)".to_string(), false),
-        "uuid" => ("z.string().uuid()".to_string(), false),
+        "uuid" => ("z.uuidv4()".to_string(), false),
 
-        // Date/time primitives
-        "date" => ("z.string().regex(/^\\d{4}(-\\d{2}(-\\d{2})?)?$/)".to_string(), false),
-        "dateTime" => ("z.string().regex(/^\\d{4}(-\\d{2}(-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:\\d{2})?)?)?)?$/)".to_string(), false),
-        "instant" => ("z.string().datetime()".to_string(), false),
-        "time" => ("z.string().regex(/^\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?$/)".to_string(), false),
+        // Date/time primitives - use z.iso.* (Zod 4 top-level functions)
+        "date" => ("z.iso.date()".to_string(), false),
+        "dateTime" => ("z.iso.datetime()".to_string(), false),
+        "instant" => ("z.iso.datetime()".to_string(), false),
+        "time" => ("z.iso.time()".to_string(), false),
 
         // Numeric primitives
         "boolean" => ("z.boolean()".to_string(), false),
