@@ -71,6 +71,9 @@ pub struct ResourceDefinition {
     pub date: Option<String>,
     pub lineage: ProfileLineage,
     pub elements: Vec<ElementDefinition>,
+    /// Flat list of elements before tree building (preserves slice information)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flat_elements: Vec<ElementDefinition>,
     pub extensions: Vec<ExtensionDefinition>,
     pub invariants: Vec<InvariantDefinition>,
 }

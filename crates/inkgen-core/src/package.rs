@@ -25,6 +25,7 @@ impl PackageId {
             name: self.name.clone(),
             version: self.version.clone(),
             priority,
+            url: None,
         }
     }
 

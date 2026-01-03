@@ -68,7 +68,186 @@ pub fn extract_extensions(resource: &ResourceDefinition) -> IndexMap<String, Ren
         }
     }
 
+    // For Extension StructureDefinitions (type="Extension", derivation="constraint"):
+    // Convert the ResourceDefinition itself to an extension
+    if is_extension_structure_definition(resource) {
+        if let Some(render_ext) = create_render_extension_from_resource(resource) {
+            extensions.insert(resource.url.clone(), render_ext);
+        }
+    }
+
+    // For profiles: extract extension slices from elements
+    extract_extension_slices_from_elements(&resource.elements, &mut extensions);
+
     extensions
+}
+
+/// Check if a ResourceDefinition represents an Extension StructureDefinition.
+fn is_extension_structure_definition(resource: &ResourceDefinition) -> bool {
+    // Check if type is "Extension" and it's a constraint derivation
+    matches!(
+        resource.lineage.derivation,
+        Some(inkgen_core::ir::Derivation::Constraint)
+    ) && resource.fhir_type.as_deref() == Some("Extension")
+}
+
+/// Create a RenderExtension from an Extension StructureDefinition ResourceDefinition.
+fn create_render_extension_from_resource(resource: &ResourceDefinition) -> Option<RenderExtension> {
+    let type_name = extension_url_to_type_name(&resource.url);
+
+    // Use flat_elements which preserves slice information
+    let flat_elements = &resource.flat_elements;
+
+    tracing::info!(
+        "create_render_extension_from_resource: url={}, flat_elements={}",
+        resource.url,
+        flat_elements.len()
+    );
+
+    // Extract contexts
+    let contexts = vec![]; // TODO: extract from resource.context if available
+
+    // Determine if complex by checking for Extension.extension slices
+    let is_complex = flat_elements
+        .iter()
+        .any(|elem| elem.path == "Extension.extension" && elem.slice_name.is_some());
+
+    // For simple extensions, find the value type
+    let value_type = if !is_complex {
+        flat_elements
+            .iter()
+            .find(|elem| elem.path == "Extension.value[x]")
+            .and_then(|elem| elem.types.first())
+            .map(|t| element_type_to_typescript_from_type(&t.code))
+    } else {
+        None
+    };
+
+    // Collect nested types for complex extensions
+    let nested_types = if is_complex {
+        collect_nested_from_elements_flat(flat_elements)
+    } else {
+        Vec::new()
+    };
+
+    tracing::info!(
+        "Created RenderExtension from StructureDefinition: url={}, is_complex={}, nested_types={}",
+        resource.url,
+        is_complex,
+        nested_types.len()
+    );
+
+    Some(RenderExtension {
+        url: resource.url.clone(),
+        type_name,
+        contexts,
+        is_complex,
+        value_type,
+        nested_types,
+        cardinality_min: 0,
+        cardinality_max: Some(1),
+        description: resource.description.clone(),
+    })
+}
+
+/// Collect nested types from Extension.extension slices in elements.
+///
+/// This works with a FLAT list of elements to preserve slice information.
+/// The tree structure loses slices because it merges elements with the same path.
+fn collect_nested_from_elements_flat(flat_elements: &[ElementDefinition]) -> Vec<NestedTypeInfo> {
+    let mut nested_types = Vec::new();
+
+    for (idx, element) in flat_elements.iter().enumerate() {
+        // Look for Extension.extension:sliceName
+        if element.path == "Extension.extension" && element.slice_name.is_some() {
+            let slice_name = element.slice_name.as_ref().unwrap();
+
+            // The next few elements should be the child elements of this slice
+            // Look for the value[x] element immediately following
+            let value_type = flat_elements
+                .iter()
+                .skip(idx + 1)
+                .take(3)
+                .find(|e| e.path == "Extension.extension.value[x]")
+                .and_then(|value_elem| value_elem.types.first())
+                .map(|t| element_type_to_typescript_from_type(&t.code))
+                .unwrap_or_else(|| "unknown".to_string());
+
+            nested_types.push(NestedTypeInfo {
+                type_name: slice_name.clone(),
+                element_path: element.path.clone(),
+                base_type: value_type.clone(),
+                children: vec![],
+                doc_comment: element.definition.clone().or_else(|| element.short.clone()),
+                depth: 0,
+            });
+
+            tracing::debug!(
+                "Found sub-extension in StructureDefinition: slice_name={}, value_type={}",
+                slice_name,
+                value_type
+            );
+        }
+    }
+
+    tracing::info!(
+        "collect_nested_from_elements_flat: found {} nested types",
+        nested_types.len()
+    );
+
+    nested_types
+}
+
+/// Extract extension slices from profile differential elements.
+/// Looks for elements like "Resource.extension:sliceName" with type=Extension.
+fn extract_extension_slices_from_elements(
+    elements: &[inkgen_core::ir::ElementDefinition],
+    extensions: &mut IndexMap<String, RenderExtension>,
+) {
+    for element in elements {
+        // Check if this is an extension slice
+        if element.path.contains(".extension") && element.slice_name.is_some() {
+            // Extract the extension URL from the type profile
+            if let Some(ext_url) = element
+                .types
+                .iter()
+                .find(|t| t.code == "Extension")
+                .and_then(|t| t.profiles.first())
+                .map(|p| p.as_str())
+            {
+                tracing::info!(
+                    "Found extension slice: path={}, slice_name={:?}, url={}",
+                    element.path,
+                    element.slice_name,
+                    ext_url
+                );
+
+                // Create RenderExtension for this slice
+                let type_name = extension_url_to_type_name(ext_url);
+
+                extensions.insert(
+                    ext_url.to_string(),
+                    RenderExtension {
+                        url: ext_url.to_string(),
+                        type_name,
+                        description: element.definition.clone().or_else(|| element.short.clone()),
+                        is_complex: false, // Will be determined later if needed
+                        value_type: None,  // Will be populated if simple extension
+                        nested_types: Vec::new(), // Will be populated if complex
+                        contexts: Vec::new(), // Could extract from element path
+                        cardinality_min: element.cardinality.min,
+                        cardinality_max: match element.cardinality.max {
+                            inkgen_core::ir::ElementMax::Finite(n) => Some(n),
+                            inkgen_core::ir::ElementMax::Unbounded => None,
+                        },
+                    },
+                );
+            }
+        }
+
+        // Recursively process children
+        extract_extension_slices_from_elements(&element.children, extensions);
+    }
 }
 
 /// Create a RenderExtension from an ExtensionDefinition.
@@ -163,11 +342,102 @@ fn find_value_element(ext_def: &ExtensionDefinition) -> Option<&ElementDefinitio
 }
 
 /// Collect nested types from extension structure.
-fn collect_extension_nested_types(_ext_def: &ExtensionDefinition) -> Vec<NestedTypeInfo> {
-    // Reuse the nested type collection logic from nested.rs
-    // For now, we'll create a simple implementation
-    // This mirrors the pattern used in nested.rs::collect_nested_types
-    Vec::new()
+///
+/// For complex extensions, this extracts sub-extensions (Extension.extension slices)
+/// and creates NestedTypeInfo for each one.
+fn collect_extension_nested_types(ext_def: &ExtensionDefinition) -> Vec<NestedTypeInfo> {
+    let mut nested_types = Vec::new();
+
+    // Find all Extension.extension:sliceName elements
+    for element in &ext_def.elements {
+        // Look for extension slices: "Extension.extension:sliceName" or just "Extension.extension"
+        if element.path == "Extension.extension" && element.slice_name.is_some() {
+            let slice_name = element.slice_name.as_ref().unwrap();
+
+            // Find the corresponding value[x] element for this slice
+            let value_elem_path = format!("{}.value[x]", element.path);
+            let value_type = ext_def
+                .elements
+                .iter()
+                .find(|e| {
+                    e.path == value_elem_path
+                        || e.path.starts_with(&format!("{}.value", element.path))
+                })
+                .and_then(|value_elem| {
+                    // Get the first type from the element's types
+                    value_elem
+                        .types
+                        .first()
+                        .map(|t| element_type_to_typescript_from_type(&t.code))
+                })
+                .unwrap_or_else(|| "unknown".to_string());
+
+            // Get cardinality
+            let cardinality_min = element.cardinality.min;
+            let cardinality_max = match element.cardinality.max {
+                inkgen_core::ir::ElementMax::Finite(n) => Some(n),
+                inkgen_core::ir::ElementMax::Unbounded => None,
+            };
+
+            // Create NestedTypeInfo for this sub-extension
+            nested_types.push(NestedTypeInfo {
+                type_name: slice_name.clone(),
+                element_path: element.path.clone(),
+                base_type: value_type.clone(),
+                children: vec![], // Sub-extensions don't have children
+                doc_comment: element.definition.clone().or_else(|| element.short.clone()),
+                depth: 0,
+            });
+
+            tracing::debug!(
+                "Found sub-extension: slice_name={}, value_type={}, min={}, max={:?}",
+                slice_name,
+                value_type,
+                cardinality_min,
+                cardinality_max
+            );
+        }
+    }
+
+    tracing::info!(
+        "Collected {} nested types for extension {}",
+        nested_types.len(),
+        ext_def.url
+    );
+
+    nested_types
+}
+
+/// Convert a FHIR type code string to TypeScript type.
+fn element_type_to_typescript_from_type(type_code: &str) -> String {
+    match type_code {
+        "string" | "uri" | "url" | "canonical" | "code" | "oid" | "id" | "uuid" | "markdown" => {
+            "string".to_string()
+        }
+        "integer" | "unsignedInt" | "positiveInt" => "number".to_string(),
+        "boolean" => "boolean".to_string(),
+        "decimal" => "number".to_string(),
+        "date" | "dateTime" | "time" | "instant" => "string".to_string(),
+        "base64Binary" => "string".to_string(),
+        // Complex types - keep as-is
+        "Duration" => "Duration".to_string(),
+        "Period" => "Period".to_string(),
+        "CodeableConcept" => "CodeableConcept".to_string(),
+        "Coding" => "Coding".to_string(),
+        "Reference" => "Reference".to_string(),
+        "Identifier" => "Identifier".to_string(),
+        "Quantity" => "Quantity".to_string(),
+        "Range" => "Range".to_string(),
+        "Ratio" => "Ratio".to_string(),
+        "Attachment" => "Attachment".to_string(),
+        "Address" => "Address".to_string(),
+        "ContactPoint" => "ContactPoint".to_string(),
+        "HumanName" => "HumanName".to_string(),
+        _ => {
+            tracing::warn!("Unknown FHIR type code: {}", type_code);
+            "unknown".to_string()
+        }
+    }
 }
 
 /// Convert a FHIR element type to TypeScript type.

@@ -75,9 +75,22 @@ impl ValueSetInfo {
         let resolved = extract_codes_from_valueset(value_set_json, None)
             .map_err(|e| format!("Failed to extract codes: {}", e))?;
 
+        tracing::debug!(
+            "ValueSet {} extracted {} codes, max_codes={:?}",
+            type_name,
+            resolved.codes.len(),
+            max_codes
+        );
+
         // Check if we should generate based on code count and max limit
         if let Some(max) = max_codes {
             if !should_generate_valueset(resolved.codes.len(), max) {
+                tracing::debug!(
+                    "ValueSet {} skipped: should_generate_valueset({}, {}) = false",
+                    type_name,
+                    resolved.codes.len(),
+                    max
+                );
                 return Ok(None);
             }
         } else if resolved.codes.is_empty() {

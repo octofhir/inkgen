@@ -42,11 +42,17 @@ impl ProjectContext {
     }
 
     pub fn default_packages_dir(&self) -> PathBuf {
-        self.root.join("target").join("inkgen").join("packages")
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".inkgen")
+            .join("packages")
     }
 
     pub fn default_cache_dir(&self) -> PathBuf {
-        self.root.join("target").join("inkgen").join("cache")
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".inkgen")
+            .join("cache")
     }
 
     pub fn default_output_dir(&self) -> PathBuf {

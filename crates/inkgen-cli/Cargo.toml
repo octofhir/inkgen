@@ -22,6 +22,7 @@ inkgen-core = { path = "../inkgen-core" }
 inkgen-typescript = { path = "../inkgen-typescript" }
 clap_complete = "4"
 similar = "2.3"
+dirs = "6.0"
 
 [dev-dependencies]
 assert_cmd = "2.0"

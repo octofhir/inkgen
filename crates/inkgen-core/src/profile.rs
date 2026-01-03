@@ -16,22 +16,48 @@ impl ProfilePipeline {
         structure: &Value,
         _base: Option<&ResourceDefinition>,
     ) -> CoreResult<ResourceDefinition> {
-        let snapshot = structure
+        // Try snapshot first, fall back to differential for profiles
+        let elements_array = structure
             .get("snapshot")
             .and_then(|v| v.get("element"))
             .and_then(Value::as_array)
+            .or_else(|| {
+                // Fallback to differential for profiles without snapshot
+                structure
+                    .get("differential")
+                    .and_then(|v| v.get("element"))
+                    .and_then(Value::as_array)
+            })
             .ok_or_else(|| {
-                CoreError::validation("StructureDefinition missing snapshot.element array")
+                CoreError::validation("StructureDefinition missing both snapshot.element and differential.element arrays")
             })?;
 
         let mut element_invariants: IndexMap<String, InvariantDefinition> = IndexMap::new();
-        let mut elements = Vec::with_capacity(snapshot.len());
-        for element_value in snapshot {
-            elements.push(parse_element(element_value, &mut element_invariants)?);
+        let mut elements = Vec::with_capacity(elements_array.len());
+
+        tracing::info!(
+            "profile.rs: Parsing {} elements from differential/snapshot",
+            elements_array.len()
+        );
+
+        for element_value in elements_array {
+            let elem = parse_element(element_value, &mut element_invariants)?;
+            tracing::info!(
+                "  Parsed element: path={}, must_support={}",
+                elem.path,
+                elem.must_support
+            );
+            elements.push(elem);
         }
 
         // Build hierarchical element tree from flat snapshot
+        tracing::info!(
+            "Building element tree from {} flat elements",
+            elements.len()
+        );
+        let flat_elements = elements.clone(); // Preserve flat elements before tree building
         elements = build_element_tree(elements);
+        tracing::info!("Element tree built: {} root elements", elements.len());
 
         let mut invariants: Vec<InvariantDefinition> = element_invariants.into_values().collect();
         invariants.sort_by(|a, b| a.key.cmp(&b.key));
@@ -51,6 +77,7 @@ impl ProfilePipeline {
             date: string_field(structure, "date"),
             lineage: parse_lineage(structure),
             elements,
+            flat_elements,
             extensions: Vec::new(),
             invariants,
         };
@@ -461,6 +488,23 @@ fn build_element_tree(mut flat_elements: Vec<ElementDefinition>) -> Vec<ElementD
 
     // Sort for deterministic output
     elements.sort_by(|a, b| a.path.cmp(&b.path));
+
+    // Debug: Log tree structure
+    for elem in &elements {
+        tracing::info!(
+            "  Root element: path={}, children={}, must_support={}",
+            elem.path,
+            elem.children.len(),
+            elem.must_support
+        );
+        for child in &elem.children {
+            tracing::info!(
+                "    Child: path={}, must_support={}",
+                child.path,
+                child.must_support
+            );
+        }
+    }
 
     elements
 }

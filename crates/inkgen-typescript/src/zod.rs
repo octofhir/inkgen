@@ -63,12 +63,18 @@ pub fn fhir_to_zod_type(fhir_type: &str) -> ZodSchemaInfo {
         // String-like primitives
         "string" | "markdown" => ("z.string()".to_string(), false),
         "code" => ("z.string()".to_string(), false), // Could add enum validation
-        "id" => ("z.string().regex(/^[A-Za-z0-9\\-\\.]{1,64}$/)".to_string(), false),
+        "id" => (
+            "z.string().regex(/^[A-Za-z0-9\\-\\.]{1,64}$/)".to_string(),
+            false,
+        ),
         // URI/URL types - use z.url() (Zod 4 top-level function)
         "uri" => ("z.url()".to_string(), false),
         "url" => ("z.url()".to_string(), false),
         "canonical" => ("z.url()".to_string(), false),
-        "oid" => ("z.string().regex(/^urn:oid:[0-2](\\.(0|[1-9][0-9]*))+$/)".to_string(), false),
+        "oid" => (
+            "z.string().regex(/^urn:oid:[0-2](\\.(0|[1-9][0-9]*))+$/)".to_string(),
+            false,
+        ),
         "uuid" => ("z.uuidv4()".to_string(), false),
 
         // Date/time primitives - use z.iso.* (Zod 4 top-level functions)
@@ -85,7 +91,10 @@ pub fn fhir_to_zod_type(fhir_type: &str) -> ZodSchemaInfo {
         "decimal" => ("z.number()".to_string(), false),
 
         // Base64
-        "base64Binary" => ("z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/)".to_string(), false),
+        "base64Binary" => (
+            "z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/)".to_string(),
+            false,
+        ),
 
         // XHTML
         "xhtml" => ("z.string()".to_string(), false),

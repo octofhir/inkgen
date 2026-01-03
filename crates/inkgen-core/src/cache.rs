@@ -350,6 +350,16 @@ impl PackageCache {
         package: &PackageId,
         resource: &octofhir_canonical_manager::package::FhirResource,
     ) -> Option<StructureSummary> {
+        let res_type = resource
+            .content
+            .get("resourceType")
+            .and_then(|v| v.as_str());
+        tracing::info!(
+            "summarize_structure: file={}, resource_type={:?}",
+            resource.file_path.display(),
+            res_type
+        );
+
         let canonical = resource
             .url
             .clone()

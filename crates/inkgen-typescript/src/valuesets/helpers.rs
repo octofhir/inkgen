@@ -108,7 +108,12 @@ export function create{}Coding(
     display: (display ?? meta?.display) as FhirString | undefined,
   }};
 }}"#,
-                self.type_name, self.type_name, self.type_name, self.type_name, self.type_name, self.system_url
+                self.type_name,
+                self.type_name,
+                self.type_name,
+                self.type_name,
+                self.type_name,
+                self.system_url
             );
         }
 

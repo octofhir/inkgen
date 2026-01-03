@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -24,6 +24,10 @@ pub struct PackageEntry {
     /// Optional custom folder name (defaults to sanitized package name)
     #[serde(default)]
     pub folder: Option<String>,
+
+    /// Optional local source path (for local FHIR IGs)
+    #[serde(default)]
+    pub source: Option<String>,
 
     /// Filter mode for this package
     #[serde(default = "default_filter_mode")]
@@ -418,7 +422,20 @@ impl InkgenConfig {
     pub fn package_requests(&self) -> Vec<PackageRequest> {
         self.packages
             .iter()
-            .map(|entry| PackageRequest::registry(entry.name.clone(), entry.version.clone()))
+            .map(|entry| {
+                if let Some(source_path) = &entry.source {
+                    // Local package
+                    PackageRequest::local(
+                        entry.name.clone(),
+                        entry.version.clone(),
+                        PathBuf::from(source_path),
+                        1,
+                    )
+                } else {
+                    // Registry package
+                    PackageRequest::registry(entry.name.clone(), entry.version.clone())
+                }
+            })
             .collect()
     }
 

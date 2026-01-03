@@ -144,7 +144,10 @@ impl ProfileInfo {
     /// Creates a ProfileInfo from a ResourceDefinition that represents a profile.
     ///
     /// Returns None if the resource is not a profile (constraint derivation).
-    pub fn from_resource_definition(definition: &ResourceDefinition) -> Option<Self> {
+    pub fn from_resource_definition(
+        definition: &ResourceDefinition,
+        all_extensions: &indexmap::IndexMap<String, crate::extensions::RenderExtension>,
+    ) -> Option<Self> {
         // Only process profiles (derivation = constraint)
         if !matches!(definition.lineage.derivation, Some(Derivation::Constraint)) {
             return None;
@@ -165,6 +168,21 @@ impl ProfileInfo {
         let mut fixed_elements = Vec::new();
         let mut constrained_elements = Vec::new();
 
+        tracing::info!(
+            "ProfileInfo::from_resource_definition for {} - {} elements to scan",
+            type_name,
+            definition.elements.len()
+        );
+        for elem in &definition.elements {
+            tracing::info!(
+                "  Element: path={}, must_support={}, min={}, max={:?}",
+                elem.path,
+                elem.must_support,
+                elem.cardinality.min,
+                elem.cardinality.max
+            );
+        }
+
         extract_constraints(
             &definition.elements,
             &base_type,
@@ -173,9 +191,39 @@ impl ProfileInfo {
             &mut constrained_elements,
         );
 
-        // Extract extensions from the definition
+        tracing::info!(
+            "  After extract_constraints: must_support={}, fixed={}, constrained={}",
+            must_support_elements.len(),
+            fixed_elements.len(),
+            constrained_elements.len()
+        );
+
+        // Extract extension slices from the profile's definition
         let extensions_map = crate::extensions::extract_extensions(definition);
-        let extensions: Vec<_> = extensions_map.into_values().collect();
+
+        // Enrich extensions with information from all_extensions
+        let mut enriched_extensions = Vec::new();
+        for (url, mut ext) in extensions_map {
+            // Look up the full extension definition
+            if let Some(full_ext) = all_extensions.get(&url) {
+                tracing::info!(
+                    "Enriching extension {} with full definition: is_complex={}, nested_types={}",
+                    url,
+                    full_ext.is_complex,
+                    full_ext.nested_types.len()
+                );
+
+                // Enrich with full extension information
+                ext.is_complex = full_ext.is_complex;
+                ext.value_type = full_ext.value_type.clone();
+                ext.nested_types = full_ext.nested_types.clone();
+            } else {
+                tracing::warn!("Extension {} not found in all_extensions map", url);
+            }
+            enriched_extensions.push(ext);
+        }
+
+        let extensions = enriched_extensions;
 
         Some(Self {
             type_name,
@@ -200,6 +248,14 @@ impl ProfileInfo {
         with_zod: bool,
     ) -> String {
         let mut output = String::new();
+
+        // Generate flat input types for complex extensions
+        for extension in &self.extensions {
+            if extension.is_complex && !extension.nested_types.is_empty() {
+                self.generate_flat_input_type(&mut output, extension);
+                self.generate_converter_functions(&mut output, extension);
+            }
+        }
 
         // Add JSDoc comment
         if self.title.is_some() || self.description.is_some() {
@@ -362,8 +418,33 @@ impl ProfileInfo {
             extension.url
         ));
 
-        if extension.is_complex {
-            // Complex extension returns the extension object itself
+        if extension.is_complex && !extension.nested_types.is_empty() {
+            // Complex extension with flat API
+            let input_type_name = format!("{}Input", method_name);
+
+            // Generate overloaded getters
+            output.push_str(&format!(
+                "  get{}(raw: true): Extension | undefined;\n",
+                method_name
+            ));
+            output.push_str(&format!(
+                "  get{}(raw?: false): {} | undefined;\n",
+                method_name, input_type_name
+            ));
+            output.push_str(&format!(
+                "  get{}(raw?: boolean): Extension | {} | undefined {{\n",
+                method_name, input_type_name
+            ));
+            output.push_str(&format!(
+                "    const ext = this.extension?.find(e => e.url === '{}');\n",
+                extension.url
+            ));
+            output.push_str("    if (!ext) return undefined;\n");
+            output.push_str("    if (raw) return ext;\n");
+            output.push_str(&format!("    return extensionTo{}(ext);\n", method_name));
+            output.push_str("  }\n\n");
+        } else if extension.is_complex {
+            // Complex extension without nested types (fallback to raw)
             output.push_str(&format!(
                 "  get{}(): {{ url: string; extension?: Extension[] }} | undefined {{\n",
                 method_name
@@ -413,15 +494,23 @@ impl ProfileInfo {
             extension.url
         ));
 
-        if extension.is_complex {
+        if extension.is_complex && !extension.nested_types.is_empty() {
+            // Complex extension with flat API
+            let input_type_name = format!("{}Input", method_name);
             output.push_str(&format!(
-                "  set{}(value: {{ url: string; extension?: Extension[] }}): void {{\n",
+                "  set{}(value: {}): this {{\n",
+                method_name, input_type_name
+            ));
+        } else if extension.is_complex {
+            // Complex extension without nested types (fallback to raw)
+            output.push_str(&format!(
+                "  set{}(value: {{ url: string; extension?: Extension[] }}): this {{\n",
                 method_name
             ));
         } else {
             let value_type = extension.value_type.as_deref().unwrap_or("unknown");
             output.push_str(&format!(
-                "  set{}(value: {}): void {{\n",
+                "  set{}(value: {}): this {{\n",
                 method_name, value_type
             ));
         }
@@ -434,7 +523,19 @@ impl ProfileInfo {
             extension.url
         ));
 
-        if extension.is_complex {
+        if extension.is_complex && !extension.nested_types.is_empty() {
+            // Convert flat input to Extension format
+            output.push_str(&format!(
+                "    const ext = {}ToExtension(value);\n",
+                method_name
+            ));
+            output.push_str("    if (idx !== undefined && idx >= 0) {\n");
+            output.push_str("      this.extension[idx] = ext;\n");
+            output.push_str("    } else {\n");
+            output.push_str("      this.extension.push(ext);\n");
+            output.push_str("    }\n");
+        } else if extension.is_complex {
+            // Raw Extension (no conversion)
             output.push_str("    if (idx !== undefined && idx >= 0) {\n");
             output.push_str("      this.extension[idx] = value;\n");
             output.push_str("    } else {\n");
@@ -463,7 +564,143 @@ impl ProfileInfo {
             output.push_str("    }\n");
         }
 
+        output.push_str("    return this;\n");
         output.push_str("  }\n\n");
+    }
+
+    /// Generate flat input type interface for a complex extension.
+    fn generate_flat_input_type(
+        &self,
+        output: &mut String,
+        extension: &crate::extensions::RenderExtension,
+    ) {
+        let type_name = extension
+            .type_name
+            .strip_suffix("Extension")
+            .unwrap_or(&extension.type_name);
+        let input_type_name = format!("{}Input", type_name);
+
+        output.push_str(&format!(
+            "/**\n * Flat input type for {} extension\n",
+            extension
+                .description
+                .as_deref()
+                .unwrap_or(&extension.type_name)
+        ));
+        output.push_str(&format!(" * @see {}\n */\n", extension.url));
+        output.push_str(&format!("export interface {} {{\n", input_type_name));
+
+        for nested in &extension.nested_types {
+            if let Some(doc) = &nested.doc_comment {
+                output.push_str(&format!("  /** {} */\n", doc));
+            }
+
+            // Determine if field is required (we'd need cardinality info from nested types)
+            // For now, make all fields optional except the first one
+            let is_required = false; // TODO: check nested.cardinality_min when available
+
+            let optional_marker = if is_required { "" } else { "?" };
+            output.push_str(&format!(
+                "  {}{}: {};\n",
+                nested.type_name, optional_marker, nested.base_type
+            ));
+        }
+
+        output.push_str("}\n\n");
+    }
+
+    /// Generate converter functions between flat input and Extension format.
+    fn generate_converter_functions(
+        &self,
+        output: &mut String,
+        extension: &crate::extensions::RenderExtension,
+    ) {
+        let type_name = extension
+            .type_name
+            .strip_suffix("Extension")
+            .unwrap_or(&extension.type_name);
+        let input_type_name = format!("{}Input", type_name);
+
+        // Generate "to Extension" converter
+        output.push_str(&format!(
+            "function {}ToExtension(input: {}): Extension {{\n",
+            type_name, input_type_name
+        ));
+        output.push_str("  const subExtensions: Extension[] = [];\n\n");
+
+        for nested in &extension.nested_types {
+            output.push_str(&format!(
+                "  if (input.{} !== undefined) {{\n",
+                nested.type_name
+            ));
+
+            // Determine the value field based on type
+            let value_field = match nested.base_type.as_str() {
+                "string" => "valueString",
+                "number" => "valueInteger",
+                "boolean" => "valueBoolean",
+                "Duration" => "valueDuration",
+                "Period" => "valuePeriod",
+                "CodeableConcept" => "valueCodeableConcept",
+                "Coding" => "valueCoding",
+                "Reference" => "valueReference",
+                "Quantity" => "valueQuantity",
+                _ => "value",
+            };
+
+            output.push_str("    subExtensions.push({\n");
+            output.push_str(&format!("      url: '{}',\n", nested.type_name));
+            output.push_str(&format!(
+                "      {}: input.{}\n",
+                value_field, nested.type_name
+            ));
+            output.push_str("    });\n");
+            output.push_str("  }\n\n");
+        }
+
+        output.push_str("  return {\n");
+        output.push_str(&format!("    url: '{}',\n", extension.url));
+        output.push_str("    extension: subExtensions\n");
+        output.push_str("  };\n");
+        output.push_str("}\n\n");
+
+        // Generate "from Extension" converter
+        output.push_str(&format!(
+            "function extensionTo{}(ext: Extension): {} | undefined {{\n",
+            type_name, input_type_name
+        ));
+        output.push_str("  if (!ext.extension) return undefined;\n\n");
+        output.push_str(&format!(
+            "  const result: Partial<{}> = {{}};\n\n",
+            input_type_name
+        ));
+
+        for nested in &extension.nested_types {
+            let value_field = match nested.base_type.as_str() {
+                "string" => "valueString",
+                "number" => "valueInteger",
+                "boolean" => "valueBoolean",
+                "Duration" => "valueDuration",
+                "Period" => "valuePeriod",
+                "CodeableConcept" => "valueCodeableConcept",
+                "Coding" => "valueCoding",
+                "Reference" => "valueReference",
+                "Quantity" => "valueQuantity",
+                _ => "value",
+            };
+
+            output.push_str(&format!(
+                "  const {} = ext.extension.find(e => e.url === '{}');\n",
+                nested.type_name, nested.type_name
+            ));
+            output.push_str(&format!(
+                "  if ({}) result.{} = {}.{} as {};\n\n",
+                nested.type_name, nested.type_name, nested.type_name, value_field, nested.base_type
+            ));
+        }
+
+        output.push_str(&format!("  return result as {};\n", input_type_name));
+        output.push_str("}\n\n");
     }
 
     /// Returns true if this profile has any constraints worth generating.
@@ -579,59 +816,57 @@ fn extract_constraints(
     constrained: &mut Vec<ConstrainedElement>,
 ) {
     for element in elements {
-        // Skip the root element
-        if element.path == base_type {
-            continue;
+        // Extract constraints from non-root elements
+        if element.path != base_type {
+            // Extract mustSupport elements
+            if element.must_support {
+                must_support.push(element.path.clone());
+            }
+
+            // Extract fixed values
+            if let Some(fixed_value) = &element.fixed
+                && let Some(ts_value) = json_to_typescript_literal(fixed_value)
+            {
+                let field_name = element
+                    .path
+                    .split('.')
+                    .next_back()
+                    .unwrap_or(&element.path)
+                    .to_string();
+
+                fixed.push(FixedElement {
+                    path: element.path.clone(),
+                    field_name,
+                    fixed_value: ts_value.clone(),
+                    value_type: infer_type_from_value(&ts_value),
+                });
+            }
+
+            // Extract tightened cardinality (min > 0 makes optional required)
+            if element.cardinality.min > 0 {
+                let field_name = element
+                    .path
+                    .split('.')
+                    .next_back()
+                    .unwrap_or(&element.path)
+                    .to_string();
+
+                let max = match element.cardinality.max {
+                    inkgen_core::ir::ElementMax::Unbounded => "*".to_string(),
+                    inkgen_core::ir::ElementMax::Finite(n) => n.to_string(),
+                };
+
+                constrained.push(ConstrainedElement {
+                    path: element.path.clone(),
+                    field_name,
+                    min: element.cardinality.min,
+                    max,
+                    makes_required: element.cardinality.min > 0,
+                });
+            }
         }
 
-        // Extract mustSupport elements
-        if element.must_support {
-            must_support.push(element.path.clone());
-        }
-
-        // Extract fixed values
-        if let Some(fixed_value) = &element.fixed
-            && let Some(ts_value) = json_to_typescript_literal(fixed_value)
-        {
-            let field_name = element
-                .path
-                .split('.')
-                .next_back()
-                .unwrap_or(&element.path)
-                .to_string();
-
-            fixed.push(FixedElement {
-                path: element.path.clone(),
-                field_name,
-                fixed_value: ts_value.clone(),
-                value_type: infer_type_from_value(&ts_value),
-            });
-        }
-
-        // Extract tightened cardinality (min > 0 makes optional required)
-        if element.cardinality.min > 0 {
-            let field_name = element
-                .path
-                .split('.')
-                .next_back()
-                .unwrap_or(&element.path)
-                .to_string();
-
-            let max = match element.cardinality.max {
-                inkgen_core::ir::ElementMax::Unbounded => "*".to_string(),
-                inkgen_core::ir::ElementMax::Finite(n) => n.to_string(),
-            };
-
-            constrained.push(ConstrainedElement {
-                path: element.path.clone(),
-                field_name,
-                min: element.cardinality.min,
-                max,
-                makes_required: element.cardinality.min > 0,
-            });
-        }
-
-        // Recursively process children
+        // Always recursively process children (even for root element)
         extract_constraints(
             &element.children,
             base_type,

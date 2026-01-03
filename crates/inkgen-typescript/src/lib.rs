@@ -27,17 +27,17 @@ pub use config::{GenerationMode, NamingConvention, OutputStructure, TypescriptGe
 /// These are external terminology standards that we don't attempt to resolve.
 static EXTERNAL_CODE_SYSTEMS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     [
-        "http://unitsofmeasure.org",       // UCUM units
-        "http://loinc.org",                 // LOINC codes
-        "http://snomed.info/sct",          // SNOMED CT
-        "http://hl7.org/fhir/sid/icd-10",  // ICD-10
-        "http://hl7.org/fhir/sid/icd-9",   // ICD-9
-        "urn:ietf:bcp:47",                 // Language tags (BCP-47)
-        "urn:iso:std:iso:3166",            // Country codes (ISO 3166)
-        "urn:iso:std:iso:4217",            // Currency codes (ISO 4217)
-        "urn:iso:std:iso:11073:10101",     // Health device codes
+        "http://unitsofmeasure.org",                   // UCUM units
+        "http://loinc.org",                            // LOINC codes
+        "http://snomed.info/sct",                      // SNOMED CT
+        "http://hl7.org/fhir/sid/icd-10",              // ICD-10
+        "http://hl7.org/fhir/sid/icd-9",               // ICD-9
+        "urn:ietf:bcp:47",                             // Language tags (BCP-47)
+        "urn:iso:std:iso:3166",                        // Country codes (ISO 3166)
+        "urn:iso:std:iso:4217",                        // Currency codes (ISO 4217)
+        "urn:iso:std:iso:11073:10101",                 // Health device codes
         "http://www.nlm.nih.gov/research/umls/rxnorm", // RxNorm
-        "http://www.ama-assn.org/go/cpt",  // CPT
+        "http://www.ama-assn.org/go/cpt",              // CPT
     ]
     .into_iter()
     .collect()
@@ -45,7 +45,9 @@ static EXTERNAL_CODE_SYSTEMS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
 
 /// Check if a URL is an external code system that shouldn't be resolved
 fn is_external_code_system(url: &str) -> bool {
-    EXTERNAL_CODE_SYSTEMS.iter().any(|prefix| url.starts_with(prefix))
+    EXTERNAL_CODE_SYSTEMS
+        .iter()
+        .any(|prefix| url.starts_with(prefix))
 }
 pub use imports::TypeRegistry;
 
@@ -1203,9 +1205,47 @@ impl TypescriptGenerator {
         for type_name in types_to_ensure {
             if existing_types.contains(type_name) {
                 if type_name == "Extension" || type_name == "Quantity" {
-                    warn!("ensure_core_types: Skipping '{}' - already in existing_types", type_name);
+                    warn!(
+                        "ensure_core_types: Skipping '{}' - already in existing_types",
+                        type_name
+                    );
                 }
                 continue;
+            }
+
+            // Check if type is available from a dependency package via type_registry
+            if let Some(type_registry) = &self.config.type_registry {
+                // TypeRegistry uses PascalCase names, but FhirTypeRegistry uses lowercase
+                // Convert to PascalCase for lookup
+                let pascal_name = if type_name.chars().next().map_or(false, |c| c.is_lowercase()) {
+                    let mut chars = type_name.chars();
+                    match chars.next() {
+                        None => type_name.to_string(),
+                        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                    }
+                } else {
+                    type_name.to_string()
+                };
+
+                if let Some((dep_package_folder, _stem)) = type_registry.get(&pascal_name) {
+                    // Get the current package's folder name from config.package_folders
+                    let current_package_folder = self
+                        .config
+                        .package_folders
+                        .get(&descriptor.id)
+                        .map(|s| s.as_str())
+                        .unwrap_or("");
+
+                    // Only skip if type is from a DIFFERENT package (not the current one)
+                    if dep_package_folder != current_package_folder {
+                        // Type is available from a dependency package - will be imported, not hydrated
+                        debug!(
+                            "Skipping hydration of '{}' (as '{}') for {} - available from dependency package '{}'",
+                            type_name, pascal_name, descriptor.id, dep_package_folder
+                        );
+                        continue;
+                    }
+                }
             }
 
             // Get the canonical URL from the registry
@@ -1214,12 +1254,18 @@ impl TypescriptGenerator {
                 None => {
                     // Fallback to constructing URL if not in registry
                     let url = format!("http://hl7.org/fhir/StructureDefinition/{}", type_name);
-                    debug!("Type '{}' not in registry, using fallback URL: {}", type_name, url);
+                    debug!(
+                        "Type '{}' not in registry, using fallback URL: {}",
+                        type_name, url
+                    );
                     url
                 }
             };
 
-            debug!("ensure_core_types: Attempting to load type '{}' from {}", type_name, canonical);
+            debug!(
+                "ensure_core_types: Attempting to load type '{}' from {}",
+                type_name, canonical
+            );
 
             match service.load_structure(&canonical).await {
                 Ok(definition) => {
@@ -1360,9 +1406,20 @@ where
         );
 
         // Log specific types we expect to find
-        for expected in ["Period", "Reference", "HumanName", "CodeableConcept", "Resource", "DomainResource"] {
+        for expected in [
+            "Period",
+            "Reference",
+            "HumanName",
+            "CodeableConcept",
+            "Resource",
+            "DomainResource",
+        ] {
             if fhir_registry.contains(expected) {
-                debug!("Registry contains '{}': url={:?}", expected, fhir_registry.get_url(expected));
+                debug!(
+                    "Registry contains '{}': url={:?}",
+                    expected,
+                    fhir_registry.get_url(expected)
+                );
             } else {
                 warn!("Registry MISSING expected type '{}'", expected);
             }
@@ -1372,6 +1429,11 @@ where
             .into_iter()
             .filter(|summary| summary.package == descriptor.id)
             .collect();
+
+        info!("RELEVANT BEFORE FILTERS: {} structures", relevant.len());
+        for summary in &relevant {
+            info!("  - {} (kind={:?})", summary.canonical_url, summary.kind);
+        }
 
         // Apply per-package filtering if configured
         // IMPORTANT: Filters only apply to BaseResource (actual FHIR resources)
@@ -1544,6 +1606,11 @@ where
         let mut current_phase: Option<StructureKind> = None;
 
         for summary in relevant {
+            info!(
+                "LOOP: Processing {} - kind={:?}",
+                summary.canonical_url, summary.kind
+            );
+
             // Log phase transitions
             if current_phase != Some(summary.kind) {
                 let phase_name = match summary.kind {
@@ -1556,13 +1623,19 @@ where
                 info!("{}", phase_name);
                 current_phase = Some(summary.kind);
             }
-            // Generate BaseResource, ComplexType, PrimitiveType, and Logical structures
+            // Generate BaseResource, ComplexType, PrimitiveType, Logical, and Profile structures
             // Logical includes important data types like CodeableConcept, Extension, Period, Range, etc.
+            // Profiles are constraint derivations on base resources with extensions and constraints
             if summary.kind != StructureKind::BaseResource
                 && summary.kind != StructureKind::ComplexType
                 && summary.kind != StructureKind::PrimitiveType
                 && summary.kind != StructureKind::Logical
+                && summary.kind != StructureKind::Profile
             {
+                info!(
+                    "LOOP: Skipping {} (kind not allowed)",
+                    summary.canonical_url
+                );
                 continue;
             }
 
@@ -1620,10 +1693,9 @@ where
             // Also check if type_code differs from definition.id - if they differ significantly,
             // this is likely a profile even if kind says ComplexType (e.g., MoneyQuantity, SimpleQuantity)
             let is_profile_like = summary.kind == StructureKind::Profile
-                || summary
-                    .type_code
-                    .as_deref()
-                    .is_some_and(|tc| tc != &definition.id && !definition.id.eq_ignore_ascii_case(tc));
+                || summary.type_code.as_deref().is_some_and(|tc| {
+                    tc != &definition.id && !definition.id.eq_ignore_ascii_case(tc)
+                });
 
             let type_name = if is_profile_like {
                 // Profiles use their own id as the type name
@@ -1633,10 +1705,19 @@ where
             };
 
             // Debug: Log important entries
-            if type_name == "Quantity" || type_name == "Extension" || definition.id.contains("Quantity") || definition.id.contains("Extension") {
+            if type_name == "Quantity"
+                || type_name == "Extension"
+                || definition.id.contains("Quantity")
+                || definition.id.contains("Extension")
+            {
                 info!(
                     "name_to_stem entry: type_name={}, kind={:?}, type_code={:?}, def.id={}, is_profile_like={}, stem={}",
-                    type_name, summary.kind, summary.type_code, definition.id, is_profile_like, file_stem(&definition.id)
+                    type_name,
+                    summary.kind,
+                    summary.type_code,
+                    definition.id,
+                    is_profile_like,
+                    file_stem(&definition.id)
                 );
             }
             // Also log if definition.id is exactly "Extension" or "Quantity" but not caught above
@@ -1663,7 +1744,9 @@ where
                 warn!(
                     "Skipping duplicate type_name={} (already mapped to {})",
                     type_name,
-                    name_to_stem.get(&type_name).unwrap_or(&"<unknown>".to_string())
+                    name_to_stem
+                        .get(&type_name)
+                        .unwrap_or(&"<unknown>".to_string())
                 );
             }
         }
@@ -1746,16 +1829,20 @@ where
             })
             .collect();
 
-        // Phase 2: Generate structures using the complete name mapping
+        // Phase 2a: First pass - collect all extensions from all structures
+        info!("Phase 2a: Collecting extensions from all structures");
+        let mut all_extensions = IndexMap::new();
+        for (_summary, definition) in &entries {
+            let extensions = extensions::extract_extensions(definition);
+            all_extensions.extend(extensions);
+        }
+        info!("Collected {} total extensions", all_extensions.len());
+
+        // Phase 2b: Generate structures using the complete name mapping and extensions
         let mut structures = Vec::new();
         let mut profiles = Vec::new();
-        let mut all_extensions = IndexMap::new();
 
         for (summary, definition) in entries {
-            // Extract extensions from this resource definition
-            let extensions = extensions::extract_extensions(&definition);
-            all_extensions.extend(extensions);
-
             let type_name =
                 naming::pascal_case(summary.type_code.as_deref().unwrap_or(&definition.id));
             let file_name = name_to_file
@@ -1775,13 +1862,50 @@ where
                     .as_ref()
                     .is_some_and(|base_id| base_id != &definition.id);
 
+            info!(
+                "Processing structure: {} - kind={:?}, derivation={:?}, base_id={:?}, is_profile={}",
+                type_name,
+                summary.kind,
+                definition.lineage.derivation,
+                definition.lineage.base_id,
+                is_profile
+            );
+
             if is_profile {
+                info!("Found profile: {} ({})", type_name, definition.url);
                 if !self.config.generate_profiles {
+                    info!("  Skipping profile (generate_profiles=false)");
                     continue;
                 }
                 // Generate profile
                 if let Some(profile_info) =
-                    profiles::ProfileInfo::from_resource_definition(&definition)
+                    profiles::ProfileInfo::from_resource_definition(&definition, &all_extensions)
+                {
+                    info!(
+                        "  ProfileInfo created, has_constraints={}",
+                        profile_info.has_constraints()
+                    );
+                    info!(
+                        "  - must_support: {}",
+                        profile_info.must_support_elements.len()
+                    );
+                    info!("  - fixed: {}", profile_info.fixed_elements.len());
+                    info!(
+                        "  - constrained: {}",
+                        profile_info.constrained_elements.len()
+                    );
+
+                    if !profile_info.has_constraints() {
+                        info!("  Skipping profile (no constraints)");
+                        continue;
+                    }
+                } else {
+                    info!("  Failed to create ProfileInfo");
+                    continue;
+                }
+
+                if let Some(profile_info) =
+                    profiles::ProfileInfo::from_resource_definition(&definition, &all_extensions)
                     && profile_info.has_constraints()
                 {
                     // Check if any profile methods are enabled (for backward compat with old method)
@@ -2856,11 +2980,7 @@ fn build_render_structure(
 
         (fields, schema_imports, valueset_value_imports)
     } else {
-        (
-            Vec::new(),
-            Vec::new(),
-            std::collections::HashMap::new(),
-        )
+        (Vec::new(), Vec::new(), std::collections::HashMap::new())
     };
 
     // IMPORTANT: Regroup imports after Zod schema processing

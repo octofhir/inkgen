@@ -76,7 +76,9 @@ impl FhirTypeRegistry {
             // Only insert if not already present (first package wins)
             if !registry.types.contains_key(&type_name) {
                 registry.types.insert(type_name.clone(), info);
-                registry.by_url.insert(summary.canonical_url.clone(), type_name.clone());
+                registry
+                    .by_url
+                    .insert(summary.canonical_url.clone(), type_name.clone());
                 registry
                     .by_kind
                     .entry(summary.kind)
@@ -95,7 +97,10 @@ impl FhirTypeRegistry {
             if !self.types.contains_key(name) {
                 self.types.insert(name.clone(), info.clone());
                 self.by_url.insert(info.url.clone(), name.clone());
-                self.by_kind.entry(info.kind).or_default().insert(name.clone());
+                self.by_kind
+                    .entry(info.kind)
+                    .or_default()
+                    .insert(name.clone());
             }
         }
     }
@@ -221,9 +226,21 @@ mod tests {
     #[test]
     fn test_from_summaries() {
         let summaries = vec![
-            make_summary("string", "http://hl7.org/fhir/StructureDefinition/string", StructureKind::PrimitiveType),
-            make_summary("Address", "http://hl7.org/fhir/StructureDefinition/Address", StructureKind::ComplexType),
-            make_summary("Patient", "http://hl7.org/fhir/StructureDefinition/Patient", StructureKind::BaseResource),
+            make_summary(
+                "string",
+                "http://hl7.org/fhir/StructureDefinition/string",
+                StructureKind::PrimitiveType,
+            ),
+            make_summary(
+                "Address",
+                "http://hl7.org/fhir/StructureDefinition/Address",
+                StructureKind::ComplexType,
+            ),
+            make_summary(
+                "Patient",
+                "http://hl7.org/fhir/StructureDefinition/Patient",
+                StructureKind::BaseResource,
+            ),
         ];
 
         let registry = FhirTypeRegistry::from_summaries(&summaries);
@@ -238,9 +255,21 @@ mod tests {
     #[test]
     fn test_primitives_iterator() {
         let summaries = vec![
-            make_summary("string", "http://hl7.org/fhir/StructureDefinition/string", StructureKind::PrimitiveType),
-            make_summary("boolean", "http://hl7.org/fhir/StructureDefinition/boolean", StructureKind::PrimitiveType),
-            make_summary("Address", "http://hl7.org/fhir/StructureDefinition/Address", StructureKind::ComplexType),
+            make_summary(
+                "string",
+                "http://hl7.org/fhir/StructureDefinition/string",
+                StructureKind::PrimitiveType,
+            ),
+            make_summary(
+                "boolean",
+                "http://hl7.org/fhir/StructureDefinition/boolean",
+                StructureKind::PrimitiveType,
+            ),
+            make_summary(
+                "Address",
+                "http://hl7.org/fhir/StructureDefinition/Address",
+                StructureKind::ComplexType,
+            ),
         ];
 
         let registry = FhirTypeRegistry::from_summaries(&summaries);
@@ -254,9 +283,11 @@ mod tests {
 
     #[test]
     fn test_get_url() {
-        let summaries = vec![
-            make_summary("Patient", "http://hl7.org/fhir/StructureDefinition/Patient", StructureKind::BaseResource),
-        ];
+        let summaries = vec![make_summary(
+            "Patient",
+            "http://hl7.org/fhir/StructureDefinition/Patient",
+            StructureKind::BaseResource,
+        )];
 
         let registry = FhirTypeRegistry::from_summaries(&summaries);
 
@@ -269,12 +300,16 @@ mod tests {
 
     #[test]
     fn test_merge() {
-        let summaries1 = vec![
-            make_summary("string", "http://hl7.org/fhir/StructureDefinition/string", StructureKind::PrimitiveType),
-        ];
-        let summaries2 = vec![
-            make_summary("Address", "http://hl7.org/fhir/StructureDefinition/Address", StructureKind::ComplexType),
-        ];
+        let summaries1 = vec![make_summary(
+            "string",
+            "http://hl7.org/fhir/StructureDefinition/string",
+            StructureKind::PrimitiveType,
+        )];
+        let summaries2 = vec![make_summary(
+            "Address",
+            "http://hl7.org/fhir/StructureDefinition/Address",
+            StructureKind::ComplexType,
+        )];
 
         let mut registry = FhirTypeRegistry::from_summaries(&summaries1);
         let other = FhirTypeRegistry::from_summaries(&summaries2);

@@ -27,12 +27,12 @@ mod type_registry;
 pub use backends::{BackendRegistry, LanguageBackend};
 pub use cache::{InstallMode, PackageCache, PackageCacheConfig};
 pub use canonical_map::{CanonicalTypeMap, TypeEntry};
-pub use dependency_graph::TypeDependencyGraph;
 pub use config::{
     FilterMode, InkgenConfig, LanguagesSection, PackageEntry, ProjectFilesConfig,
     TypescriptLanguageConfig, sanitize_package_name,
 };
 pub use dependencies::DependencyAnalyzer;
+pub use dependency_graph::TypeDependencyGraph;
 pub use error::{CoreError, CoreResult};
 pub use generator::LanguageGenerator;
 pub use lineage::{ProfileAncestor, ProfileChain, merge_element_snapshots, resolve_full_chain};

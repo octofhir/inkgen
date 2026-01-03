@@ -336,8 +336,12 @@ mod tests {
         assert!(is_primitive_or_builtin("string"));
         assert!(is_primitive_or_builtin("boolean"));
         assert!(is_primitive_or_builtin("integer"));
-        assert!(is_primitive_or_builtin("http://hl7.org/fhirpath/System.String"));
+        assert!(is_primitive_or_builtin(
+            "http://hl7.org/fhirpath/System.String"
+        ));
         assert!(!is_primitive_or_builtin("Extension"));
-        assert!(!is_primitive_or_builtin("http://hl7.org/fhir/StructureDefinition/Extension"));
+        assert!(!is_primitive_or_builtin(
+            "http://hl7.org/fhir/StructureDefinition/Extension"
+        ));
     }
 }

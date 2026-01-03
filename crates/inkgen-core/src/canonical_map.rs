@@ -227,16 +227,12 @@ impl CanonicalTypeMap {
 
     /// Get a type entry by type name (e.g., "Extension").
     pub fn get_by_name(&self, name: &str) -> Option<&TypeEntry> {
-        self.by_name
-            .get(name)
-            .and_then(|url| self.by_url.get(url))
+        self.by_name.get(name).and_then(|url| self.by_url.get(url))
     }
 
     /// Get a type entry by file stem (e.g., "extension").
     pub fn get_by_stem(&self, stem: &str) -> Option<&TypeEntry> {
-        self.by_stem
-            .get(stem)
-            .and_then(|url| self.by_url.get(url))
+        self.by_stem.get(stem).and_then(|url| self.by_url.get(url))
     }
 
     /// Get the file stem for a type name.
@@ -283,7 +279,12 @@ impl CanonicalTypeMap {
     ///
     /// # Returns
     /// The relative import path (e.g., "./extension" or "../other-package/extension")
-    pub fn import_path(&self, from_package: &str, _from_stem: &str, to_type_name: &str) -> Option<String> {
+    pub fn import_path(
+        &self,
+        from_package: &str,
+        _from_stem: &str,
+        to_type_name: &str,
+    ) -> Option<String> {
         let entry = self.get_by_name(to_type_name)?;
 
         // Get the target package folder
@@ -411,7 +412,10 @@ mod tests {
 
         // Base type should still be mapped by name
         let entry = map.get_by_name("Extension").unwrap();
-        assert_eq!(entry.canonical_url, "http://hl7.org/fhir/StructureDefinition/Extension");
+        assert_eq!(
+            entry.canonical_url,
+            "http://hl7.org/fhir/StructureDefinition/Extension"
+        );
         assert_eq!(entry.kind, StructureKind::ComplexType);
     }
 }
