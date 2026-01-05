@@ -7,6 +7,7 @@ pub mod helpers;
 pub mod metadata;
 
 use self::metadata::EnhancedCodeInfo;
+use indexmap::IndexSet;
 use inkgen_core::{extract_codes_from_valueset, should_generate_valueset};
 use serde::Serialize;
 use serde_json::Value;
@@ -98,9 +99,12 @@ impl ValueSetInfo {
         }
 
         // Build CodeInfo structures with display (definition not available from expansion)
+        // Deduplicate codes while preserving order (first occurrence wins)
+        let mut seen_codes: IndexSet<String> = IndexSet::new();
         let code_info: Vec<CodeInfo> = resolved
             .codes
             .iter()
+            .filter(|code| seen_codes.insert((*code).clone()))
             .map(|code| CodeInfo {
                 code: code.clone(),
                 display: resolved.displays.get(code).cloned(),

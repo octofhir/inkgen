@@ -6,6 +6,7 @@
 //! - Creating typed accessor functions for safe extension access
 //! - Handling both simple and complex extensions
 
+use crate::naming;
 use crate::nested::NestedTypeInfo;
 use indexmap::IndexMap;
 use inkgen_core::ir::{ElementDefinition, ExtensionDefinition, ResourceDefinition};
@@ -473,18 +474,9 @@ pub fn extension_url_to_type_name(url: &str) -> String {
     // Extract the last component of the URL path
     let last_component = url.split('/').next_back().unwrap_or("Extension");
 
-    // Convert kebab-case or snake_case to PascalCase
-    last_component
-        .split(['-', '_'])
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-            }
-        })
-        .collect::<String>()
-        + "Extension"
+    // Use naming::pascal_case which handles sanitization (prefixes digits, etc.)
+    let base_name = naming::pascal_case(last_component);
+    format!("{}Extension", base_name)
 }
 
 /// Generate accessor function information for extensions on a resource.

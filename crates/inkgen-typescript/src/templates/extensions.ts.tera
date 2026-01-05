@@ -3,6 +3,10 @@
  * Extension type definitions and accessor functions
  * This file is generated and should not be manually edited
  */
+{%- if imported_types and imported_types | length > 0 %}
+
+import type { {{ imported_types | join(sep=", ") }} } from "./index";
+{%- endif %}
 
 {%- for ext_url, ext in extensions %}
 {%- if ext.description %}

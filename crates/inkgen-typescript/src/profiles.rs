@@ -4,9 +4,50 @@
 //! that constrain base resources with additional rules like mustSupport, fixed values,
 //! and tightened cardinality.
 
+use std::collections::{HashMap, HashSet};
+
 use inkgen_core::config::{ExtensionAccessorStyle, ProfileMethodConfig};
 use inkgen_core::ir::{Derivation, ElementDefinition, ResourceDefinition};
 use serde::Serialize;
+
+use crate::imports::{TypeRegistry, calculate_import_path};
+use crate::naming;
+
+/// TypeScript reserved words that cannot be used as property names in class declarations.
+const TS_RESERVED_WORDS: &[&str] = &[
+    "break", "case", "catch", "class", "const", "continue", "debugger", "default",
+    "delete", "do", "else", "enum", "export", "extends", "false", "finally", "for",
+    "function", "if", "import", "in", "instanceof", "module", "new", "null", "return",
+    "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while",
+    "with", "yield", "let", "static", "implements", "interface", "package", "private",
+    "protected", "public", "any", "boolean", "number", "string", "symbol", "type",
+    "namespace", "abstract", "as", "async", "await", "constructor", "declare", "from",
+    "get", "is", "of", "require", "set",
+];
+
+/// Sanitize a field name for TypeScript compatibility.
+/// - Removes `[x]` suffix from FHIR choice type fields (e.g., "value[x]" -> "value")
+/// - Escapes TypeScript reserved words by prefixing with underscore
+fn sanitize_field_name(name: &str) -> String {
+    // Remove [x] suffix from choice types
+    let name = name.strip_suffix("[x]").unwrap_or(name);
+
+    // Check if it's a reserved word
+    if TS_RESERVED_WORDS.contains(&name.to_lowercase().as_str()) {
+        format!("_{}", name)
+    } else {
+        name.to_string()
+    }
+}
+
+/// Context for generating profile TypeScript code with proper imports.
+#[derive(Debug, Clone)]
+pub struct ProfileGenerationContext<'a> {
+    /// Current package folder (e.g., "psychportal")
+    pub current_package_folder: &'a str,
+    /// Type registry for looking up type locations
+    pub type_registry: &'a TypeRegistry,
+}
 
 /// Information about a FHIR profile for TypeScript generation.
 #[derive(Debug, Clone)]
@@ -159,10 +200,12 @@ impl ProfileInfo {
             .clone()
             .or_else(|| definition.lineage.type_name.clone())?;
 
-        let type_name = definition
+        // Sanitize type_name - names like "CDS Hooks GuidanceResponse" need to become "CdsHooksGuidanceResponse"
+        let raw_name = definition
             .name
             .clone()
             .unwrap_or_else(|| definition.id.clone());
+        let type_name = naming::pascal_case(&raw_name);
 
         let mut must_support_elements = Vec::new();
         let mut fixed_elements = Vec::new();
@@ -183,12 +226,14 @@ impl ProfileInfo {
             );
         }
 
+        let mut seen_field_names = std::collections::HashSet::new();
         extract_constraints(
             &definition.elements,
             &base_type,
             &mut must_support_elements,
             &mut fixed_elements,
             &mut constrained_elements,
+            &mut seen_field_names,
         );
 
         tracing::info!(
@@ -246,8 +291,14 @@ impl ProfileInfo {
         as_class: bool,
         with_methods: bool,
         with_zod: bool,
+        context: Option<&ProfileGenerationContext>,
     ) -> String {
         let mut output = String::new();
+
+        // Generate imports if context is provided
+        if let Some(ctx) = context {
+            self.generate_imports(&mut output, as_class, with_zod, ctx);
+        }
 
         // Generate flat input types for complex extensions
         for extension in &self.extensions {
@@ -336,7 +387,12 @@ impl ProfileInfo {
             ));
 
             // Add fixed value fields (override with specific literals)
+            // Skip 'url' field for Extension profiles as it conflicts with FhirString type
             for fixed in &self.fixed_elements {
+                if fixed.field_name == "url" && self.base_type == "Extension" {
+                    // Skip - url is already typed as FhirString in Extension
+                    continue;
+                }
                 output.push_str(&format!("  /** Fixed value: {} */\n", fixed.fixed_value));
                 output.push_str(&format!("  {}: {};\n", fixed.field_name, fixed.fixed_value));
             }
@@ -372,26 +428,38 @@ impl ProfileInfo {
         output.push_str("}\n");
 
         // Generate Zod schema if requested
+        // Use z.intersection() instead of .extend() because .extend() doesn't work
+        // on z.ZodType<object> which is used for recursive schemas like Extension
         if with_zod {
             output.push('\n');
             output.push_str(&format!("/**\n * Zod schema for {}\n */\n", self.type_name));
-            output.push_str(&format!(
-                "export const {}Schema = {}Schema.extend({{\n",
-                self.type_name, self.base_type
-            ));
 
-            // Add constrained fields to the schema
-            for constrained in &self.constrained_elements {
-                if constrained.makes_required {
-                    // Override to make required
-                    output.push_str(&format!(
-                        "  {}: z.array(z.unknown()).min({}),\n",
-                        constrained.field_name, constrained.min
-                    ));
+            if self.constrained_elements.is_empty() {
+                // No additional constraints, just re-export the base schema
+                output.push_str(&format!(
+                    "export const {}Schema = {}Schema;\n",
+                    self.type_name, self.base_type
+                ));
+            } else {
+                // Use intersection to combine base schema with additional constraints
+                output.push_str(&format!(
+                    "export const {}Schema = z.intersection(\n  {}Schema,\n  z.object({{\n",
+                    self.type_name, self.base_type
+                ));
+
+                // Add constrained fields to the schema
+                for constrained in &self.constrained_elements {
+                    if constrained.makes_required {
+                        // Override to make required
+                        output.push_str(&format!(
+                            "    {}: z.array(z.unknown()).min({}),\n",
+                            constrained.field_name, constrained.min
+                        ));
+                    }
                 }
-            }
 
-            output.push_str("});\n");
+                output.push_str("  })\n);\n");
+            }
         }
 
         output
@@ -568,6 +636,157 @@ impl ProfileInfo {
         output.push_str("  }\n\n");
     }
 
+    /// Generate import statements for the profile.
+    fn generate_imports(
+        &self,
+        output: &mut String,
+        as_class: bool,
+        with_zod: bool,
+        ctx: &ProfileGenerationContext,
+    ) {
+        // Collect all types that need to be imported
+        // Group by (package_folder, file_stem) -> (type_imports, value_imports)
+        let mut imports_by_path: HashMap<(String, String), (HashSet<String>, HashSet<String>)> =
+            HashMap::new();
+
+        // Collect type imports
+        let mut type_imports_needed: Vec<String> = Vec::new();
+        let mut value_imports_needed: Vec<String> = Vec::new();
+
+        // Import base type
+        if as_class {
+            value_imports_needed.push(self.base_type.clone());
+        } else {
+            type_imports_needed.push(self.base_type.clone());
+        }
+
+        // Import base type schema if using Zod
+        if with_zod {
+            let schema_name = format!("{}Schema", self.base_type);
+            value_imports_needed.push(schema_name);
+        }
+
+        // Import Extension type if we have extensions
+        if !self.extensions.is_empty() {
+            type_imports_needed.push("Extension".to_string());
+        }
+
+        // Check if we need FhirString for extension URL casts
+        // FhirString is handled separately since it's a primitive in primitives.ts
+        let needs_fhir_string = self
+            .extensions
+            .iter()
+            .any(|ext| ext.is_complex && !ext.nested_types.is_empty());
+
+        // Import types used in extension nested types
+        for ext in &self.extensions {
+            for nested in &ext.nested_types {
+                // Add the base type if it's not a primitive
+                if !is_primitive_typescript_type(&nested.base_type) {
+                    type_imports_needed.push(nested.base_type.clone());
+                }
+            }
+        }
+
+        // Add type imports to the map
+        for type_name in type_imports_needed {
+            if let Some((pkg, stem)) = ctx.type_registry.get(&type_name) {
+                let key = (pkg.to_string(), stem.to_string());
+                imports_by_path
+                    .entry(key)
+                    .or_insert_with(|| (HashSet::new(), HashSet::new()))
+                    .0
+                    .insert(type_name);
+            }
+        }
+
+        // Add value imports to the map
+        for type_name in value_imports_needed {
+            // For schemas (e.g., "ScheduleSchema"), look up the base type ("Schedule")
+            let lookup_name = if type_name.ends_with("Schema") {
+                type_name.strip_suffix("Schema").unwrap_or(&type_name)
+            } else {
+                &type_name
+            };
+
+            if let Some((pkg, stem)) = ctx.type_registry.get(lookup_name) {
+                let key = (pkg.to_string(), stem.to_string());
+                imports_by_path
+                    .entry(key)
+                    .or_insert_with(|| (HashSet::new(), HashSet::new()))
+                    .1
+                    .insert(type_name);
+            }
+        }
+
+        // Build import statements sorted by path
+        let mut import_statements: Vec<String> = Vec::new();
+
+        // Add zod import if needed
+        if with_zod {
+            import_statements.push("import { z } from \"zod\";".to_string());
+        }
+
+        // Sort paths for deterministic output
+        let mut sorted_paths: Vec<_> = imports_by_path.into_iter().collect();
+        sorted_paths.sort_by(|a, b| a.0.cmp(&b.0));
+
+        for ((pkg_folder, file_stem), (type_imports, value_imports)) in sorted_paths {
+            let import_path = calculate_import_path(
+                ctx.current_package_folder,
+                "profiles", // Profiles are always in a profiles subfolder
+                &pkg_folder,
+                &file_stem,
+            );
+
+            // Generate type imports
+            if !type_imports.is_empty() {
+                let mut types: Vec<_> = type_imports.into_iter().collect();
+                types.sort();
+                import_statements.push(format!(
+                    "import type {{ {} }} from \"{}\";",
+                    types.join(", "),
+                    import_path
+                ));
+            }
+
+            // Generate value imports
+            if !value_imports.is_empty() {
+                let mut values: Vec<_> = value_imports.into_iter().collect();
+                values.sort();
+                import_statements.push(format!(
+                    "import {{ {} }} from \"{}\";",
+                    values.join(", "),
+                    import_path
+                ));
+            }
+        }
+
+        // Add FhirString import for extension URL casts if needed
+        // FhirString is a primitive that lives in primitives.ts in r4-core
+        if needs_fhir_string {
+            let primitives_path = calculate_import_path(
+                ctx.current_package_folder,
+                "profiles", // Profiles are always in a profiles subfolder
+                "r4-core",
+                "primitives",
+            );
+            import_statements.push(format!(
+                "import type {{ FhirString }} from \"{}\";",
+                primitives_path
+            ));
+        }
+
+        // Write import statements
+        if !import_statements.is_empty() {
+            for stmt in import_statements {
+                output.push_str(&stmt);
+                output.push('\n');
+            }
+            output.push('\n');
+        }
+    }
+
     /// Generate flat input type interface for a complex extension.
     fn generate_flat_input_type(
         &self,
@@ -648,18 +867,20 @@ impl ProfileInfo {
                 _ => "value",
             };
 
+            // Use 'as any' to bypass TypeScript's strict Extension type checking
+            // Extension.value is a union but we need to set value[x] properties like valueDuration
             output.push_str("    subExtensions.push({\n");
-            output.push_str(&format!("      url: '{}',\n", nested.type_name));
+            output.push_str(&format!("      url: '{}' as FhirString,\n", nested.type_name));
             output.push_str(&format!(
                 "      {}: input.{}\n",
                 value_field, nested.type_name
             ));
-            output.push_str("    });\n");
+            output.push_str("    } as Extension);\n");
             output.push_str("  }\n\n");
         }
 
         output.push_str("  return {\n");
-        output.push_str(&format!("    url: '{}',\n", extension.url));
+        output.push_str(&format!("    url: '{}' as FhirString,\n", extension.url));
         output.push_str("    extension: subExtensions\n");
         output.push_str("  };\n");
         output.push_str("}\n\n");
@@ -693,8 +914,9 @@ impl ProfileInfo {
                 "  const {} = ext.extension.find(e => e.url === '{}');\n",
                 nested.type_name, nested.type_name
             ));
+            // Cast to 'any' to access value[x] properties like valueDuration, valueInteger, etc.
             output.push_str(&format!(
-                "  if ({}) result.{} = {}.{} as {};\n\n",
+                "  if ({}) result.{} = ({} as any).{} as {};\n\n",
                 nested.type_name, nested.type_name, nested.type_name, value_field, nested.base_type
             ));
         }
@@ -807,50 +1029,73 @@ impl ProfileInfo {
     }
 }
 
+/// Checks if an element path is a direct child of the base type.
+/// E.g., "Patient.name" is a direct child of "Patient", but "Patient.name.given" is not.
+fn is_direct_child(path: &str, base_type: &str) -> bool {
+    if !path.starts_with(base_type) {
+        return false;
+    }
+    // Check there's exactly one segment after base_type
+    // e.g., "Patient.name" -> "name" (one segment), "Patient.name.given" -> "name.given" (two segments)
+    let suffix = path.strip_prefix(base_type).and_then(|s| s.strip_prefix('.'));
+    match suffix {
+        Some(s) => !s.contains('.'),
+        None => false,
+    }
+}
+
 /// Extracts profile constraints from element definitions.
+/// Only extracts constraints for direct children of the base type to avoid duplicates.
 fn extract_constraints(
     elements: &[ElementDefinition],
     base_type: &str,
     must_support: &mut Vec<String>,
     fixed: &mut Vec<FixedElement>,
     constrained: &mut Vec<ConstrainedElement>,
+    seen_field_names: &mut std::collections::HashSet<String>,
 ) {
     for element in elements {
-        // Extract constraints from non-root elements
-        if element.path != base_type {
+        // Extract constraints from non-root elements that are direct children
+        if element.path != base_type && is_direct_child(&element.path, base_type) {
             // Extract mustSupport elements
             if element.must_support {
                 must_support.push(element.path.clone());
+            }
+
+            let raw_field_name = element
+                .path
+                .split('.')
+                .next_back()
+                .unwrap_or(&element.path);
+            let field_name = sanitize_field_name(raw_field_name);
+
+            // Skip primitive element extensions (e.g., _type, _module)
+            // Our generated TypeScript types don't include these underscore-prefixed fields
+            if field_name.starts_with('_') {
+                continue;
+            }
+
+            // Skip if we've already seen this field name (avoid duplicates)
+            if seen_field_names.contains(&field_name) {
+                continue;
             }
 
             // Extract fixed values
             if let Some(fixed_value) = &element.fixed
                 && let Some(ts_value) = json_to_typescript_literal(fixed_value)
             {
-                let field_name = element
-                    .path
-                    .split('.')
-                    .next_back()
-                    .unwrap_or(&element.path)
-                    .to_string();
-
+                seen_field_names.insert(field_name.clone());
                 fixed.push(FixedElement {
                     path: element.path.clone(),
-                    field_name,
+                    field_name: field_name.clone(),
                     fixed_value: ts_value.clone(),
                     value_type: infer_type_from_value(&ts_value),
                 });
             }
 
             // Extract tightened cardinality (min > 0 makes optional required)
-            if element.cardinality.min > 0 {
-                let field_name = element
-                    .path
-                    .split('.')
-                    .next_back()
-                    .unwrap_or(&element.path)
-                    .to_string();
-
+            if element.cardinality.min > 0 && !seen_field_names.contains(&field_name) {
+                seen_field_names.insert(field_name.clone());
                 let max = match element.cardinality.max {
                     inkgen_core::ir::ElementMax::Unbounded => "*".to_string(),
                     inkgen_core::ir::ElementMax::Finite(n) => n.to_string(),
@@ -866,23 +1111,28 @@ fn extract_constraints(
             }
         }
 
-        // Always recursively process children (even for root element)
+        // Recursively process children (but is_direct_child check will filter them)
         extract_constraints(
             &element.children,
             base_type,
             must_support,
             fixed,
             constrained,
+            seen_field_names,
         );
     }
 }
 
 /// Converts a JSON value to a TypeScript literal.
+/// Note: Booleans and numbers are skipped because they conflict with branded primitives
+/// (FhirBoolean, FhirInteger, etc.) where literal types can't be assigned.
 fn json_to_typescript_literal(value: &serde_json::Value) -> Option<String> {
     match value {
         serde_json::Value::String(s) => Some(format!("\"{}\"", escape_string(s))),
-        serde_json::Value::Number(n) => Some(n.to_string()),
-        serde_json::Value::Bool(b) => Some(b.to_string()),
+        // Skip number and boolean fixed values - they conflict with branded primitives
+        // (e.g., literal `false` can't be assigned to FhirBoolean branded type)
+        serde_json::Value::Number(_) => None,
+        serde_json::Value::Bool(_) => None,
         serde_json::Value::Null => Some("null".to_string()),
         serde_json::Value::Array(arr) if arr.is_empty() => Some("[]".to_string()),
         serde_json::Value::Object(obj) if obj.is_empty() => Some("{}".to_string()),
@@ -1203,7 +1453,7 @@ mod tests {
             extensions: vec![],
         };
 
-        let output = profile.generate_typescript(false, false, false);
+        let output = profile.generate_typescript(false, false, false, None);
 
         assert!(output.contains("export interface USCorePatient extends Patient"));
         assert!(output.contains("readonly __profileUrl"));
@@ -1247,7 +1497,7 @@ mod tests {
         };
 
         // Test class generation with extension methods
-        let output = profile.generate_typescript(true, true, false);
+        let output = profile.generate_typescript(true, true, false, None);
 
         assert!(output.contains("export class USCorePatient extends Patient"));
         assert!(output.contains("readonly __profile ="));
@@ -1257,18 +1507,18 @@ mod tests {
         assert!(output.contains("valueCodeableConcept"));
 
         // Test class generation without extension methods
-        let output_no_methods = profile.generate_typescript(true, false, false);
+        let output_no_methods = profile.generate_typescript(true, false, false, None);
         assert!(output_no_methods.contains("export class USCorePatient extends Patient"));
         assert!(!output_no_methods.contains("getUSCoreRace()"));
 
         // Test interface generation (original behavior)
-        let output_interface = profile.generate_typescript(false, false, false);
+        let output_interface = profile.generate_typescript(false, false, false, None);
         assert!(output_interface.contains("export interface USCorePatient extends Patient"));
         assert!(output_interface.contains("readonly __profileUrl"));
         assert!(!output_interface.contains("getUSCoreRace()"));
 
         // Test Zod schema generation
-        let output_with_zod = profile.generate_typescript(false, false, true);
+        let output_with_zod = profile.generate_typescript(false, false, true, None);
         assert!(
             output_with_zod.contains("export const USCorePatientSchema = PatientSchema.extend({")
         );

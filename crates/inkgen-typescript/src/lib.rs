@@ -399,9 +399,9 @@ mod config {
     }
 }
 
-mod naming {
+pub mod naming {
     pub fn pascal_case(value: &str) -> String {
-        split_tokens(value)
+        let result: String = split_tokens(value)
             .into_iter()
             .map(|token| {
                 let mut chars = token.chars();
@@ -410,7 +410,25 @@ mod naming {
                     None => String::new(),
                 }
             })
-            .collect::<String>()
+            .collect();
+        sanitize_typescript_identifier(&result)
+    }
+
+    /// Ensure the identifier is valid TypeScript (doesn't start with digit, no invalid chars)
+    fn sanitize_typescript_identifier(name: &str) -> String {
+        if name.is_empty() {
+            return "Unknown".to_string();
+        }
+
+        // If starts with a digit, prefix with underscore
+        let result = if name.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+            format!("_{}", name)
+        } else {
+            name.to_string()
+        };
+
+        // Ensure only valid identifier characters (already handled by split_tokens, but double-check)
+        result
     }
 
     pub fn camel_case(value: &str) -> String {
@@ -864,6 +882,7 @@ struct ProfileOutput {
 #[derive(Debug, Clone, Serialize)]
 struct PackageOutput {
     path: PathBuf,
+    folder: String,
     structures: Vec<RenderStructure>,
     valuesets: Vec<ValueSetOutput>,
     profiles: Vec<ProfileOutput>,
@@ -919,6 +938,24 @@ impl TypescriptGenerator {
         // Create valuesets subdirectory
         let valuesets_dir = package_dir.join("valuesets");
         fs::create_dir_all(&valuesets_dir)?;
+
+        // Get package folder for computing cross-package import paths
+        let package_folder = self
+            .config
+            .package_folders
+            .get(&descriptor.id)
+            .cloned()
+            .unwrap_or_else(|| sanitize_package_name(&descriptor.id.name));
+
+        // Compute import prefix for valueset helpers
+        // From valuesets/ subdirectory, we need to go up one level (..) to reach the package root
+        // For r4-core: imports are at ../coding, ../codeable-concept, ../primitives
+        // For other packages: imports are at ../../r4-core/coding, etc.
+        let valueset_import_prefix = if package_folder == "r4-core" {
+            "..".to_string()
+        } else {
+            "../../r4-core".to_string()
+        };
 
         let mut generated_count = 0;
         let mut url_to_type_map: HashMap<String, String> = HashMap::new();
@@ -1070,7 +1107,8 @@ impl TypescriptGenerator {
                                         );
                                         if helpers.has_coding_factory || helpers.has_validation {
                                             helper_imports.push(format!(
-                                                "import type {{ Coding }} from \"../{}\";",
+                                                "import type {{ Coding }} from \"{}/{}\";",
+                                                valueset_import_prefix,
                                                 file_stem("Coding")
                                             ));
                                         }
@@ -1078,7 +1116,8 @@ impl TypescriptGenerator {
                                             || helpers.has_extraction
                                         {
                                             helper_imports.push(format!(
-                                                "import type {{ CodeableConcept }} from \"../{}\";",
+                                                "import type {{ CodeableConcept }} from \"{}/{}\";",
+                                                valueset_import_prefix,
                                                 file_stem("CodeableConcept")
                                             ));
                                         }
@@ -1088,7 +1127,8 @@ impl TypescriptGenerator {
                                                 || helpers.has_codeable_concept_factory)
                                         {
                                             helper_imports.push(format!(
-                                                "import type {{ FhirUri, FhirCode, FhirString }} from \"../{}\";",
+                                                "import type {{ FhirUri, FhirCode, FhirString }} from \"{}/{}\";",
+                                                valueset_import_prefix,
                                                 file_stem("primitives")
                                             ));
                                         }
@@ -1535,6 +1575,14 @@ where
             return Ok(());
         }
 
+        // Get the package folder name for this package
+        let package_folder = self
+            .config
+            .package_folders
+            .get(&descriptor.id)
+            .cloned()
+            .unwrap_or_else(|| sanitize_package_name(&descriptor.id.name));
+
         let package_dir = package_output_dir(
             &self.config.output_dir,
             &descriptor.id,
@@ -1913,10 +1961,27 @@ where
                         || self.config.profile_methods.serialization
                         || self.config.profile_methods.validation;
 
+                    // Get package folder for import path calculation
+                    let package_folder = self
+                        .config
+                        .package_folders
+                        .get(&descriptor.id)
+                        .cloned()
+                        .unwrap_or_else(|| sanitize_package_name(&descriptor.id.name));
+
+                    // Create generation context for imports
+                    let generation_context = self.config.type_registry.as_ref().map(|registry| {
+                        profiles::ProfileGenerationContext {
+                            current_package_folder: &package_folder,
+                            type_registry: registry,
+                        }
+                    });
+
                     let ts_code = profile_info.generate_typescript(
                         self.config.profile_classes,
                         with_methods,
                         self.config.zod_schemas,
+                        generation_context.as_ref(),
                     );
                     let profile_file_stem = format!("profile-{}", file_stem);
                     let profile_file_name = format!("{}.ts", profile_file_stem);
@@ -2023,6 +2088,7 @@ where
 
         let package_output = PackageOutput {
             path: package_dir.clone(),
+            folder: package_folder,
             structures,
             valuesets: Vec::new(),
             profiles,
@@ -2075,8 +2141,22 @@ fn write_package(package: &PackageOutput) -> Result<()> {
 
     // Write extensions if any are defined
     if !package.extensions.is_empty() {
+        // Collect all unique value types that need to be imported
+        let primitive_types = ["string", "number", "boolean", "unknown"];
+        let mut imported_types: Vec<String> = package
+            .extensions
+            .values()
+            .filter_map(|ext| ext.value_type.as_ref())
+            .filter(|t| !primitive_types.contains(&t.as_str()))
+            .cloned()
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        imported_types.sort();
+
         let mut context = TeraContext::new();
         context.insert("extensions", &package.extensions);
+        context.insert("imported_types", &imported_types);
         let content = templates::render("extensions.ts.tera", &context)?;
         fs::write(package.path.join("extensions.ts"), content)
             .with_context(|| "failed to write extensions.ts")?;
@@ -2087,7 +2167,19 @@ fn write_package(package: &PackageOutput) -> Result<()> {
     fs::create_dir_all(&utils_dir)
         .with_context(|| format!("failed to create utils directory {}", utils_dir.display()))?;
 
-    let utils_content = templates::render("extension_utils.ts.tera", &TeraContext::new())?;
+    // Compute import prefix for utils/extensions.ts
+    // From utils/ subdirectory, we need to go up one level (..) to reach the package root
+    // For r4-core: imports are at ../extension, ../domain-resource, ../element
+    // For other packages: imports are at ../../r4-core/extension, etc.
+    let utils_import_prefix = if package.folder == "r4-core" {
+        "..".to_string()
+    } else {
+        "../../r4-core".to_string()
+    };
+
+    let mut utils_context = TeraContext::new();
+    utils_context.insert("import_prefix", &utils_import_prefix);
+    let utils_content = templates::render("extension_utils.ts.tera", &utils_context)?;
     fs::write(utils_dir.join("extensions.ts"), utils_content)
         .with_context(|| "failed to write utils/extensions.ts")?;
 
@@ -2193,10 +2285,7 @@ fn write_package(package: &PackageOutput) -> Result<()> {
                     .unwrap_or("r4-core")
                     .to_string();
 
-                let mut include_dirs = vec![package_folder];
-                if !include_dirs.iter().any(|pkg| pkg == "profiles") {
-                    include_dirs.push("profiles".to_string());
-                }
+                let include_dirs = vec![package_folder];
 
                 let mut context = tera::Context::new();
                 context.insert("packages", &include_dirs);
@@ -2233,43 +2322,6 @@ fn write_package(package: &PackageOutput) -> Result<()> {
         let profile_index = templates::render("profiles-index.ts.tera", &profile_index_context)?;
         fs::write(profiles_dir.join("index.ts"), &profile_index)
             .with_context(|| "failed to write profiles/index.ts")?;
-
-        // Mirror profiles under <output_root>/profiles/<package_folder>
-        if let (Some(output_root), Some(package_folder)) = (
-            package.path.parent(),
-            package.path.file_name().and_then(|n| n.to_str()),
-        ) {
-            let root_profiles_dir = output_root.join("profiles");
-            fs::create_dir_all(&root_profiles_dir).with_context(|| {
-                format!(
-                    "failed to create root profiles directory {}",
-                    root_profiles_dir.display()
-                )
-            })?;
-
-            let root_package_dir = root_profiles_dir.join(package_folder);
-            fs::create_dir_all(&root_package_dir).with_context(|| {
-                format!(
-                    "failed to create package profiles directory {}",
-                    root_package_dir.display()
-                )
-            })?;
-
-            for profile in &package.profiles {
-                let file_path = root_package_dir.join(&profile.file_name);
-                fs::write(&file_path, &profile.typescript_code)
-                    .with_context(|| format!("failed to write {}", file_path.display()))?;
-            }
-
-            fs::write(root_package_dir.join("index.ts"), &profile_index).with_context(|| {
-                format!(
-                    "failed to write root profiles index for package {}",
-                    package_folder
-                )
-            })?;
-
-            write_global_profiles_index(&root_profiles_dir)?;
-        }
     }
 
     // Write main index with all exports
@@ -2281,48 +2333,6 @@ fn write_package(package: &PackageOutput) -> Result<()> {
     Ok(())
 }
 
-fn write_global_profiles_index(root_profiles_dir: &Path) -> Result<()> {
-    if !root_profiles_dir.exists() {
-        return Ok(());
-    }
-
-    let mut packages = Vec::new();
-    for entry in fs::read_dir(root_profiles_dir).with_context(|| {
-        format!(
-            "failed to read root profiles directory {}",
-            root_profiles_dir.display()
-        )
-    })? {
-        let entry = entry?;
-        let metadata = entry.metadata()?;
-        if metadata.is_dir() {
-            if let Some(name) = entry.file_name().to_str() {
-                packages.push(name.to_string());
-            }
-        }
-    }
-
-    if packages.is_empty() {
-        return Ok(());
-    }
-
-    packages.sort();
-    packages.dedup();
-
-    let mut content = String::new();
-    for package in packages {
-        content.push_str(&format!("export * from \"./{}\";\n", package));
-    }
-
-    fs::write(root_profiles_dir.join("index.ts"), content).with_context(|| {
-        format!(
-            "failed to write root profiles barrel {}",
-            root_profiles_dir.join("index.ts").display()
-        )
-    })?;
-
-    Ok(())
-}
 
 /// Extract all FHIR primitive type names from a type expression
 /// Handles simple types (FhirString), optional types (FhirBoolean | undefined),
@@ -2573,14 +2583,16 @@ fn build_render_structure(
                     }
 
                     // Try to find this type's location
-                    if let Some(stem) = name_to_stem.get(type_ref) {
-                        schema_type_refs_to_add
-                            .insert(type_ref.clone(), (package_folder.to_string(), stem.clone()));
-                    } else if let Some(type_registry) = &config.type_registry
+                    // CRITICAL: Check type_registry FIRST for correct cross-package imports
+                    if let Some(type_registry) = &config.type_registry
                         && let Some((pkg_folder, stem)) = type_registry.get(type_ref)
                     {
                         schema_type_refs_to_add
                             .insert(type_ref.clone(), (pkg_folder.to_string(), stem.to_string()));
+                    } else if let Some(stem) = name_to_stem.get(type_ref) {
+                        // Fallback for types not in registry
+                        schema_type_refs_to_add
+                            .insert(type_ref.clone(), (package_folder.to_string(), stem.clone()));
                     }
                 }
             }
@@ -2904,20 +2916,11 @@ fn build_render_structure(
             }
 
             // Try to find this type's location and add to imports_map
-            if let Some(stem) = name_to_stem.get(&base_type) {
-                // Same package
-                debug!(
-                    "Adding {} to imports_map for {} (stem: {})",
-                    base_type, type_name, stem
-                );
-                imports_map.insert(
-                    base_type.clone(),
-                    (package_folder.to_string(), stem.clone()),
-                );
-            } else if let Some(type_registry) = &config.type_registry
+            // CRITICAL: Check type_registry FIRST for correct cross-package imports
+            if let Some(type_registry) = &config.type_registry
                 && let Some((pkg_folder, stem)) = type_registry.get(&base_type)
             {
-                // Cross-package lookup
+                // Use type_registry for authoritative package info
                 debug!(
                     "Adding {} to imports_map for {} via type_registry (pkg: {}, stem: {})",
                     base_type, type_name, pkg_folder, stem
@@ -2925,6 +2928,16 @@ fn build_render_structure(
                 imports_map.insert(
                     base_type.clone(),
                     (pkg_folder.to_string(), stem.to_string()),
+                );
+            } else if let Some(stem) = name_to_stem.get(&base_type) {
+                // Fallback for types not in registry (local nested types)
+                debug!(
+                    "Adding {} to imports_map for {} (stem: {})",
+                    base_type, type_name, stem
+                );
+                imports_map.insert(
+                    base_type.clone(),
+                    (package_folder.to_string(), stem.clone()),
                 );
             } else {
                 // Check if it exists with different casing
@@ -3149,11 +3162,27 @@ fn build_render_structure(
 }
 
 fn top_level_elements(definition: &ResourceDefinition) -> Vec<&ElementDefinition> {
-    // Find the root element (e.g., "Patient")
+    // Find the root element. Try different identifiers in order of preference:
+    // 1. definition.id (e.g., "Patient" or "telegram-verification")
+    // 2. definition.name (e.g., "TelegramVerification" for logical resources)
+    // 3. First element's path root (fallback for edge cases)
     let root = definition
         .elements
         .iter()
-        .find(|elem| elem.path == definition.id);
+        .find(|elem| elem.path == definition.id)
+        .or_else(|| {
+            // For logical resources, the element paths may use 'name' instead of 'id'
+            definition.name.as_ref().and_then(|name| {
+                definition.elements.iter().find(|elem| elem.path == *name)
+            })
+        })
+        .or_else(|| {
+            // Fallback: use the first element with no dots (root element)
+            definition
+                .elements
+                .iter()
+                .find(|elem| !elem.path.contains('.'))
+        });
 
     // If we have a tree structure with children, collect all top-level fields
     if let Some(root) = root
@@ -3177,7 +3206,20 @@ fn top_level_elements(definition: &ResourceDefinition) -> Vec<&ElementDefinition
     }
 
     // Fallback to flat structure: find elements at depth 1 (sorted for determinism)
-    let prefix = format!("{}.", definition.id);
+    // Determine the root path prefix - try id, then name, then first element's root
+    let root_path = if definition.elements.iter().any(|e| e.path.starts_with(&format!("{}.", definition.id))) {
+        definition.id.clone()
+    } else if let Some(name) = &definition.name {
+        if definition.elements.iter().any(|e| e.path.starts_with(&format!("{}.", name))) {
+            name.clone()
+        } else {
+            definition.id.clone()
+        }
+    } else {
+        definition.id.clone()
+    };
+
+    let prefix = format!("{}.", root_path);
     let mut elements: Vec<_> = definition
         .elements
         .iter()
@@ -3234,18 +3276,23 @@ fn map_field_with_nested_context(
                     type_dependencies.push(type_name.clone());
 
                     if type_name != current_type {
-                        // Try current package first
-                        if let Some(stem) = name_to_stem.get(&type_name) {
-                            imports
-                                .entry(type_name.clone())
-                                .or_insert((current_package_folder.to_string(), stem.clone()));
-                        } else if let Some(type_registry) = &config.type_registry {
-                            // Try cross-package lookup
+                        // CRITICAL: Check type_registry FIRST for correct cross-package imports
+                        if let Some(type_registry) = &config.type_registry {
                             if let Some((pkg_folder, stem)) = type_registry.get(&type_name) {
                                 imports
                                     .entry(type_name.clone())
                                     .or_insert((pkg_folder.to_string(), stem.to_string()));
+                            } else if let Some(stem) = name_to_stem.get(&type_name) {
+                                // Fallback for types not in registry (local nested types)
+                                imports
+                                    .entry(type_name.clone())
+                                    .or_insert((current_package_folder.to_string(), stem.clone()));
                             }
+                        } else if let Some(stem) = name_to_stem.get(&type_name) {
+                            // No type_registry available, use local lookup
+                            imports
+                                .entry(type_name.clone())
+                                .or_insert((current_package_folder.to_string(), stem.clone()));
                         }
                     }
                 }
@@ -3256,18 +3303,23 @@ fn map_field_with_nested_context(
                     type_dependencies.push(base_type.clone());
 
                     if base_type != current_type {
-                        // Try current package first
-                        if let Some(stem) = name_to_stem.get(&base_type) {
-                            imports
-                                .entry(base_type.clone())
-                                .or_insert((current_package_folder.to_string(), stem.clone()));
-                        } else if let Some(type_registry) = &config.type_registry {
-                            // Try cross-package lookup
+                        // CRITICAL: Check type_registry FIRST for correct cross-package imports
+                        if let Some(type_registry) = &config.type_registry {
                             if let Some((pkg_folder, stem)) = type_registry.get(&base_type) {
                                 imports
                                     .entry(base_type.clone())
                                     .or_insert((pkg_folder.to_string(), stem.to_string()));
+                            } else if let Some(stem) = name_to_stem.get(&base_type) {
+                                // Fallback for types not in registry (local nested types)
+                                imports
+                                    .entry(base_type.clone())
+                                    .or_insert((current_package_folder.to_string(), stem.clone()));
                             }
+                        } else if let Some(stem) = name_to_stem.get(&base_type) {
+                            // No type_registry available, use local lookup
+                            imports
+                                .entry(base_type.clone())
+                                .or_insert((current_package_folder.to_string(), stem.clone()));
                         }
                     }
                 }
@@ -3366,18 +3418,25 @@ fn ensure_type_import(
         return;
     }
 
-    if let Some(stem) = name_to_stem.get(type_name) {
-        imports.insert(
-            type_name.to_string(),
-            (current_package_folder.to_string(), stem.clone()),
-        );
-    } else if let Some(registry) = type_registry {
+    // CRITICAL: Check type_registry FIRST for correct cross-package imports
+    // The type_registry has the authoritative package folder for each type.
+    // name_to_stem may contain types from all packages but doesn't track which package they're from.
+    if let Some(registry) = type_registry {
         if let Some((pkg_folder, stem)) = registry.get(type_name) {
             imports.insert(
                 type_name.to_string(),
                 (pkg_folder.to_string(), stem.to_string()),
             );
+            return;
         }
+    }
+
+    // Fallback: use name_to_stem for types not in registry (e.g., locally defined nested types)
+    if let Some(stem) = name_to_stem.get(type_name) {
+        imports.insert(
+            type_name.to_string(),
+            (current_package_folder.to_string(), stem.clone()),
+        );
     }
 }
 

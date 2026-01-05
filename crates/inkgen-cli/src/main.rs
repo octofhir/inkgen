@@ -601,12 +601,21 @@ fn to_snake_case(value: &str) -> String {
 fn split_tokens(value: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
+    let mut prev_was_lower = false;
+
     for ch in value.chars() {
         if ch.is_alphanumeric() {
+            // Split on camelCase boundary (lowercase followed by uppercase)
+            if prev_was_lower && ch.is_ascii_uppercase() && !current.is_empty() {
+                tokens.push(current.clone());
+                current.clear();
+            }
             current.push(ch);
+            prev_was_lower = ch.is_ascii_lowercase();
         } else if !current.is_empty() {
             tokens.push(current.clone());
             current.clear();
+            prev_was_lower = false;
         }
     }
     if !current.is_empty() {

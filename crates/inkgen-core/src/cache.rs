@@ -393,17 +393,27 @@ impl PackageCache {
             _ => StructureKind::Profile,
         };
 
-        let type_code = resource
-            .content
-            .get("type")
-            .and_then(Value::as_str)
-            .map(|s| s.to_string());
-
         let name = resource
             .content
             .get("name")
             .and_then(Value::as_str)
             .map(|s| s.to_string());
+
+        // For logical resources, the "type" field often contains a full URL (e.g.,
+        // "https://example.com/StructureDefinition/MyLogical"). In this case, we should
+        // use the "name" field as the type code, which contains the actual type name.
+        let raw_type = resource
+            .content
+            .get("type")
+            .and_then(Value::as_str)
+            .map(|s| s.to_string());
+
+        let type_code = match (structure_kind, &raw_type, &name) {
+            // For logical resources with URL-like type, use name instead
+            (StructureKind::Logical, Some(t), Some(n)) if t.contains("://") => Some(n.clone()),
+            // Otherwise use the raw type
+            _ => raw_type,
+        };
         let title = resource
             .content
             .get("title")
