@@ -67,6 +67,7 @@ mod tests {
             structures: vec![],
             value_sets: IndexMap::new(),
             search_parameters: vec![],
+            package_descriptor: None,
             diagnostics: vec![],
         }
     }

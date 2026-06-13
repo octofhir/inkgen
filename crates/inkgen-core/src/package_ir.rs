@@ -63,6 +63,10 @@ pub struct PackageIr {
     /// Search parameters defined by the package.
     #[serde(default)]
     pub search_parameters: Vec<SearchParameterInfo>,
+    /// The descriptor of the package this IR was built for (id, inventory) — the
+    /// target a backend generates, since `types` may include dependency packages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_descriptor: Option<PackageDescriptor>,
     /// Constructs skipped or unsupported during lowering (feeds `explain`).
     #[serde(default)]
     pub diagnostics: Vec<Diagnostic>,
@@ -259,6 +263,7 @@ where
         structures,
         value_sets,
         search_parameters,
+        package_descriptor: Some(descriptor.clone()),
         diagnostics,
     })
 }
@@ -293,6 +298,7 @@ mod tests {
             structures: vec![],
             value_sets: IndexMap::new(),
             search_parameters: vec![],
+            package_descriptor: None,
             diagnostics: vec![],
         };
 

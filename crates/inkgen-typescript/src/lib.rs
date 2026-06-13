@@ -1,9 +1,11 @@
 use std::collections::{HashMap, HashSet};
+// Only tests touch the filesystem now — the backend returns files in memory and
+// core does the writing.
+#[cfg(test)]
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use async_trait::async_trait;
 use indexmap::IndexMap;
 use inkgen_core::config::{
     FilterMode, PackageEntry, ProfileMethodConfig, ProjectFilesConfig, sanitize_package_name,
@@ -12,9 +14,8 @@ use inkgen_core::ir::{
     Derivation, ElementDefinition, ElementMax, ElementType, ResourceDefinition, ResourceKind,
 };
 use inkgen_core::{
-    DependencyAnalyzer, FhirTypeRegistry, LanguageBackend, LanguageGenerator, PackageCache,
-    PackageDescriptor, PackageId, StructureDefinitionProvider, StructureKind,
-    StructureProviderConfig, StructureSummary, TypescriptLanguageConfig,
+    DependencyAnalyzer, FhirTypeRegistry, GenerationOutput, PackageCache, PackageDescriptor,
+    PackageId, StructureKind, StructureSummary, TypescriptLanguageConfig,
 };
 use once_cell::sync::Lazy;
 use serde::Serialize;
@@ -956,6 +957,7 @@ impl TypescriptGenerator {
         &self,
         package_dir: &Path,
         descriptor: &PackageDescriptor,
+        files: &mut Vec<(PathBuf, String)>,
     ) -> Result<(usize, HashMap<String, String>)> {
         use crate::valuesets::ValueSetInfo;
         use crate::valuesets::helpers::{HelperConfig, ValueSetHelpers};
@@ -966,9 +968,8 @@ impl TypescriptGenerator {
             return Ok((0, HashMap::new()));
         };
 
-        // Create valuesets subdirectory
+        // ValueSet files live under the package's valuesets/ subdirectory.
         let valuesets_dir = package_dir.join("valuesets");
-        fs::create_dir_all(&valuesets_dir)?;
 
         // Get package folder for computing cross-package import paths
         let package_folder = self
@@ -1193,7 +1194,7 @@ impl TypescriptGenerator {
                                 }
                                 let ts_file = sections.join("\n\n");
 
-                                fs::write(&output_path, ts_file)?;
+                                files.push((output_path, ts_file));
                                 generated_count += 1;
 
                                 // Add to URL->type mapping
@@ -1402,50 +1403,37 @@ impl TypescriptGenerator {
     }
 }
 
-impl<S> LanguageBackend<S> for TypescriptGenerator
-where
-    S: StructureDefinitionProvider + Sync + Send,
-{
-    fn name(&self) -> &str {
+impl inkgen_core::Backend for TypescriptGenerator {
+    fn id(&self) -> &str {
         "typescript"
     }
 
-    fn description(&self) -> &str {
-        "TypeScript/JavaScript with type-safe FHIR models"
-    }
-
-    fn file_extension(&self) -> &str {
-        "ts"
-    }
-
-    fn supports_feature(&self, feature: &str) -> bool {
-        matches!(
-            feature,
-            "interfaces"
-                | "classes"
-                | "builders"
-                | "structural-guards"
-                | "primitives"
-                | "cross-package-imports"
-        )
-    }
-
-    fn version(&self) -> &str {
-        env!("CARGO_PKG_VERSION")
+    fn generate(
+        &self,
+        _ir: &inkgen_core::PackageIr,
+    ) -> std::result::Result<GenerationOutput, inkgen_core::BackendError> {
+        // The CLI sets the IR on the config and supplies the descriptor via
+        // `generate_package`; the package id is carried on the IR.
+        let descriptor = self
+            .config
+            .package_ir
+            .as_ref()
+            .and_then(|ir| ir.package_descriptor.clone())
+            .ok_or_else(|| {
+                inkgen_core::BackendError::from(
+                    "TypeScript backend requires a PackageIr with a descriptor",
+                )
+            })?;
+        self.generate_package(&descriptor)
+            .map_err(inkgen_core::BackendError::Other)
     }
 }
 
-#[async_trait]
-impl<S> LanguageGenerator<S> for TypescriptGenerator
-where
-    S: StructureDefinitionProvider + Sync + Send,
-{
-    async fn generate(
-        &self,
-        _service: &S,
-        descriptor: &PackageDescriptor,
-        _provider_config: &StructureProviderConfig,
-    ) -> Result<()> {
+impl TypescriptGenerator {
+    /// Generate the package into an in-memory [`GenerationOutput`] with paths
+    /// relative to the configured output directory. The backend never writes to
+    /// disk — core owns file output.
+    pub fn generate_package(&self, descriptor: &PackageDescriptor) -> Result<GenerationOutput> {
         // The package IR is the single source of truth — the backend reads every
         // input from it and never touches the provider or canonical manager.
         let ir = self
@@ -1511,7 +1499,7 @@ where
                 FilterMode::None => {
                     // Skip this package entirely
                     info!("Skipping package {} (filter = None)", descriptor.id);
-                    return Ok(());
+                    return Ok(GenerationOutput::new());
                 }
                 FilterMode::Include => {
                     // Keep only whitelisted RESOURCES (not types/primitives/logical)
@@ -1597,7 +1585,7 @@ where
                 "No structures matched for package {}; skipping",
                 descriptor.id
             );
-            return Ok(());
+            return Ok(GenerationOutput::new());
         }
 
         // Get the package folder name for this package
@@ -1613,16 +1601,14 @@ where
             &descriptor.id,
             &self.config.package_folders,
         );
-        fs::create_dir_all(&package_dir).with_context(|| {
-            format!(
-                "failed to create package output directory {}",
-                package_dir.display()
-            )
-        })?;
+
+        // Collect every generated file here (absolute paths); converted to a
+        // GenerationOutput with relative paths at the end. Core does the writing.
+        let mut files: Vec<(PathBuf, String)> = Vec::new();
 
         // Phase 0: Generate ValueSets/Codes before structures
         let (valueset_count, valueset_url_to_type) = if self.config.generate_valuesets {
-            self.generate_valuesets(&package_dir, descriptor)?
+            self.generate_valuesets(&package_dir, descriptor, &mut files)?
         } else {
             (0, HashMap::new())
         };
@@ -1722,7 +1708,7 @@ where
                 "Package {} has no structures after filtering; nothing to generate",
                 descriptor.id
             );
-            return Ok(());
+            return Ok(GenerationOutput::new());
         }
 
         // Phase 1: Build complete name mappings for ALL structures first
@@ -2125,41 +2111,47 @@ where
             project_config: self.config.config.clone(),
         };
 
-        write_package(&package_output)?;
+        write_package(&package_output, &mut files)?;
         info!(
-            "Generated {} file(s) in {}",
+            "Generated {} structure file(s) for {}",
             package_output.structures.len(),
             package_dir.display()
         );
 
-        Ok(())
+        // Convert absolute paths to GenerationOutput entries relative to the
+        // configured output directory; core writes them.
+        let mut output = GenerationOutput::new();
+        for (path, content) in files {
+            let rel = path
+                .strip_prefix(&self.config.output_dir)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            output.add_file(rel, content);
+        }
+        Ok(output)
     }
 }
 
-fn write_package(package: &PackageOutput) -> Result<()> {
+fn write_package(package: &PackageOutput, files: &mut Vec<(PathBuf, String)>) -> Result<()> {
     // Write FHIR primitives with branded types first (needed by all other files)
     let mut primitives_context = TeraContext::new();
     primitives_context.insert("branded_primitives", &package.branded_primitives);
     primitives_context.insert("zod_schemas", &package.zod_schemas);
     let primitives_content = templates::render("primitives.ts.tera", &primitives_context)?;
-    fs::write(package.path.join("primitives.ts"), primitives_content)
-        .with_context(|| "failed to write primitives.ts")?;
+    files.push((package.path.join("primitives.ts"), primitives_content));
 
     // Write main structures
     for structure in &package.structures {
         let mut context = TeraContext::new();
         context.insert("structure", structure);
         let content = templates::render("structure.ts.tera", &context)?;
-        let file_path = package.path.join(&structure.file_name);
-        fs::write(&file_path, content)
-            .with_context(|| format!("failed to write {}", file_path.display()))?;
+        files.push((package.path.join(&structure.file_name), content));
     }
 
     // Write value sets
     for vs in &package.valuesets {
-        let file_path = package.path.join(&vs.file_name);
-        fs::write(&file_path, &vs.typescript_code)
-            .with_context(|| format!("failed to write {}", file_path.display()))?;
+        files.push((package.path.join(&vs.file_name), vs.typescript_code.clone()));
     }
 
     // Write extensions if any are defined
@@ -2181,14 +2173,11 @@ fn write_package(package: &PackageOutput) -> Result<()> {
         context.insert("extensions", &package.extensions);
         context.insert("imported_types", &imported_types);
         let content = templates::render("extensions.ts.tera", &context)?;
-        fs::write(package.path.join("extensions.ts"), content)
-            .with_context(|| "failed to write extensions.ts")?;
+        files.push((package.path.join("extensions.ts"), content));
     }
 
-    // Write generic extension utilities to utils/ directory
+    // Generic extension utilities live under the package's utils/ directory.
     let utils_dir = package.path.join("utils");
-    fs::create_dir_all(&utils_dir)
-        .with_context(|| format!("failed to create utils directory {}", utils_dir.display()))?;
 
     // Compute import prefix for utils/extensions.ts
     // From utils/ subdirectory, we need to go up one level (..) to reach the package root
@@ -2203,8 +2192,7 @@ fn write_package(package: &PackageOutput) -> Result<()> {
     let mut utils_context = TeraContext::new();
     utils_context.insert("import_prefix", &utils_import_prefix);
     let utils_content = templates::render("extension_utils.ts.tera", &utils_context)?;
-    fs::write(utils_dir.join("extensions.ts"), utils_content)
-        .with_context(|| "failed to write utils/extensions.ts")?;
+    files.push((utils_dir.join("extensions.ts"), utils_content));
 
     // Write interop utilities if enabled
     if package.generate_interop
@@ -2222,9 +2210,6 @@ fn write_package(package: &PackageOutput) -> Result<()> {
             // Generate search parameters in separate directory if enabled
             if config.search_config.interfaces || config.search_config.url_builders {
                 let search_dir = utils_dir.join("search");
-                fs::create_dir_all(&search_dir).with_context(|| {
-                    format!("failed to create search directory {}", search_dir.display())
-                })?;
 
                 let search_helpers = interop::search::SearchHelpers::new(
                     package.resource_types.clone(),
@@ -2235,9 +2220,7 @@ fn write_package(package: &PackageOutput) -> Result<()> {
                 // Generate split files
                 let search_files = search_helpers.generate_all_split();
                 for (file_name, content) in search_files {
-                    let file_path = search_dir.join(&file_name);
-                    fs::write(&file_path, content)
-                        .with_context(|| format!("failed to write search/{}", file_name))?;
+                    files.push((search_dir.join(&file_name), content));
                 }
 
                 // Add re-export from search directory
@@ -2247,8 +2230,7 @@ fn write_package(package: &PackageOutput) -> Result<()> {
             }
 
             // Write main interop.ts
-            fs::write(utils_dir.join("interop.ts"), interop_code)
-                .with_context(|| "failed to write utils/interop.ts")?;
+            files.push((utils_dir.join("interop.ts"), interop_code));
         }
     }
 
@@ -2284,11 +2266,10 @@ fn write_package(package: &PackageOutput) -> Result<()> {
                     }
                 });
 
-                fs::write(
-                    &package_json_path,
+                files.push((
+                    package_json_path,
                     serde_json::to_string_pretty(&package_json)?,
-                )
-                .with_context(|| "failed to write package.json")?;
+                ));
             }
         }
     }
@@ -2316,35 +2297,28 @@ fn write_package(package: &PackageOutput) -> Result<()> {
                 let tsconfig_content = crate::templates::render("tsconfig.json.tera", &context)
                     .with_context(|| "failed to render tsconfig.json.tera")?;
 
-                fs::write(&tsconfig_path, tsconfig_content)
-                    .with_context(|| "failed to write tsconfig.json")?;
+                files.push((tsconfig_path, tsconfig_content));
             }
         }
     }
 
-    // Create profiles subdirectory if there are profiles
+    // Profiles live under the package's profiles/ subdirectory.
     if !package.profiles.is_empty() {
         let profiles_dir = package.path.join("profiles");
-        fs::create_dir_all(&profiles_dir).with_context(|| {
-            format!(
-                "failed to create profiles directory {}",
-                profiles_dir.display()
-            )
-        })?;
 
         // Write profiles to profiles/ subfolder
         for profile in &package.profiles {
-            let file_path = profiles_dir.join(&profile.file_name);
-            fs::write(&file_path, &profile.typescript_code)
-                .with_context(|| format!("failed to write {}", file_path.display()))?;
+            files.push((
+                profiles_dir.join(&profile.file_name),
+                profile.typescript_code.clone(),
+            ));
         }
 
         // Generate profiles/index.ts barrel export
         let mut profile_index_context = TeraContext::new();
         profile_index_context.insert("profiles", &package.profiles);
         let profile_index = templates::render("profiles-index.ts.tera", &profile_index_context)?;
-        fs::write(profiles_dir.join("index.ts"), &profile_index)
-            .with_context(|| "failed to write profiles/index.ts")?;
+        files.push((profiles_dir.join("index.ts"), profile_index));
     }
 
     // Write main index with all exports
@@ -2352,7 +2326,7 @@ fn write_package(package: &PackageOutput) -> Result<()> {
     context.insert("structures", &package.structures);
     context.insert("profiles", &package.profiles);
     let index_content = templates::render("index.ts.tera", &context)?;
-    fs::write(package.path.join("index.ts"), index_content)?;
+    files.push((package.path.join("index.ts"), index_content));
     Ok(())
 }
 
@@ -3810,10 +3784,15 @@ mod tests {
         .expect("build PackageIr");
         let mut generator = TypescriptGenerator::new(config.clone());
         generator.set_package_ir(Some(std::sync::Arc::new(ir)));
-        generator
-            .generate(&provider, &descriptor, &provider_config)
-            .await
-            .expect("generate");
+        let output = generator.generate_package(&descriptor).expect("generate");
+        // The backend returns files; write them to disk for the on-disk checks.
+        for (rel, content) in &output.files {
+            let path = config.output_dir.join(rel);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).expect("create parent");
+            }
+            fs::write(&path, content).expect("write generated file");
+        }
 
         let mut package_dir =
             package_output_dir(&config.output_dir, &descriptor.id, &config.package_folders);

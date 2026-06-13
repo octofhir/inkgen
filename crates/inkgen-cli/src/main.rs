@@ -9,9 +9,8 @@ use anyhow::{Context, Result};
 use clap::{ArgAction, Args, CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 use inkgen_core::{
-    BackendRegistry, BaseStructureService, DependencyAnalyzer, FilterMode, InstallMode,
-    LanguageGenerator, PackageCache, PackageCacheConfig, StructureDefinitionProvider,
-    StructureFilter, StructureKind,
+    BaseStructureService, DependencyAnalyzer, FilterMode, InstallMode, PackageCache,
+    PackageCacheConfig, StructureDefinitionProvider, StructureFilter, StructureKind,
 };
 use inkgen_typescript::{TypeRegistry, TypescriptGenerator, TypescriptGeneratorConfig};
 use project::{ProjectContext, describe_source, select_requests};
@@ -572,10 +571,12 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
         .with_context(|| format!("failed to build PackageIr for {}", descriptor.id))?;
         generator.set_package_ir(Some(std::sync::Arc::new(ir)));
 
-        generator
-            .generate(&*service, &descriptor, &provider_config)
-            .await
+        // The backend returns files in memory; core owns writing them to disk.
+        let output = generator
+            .generate_package(&descriptor)
             .with_context(|| format!("failed to generate for {}", descriptor.id))?;
+        write_generation_output(&generator.config().output_dir, &output)
+            .with_context(|| format!("failed to write output for {}", descriptor.id))?;
     }
     let elapsed = started.elapsed();
 
@@ -700,6 +701,24 @@ async fn generate_rust(args: GenerateRustArgs) -> Result<()> {
         );
     }
 
+    Ok(())
+}
+
+/// Write a backend's `GenerationOutput` to disk under `base`, creating parent
+/// directories. Core owns file writing — backends only declare paths + contents.
+fn write_generation_output(
+    base: &std::path::Path,
+    output: &inkgen_core::GenerationOutput,
+) -> Result<()> {
+    let mut entries: Vec<(&String, &String)> = output.files.iter().collect();
+    entries.sort_by(|a, b| a.0.cmp(b.0));
+    for (rel, content) in entries {
+        let path = base.join(rel);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&path, content).with_context(|| format!("failed to write {}", path.display()))?;
+    }
     Ok(())
 }
 
@@ -1118,81 +1137,24 @@ fn split_tokens(value: &str) -> Vec<String> {
     tokens
 }
 
-/// Create and populate the backend registry with all available backends.
-///
-/// This function serves as the central registry for all language backends.
-/// When adding a new backend, register it here.
-fn create_backend_registry(
-    generator_config: TypescriptGeneratorConfig,
-) -> BackendRegistry<BaseStructureService> {
-    let mut registry = BackendRegistry::new();
-
-    // Register TypeScript backend
-    registry.register(Box::new(TypescriptGenerator::new(generator_config)));
-
-    // Future: Register other backends here
-    // registry.register(Box::new(RustGenerator::new(rust_config)));
-    // registry.register(Box::new(PythonGenerator::new(python_config)));
-    // registry.register(Box::new(GoGenerator::new(go_config)));
-
-    registry
-}
-
-/// List all available code generation backends.
+/// List all available code generation backends (those implementing the
+/// `inkgen_core::Backend` contract over a resolved `PackageIr`).
 fn list_backends_command() -> Result<()> {
-    // Create a minimal registry just for listing (doesn't need real config)
-    let temp_config = TypescriptGeneratorConfig::from_manifest(
-        None,
-        PathBuf::from("."),
-        None,
-        std::collections::HashMap::new(),
-        std::collections::HashMap::new(),
-        None,
-        None,
-        None,
-    );
-
-    let registry = create_backend_registry(temp_config);
-
     println!("Available code generation backends:\n");
-
-    let mut backends = registry.list().to_vec();
-    backends.sort();
-
-    for name in backends {
-        if let Some(backend) = registry.get(name) {
-            println!("  {} - {}", name, backend.description());
-            println!("    Version: {}", backend.version());
-            println!("    File extension: .{}", backend.file_extension());
-
-            // Check for common features
-            let features = [
-                "interfaces",
-                "classes",
-                "builders",
-                "validation",
-                "serialization",
-                "structural-guards",
-                "primitives",
-                "cross-package-imports",
-            ];
-
-            let supported: Vec<_> = features
-                .iter()
-                .filter(|&&f| backend.supports_feature(f))
-                .collect();
-
-            if !supported.is_empty() {
-                println!(
-                    "    Features: {}",
-                    supported.iter().map(|&&f| f).collect::<Vec<_>>().join(", ")
-                );
-            }
-            println!();
-        }
+    let backends = [
+        (
+            "typescript",
+            "TypeScript/JavaScript with type-safe FHIR models",
+            "ts",
+        ),
+        ("rust", "Rust structs with serde (reference backend)", "rs"),
+    ];
+    for (id, description, ext) in backends {
+        println!("  {id} - {description}");
+        println!("    File extension: .{ext}");
+        println!();
     }
-
-    println!("Total backends: {}", registry.len());
+    println!("Total backends: {}", backends.len());
     Ok(())
 }
 
