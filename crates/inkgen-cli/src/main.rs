@@ -546,7 +546,7 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
         None
     };
 
-    let generator = TypescriptGenerator::new(generator_config);
+    let mut generator = TypescriptGenerator::new(generator_config);
 
     // Capture package summary for the optional report before consuming descriptors.
     let report_packages: Vec<(String, usize)> = descriptors
@@ -558,6 +558,20 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
     info!("Phase 3: Generating TypeScript code with filtering...");
     let started = std::time::Instant::now();
     for descriptor in descriptors {
+        // Build the PackageIr once per package — the single source of truth the
+        // backend reads from instead of the provider/cache.
+        let ir = inkgen_core::build_package_ir(
+            &*service,
+            cache.as_ref(),
+            &descriptor,
+            &provider_config,
+            Some(descriptor.id.version.clone()),
+            Vec::new(),
+        )
+        .await
+        .with_context(|| format!("failed to build PackageIr for {}", descriptor.id))?;
+        generator.set_package_ir(Some(std::sync::Arc::new(ir)));
+
         generator
             .generate(&*service, &descriptor, &provider_config)
             .await

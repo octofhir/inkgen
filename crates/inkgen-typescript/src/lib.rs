@@ -176,6 +176,10 @@ mod config {
         pub type_registry: Option<super::imports::TypeRegistry>,
         /// Package cache for loading ValueSets and other resources (optional)
         pub package_cache: Option<std::sync::Arc<PackageCache>>,
+        /// Resolved package IR — the single source of truth. When set, the
+        /// backend reads structures, type metadata, value sets and search
+        /// parameters from it instead of the provider/cache (the P1-01 cutover).
+        pub package_ir: Option<std::sync::Arc<inkgen_core::PackageIr>>,
         /// Generate profile classes instead of interfaces
         pub profile_classes: bool,
         /// Profile method generation configuration
@@ -379,6 +383,7 @@ mod config {
                 dependency_analyzer,
                 type_registry,
                 package_cache,
+                package_ir: None,
                 profile_classes,
                 profile_methods,
                 zod_schemas,
@@ -920,6 +925,31 @@ impl TypescriptGenerator {
         &self.config
     }
 
+    /// Set the resolved package IR (single source of truth) for the next
+    /// `generate` call. Built once per package by the CLI.
+    pub fn set_package_ir(&mut self, ir: Option<std::sync::Arc<inkgen_core::PackageIr>>) {
+        self.config.package_ir = ir;
+    }
+
+    /// Resolve a structure by canonical URL from the package IR (single source of
+    /// truth), falling back to the provider only when the IR is absent or does
+    /// not contain it.
+    async fn resolve_structure<S>(
+        &self,
+        service: &S,
+        canonical: &str,
+    ) -> inkgen_core::CoreResult<ResourceDefinition>
+    where
+        S: StructureDefinitionProvider + Sync + Send,
+    {
+        if let Some(ir) = &self.config.package_ir
+            && let Some(def) = ir.get(canonical)
+        {
+            return Ok(def.clone());
+        }
+        service.load_structure(canonical).await
+    }
+
     /// Generate ValueSet code files (Phase 0).
     ///
     /// Loads ValueSet resources from the package using the canonical manager
@@ -1314,7 +1344,7 @@ impl TypescriptGenerator {
                 type_name, canonical
             );
 
-            match service.load_structure(&canonical).await {
+            match self.resolve_structure(service, &canonical).await {
                 Ok(definition) => {
                     let kind = match definition.kind {
                         ResourceKind::PrimitiveType => StructureKind::PrimitiveType,
@@ -1427,10 +1457,17 @@ where
         provider_config: &StructureProviderConfig,
     ) -> Result<()> {
         let filter = StructureFilter::from_config(provider_config);
-        let summaries = service.list_structures(&filter).await?;
+        // Structure list comes from the package IR (single source of truth) when
+        // present; otherwise fall back to listing via the provider.
+        let summaries = match &self.config.package_ir {
+            Some(ir) => ir.structures.clone(),
+            None => service.list_structures(&filter).await?,
+        };
 
         // Build CanonicalTypeMap from the canonical manager - single source of truth for all types
-        let canonical_type_map = if let Some(cache) = &self.config.package_cache {
+        let canonical_type_map = if let Some(ir) = &self.config.package_ir {
+            ir.type_map.clone()
+        } else if let Some(cache) = &self.config.package_cache {
             let manager = cache.manager().await?;
             CanonicalTypeMap::from_manager(&manager).await?
         } else {
@@ -1617,7 +1654,13 @@ where
 
         // Load SearchParameter resources for interop generation
         let search_parameters = if self.config.interop_search_helpers {
-            if let Some(cache) = &self.config.package_cache {
+            if let Some(ir) = &self.config.package_ir {
+                info!(
+                    "Loaded {} search parameters for interop (from IR)",
+                    ir.search_parameters.len()
+                );
+                ir.search_parameters.clone()
+            } else if let Some(cache) = &self.config.package_cache {
                 match cache.load_search_parameters(&descriptor.id).await {
                     Ok(params) => {
                         info!("Loaded {} search parameters for interop", params.len());
@@ -1694,8 +1737,8 @@ where
                 continue;
             }
 
-            let structure = service
-                .load_structure(&summary.canonical_url)
+            let structure = self
+                .resolve_structure(service, &summary.canonical_url)
                 .await
                 .with_context(|| format!("failed to load {}", summary.canonical_url))?;
             entries.push((summary, structure));
@@ -3774,6 +3817,7 @@ mod tests {
             dependency_analyzer: None,
             type_registry: None,
             package_cache: None,
+            package_ir: None,
             profile_classes: false,
             profile_methods: ProfileMethodConfig::default(),
             zod_schemas: false,
