@@ -78,7 +78,7 @@ pub fn extract_extensions(resource: &ResourceDefinition) -> IndexMap<String, Ren
 
     // For Extension StructureDefinitions (type="Extension", derivation="constraint"):
     // Convert the ResourceDefinition itself to an extension
-    if is_extension_structure_definition(resource)
+    if resource.is_extension_definition()
         && let Some(render_ext) = create_render_extension_from_resource(resource)
     {
         extensions.insert(resource.url.clone(), render_ext);
@@ -88,15 +88,6 @@ pub fn extract_extensions(resource: &ResourceDefinition) -> IndexMap<String, Ren
     extract_extension_slices_from_elements(&resource.elements, &mut extensions);
 
     extensions
-}
-
-/// Check if a ResourceDefinition represents an Extension StructureDefinition.
-fn is_extension_structure_definition(resource: &ResourceDefinition) -> bool {
-    // Check if type is "Extension" and it's a constraint derivation
-    matches!(
-        resource.lineage.derivation,
-        Some(inkgen_core::ir::Derivation::Constraint)
-    ) && resource.fhir_type.as_deref() == Some("Extension")
 }
 
 /// Create a RenderExtension from an Extension StructureDefinition ResourceDefinition.
@@ -115,12 +106,10 @@ fn create_render_extension_from_resource(resource: &ResourceDefinition) -> Optio
     // Extract contexts
     let contexts = vec![]; // TODO: extract from resource.context if available
 
-    // Determine if complex by checking for Extension.extension slices
-    let is_complex = flat_elements
-        .iter()
-        .any(|elem| elem.path == "Extension.extension" && elem.slice_name.is_some());
+    // Extension shape analysis (FHIR-neutral) lives in inkgen-core.
+    let is_complex = resource.extension_is_complex();
 
-    // For simple extensions, find the value type
+    // For simple extensions, map the value[x] type to a TypeScript type.
     let value_elem = if !is_complex {
         flat_elements
             .iter()
@@ -131,11 +120,8 @@ fn create_render_extension_from_resource(resource: &ResourceDefinition) -> Optio
     let value_type = value_elem
         .and_then(|elem| elem.types.first())
         .map(|t| element_type_to_typescript_from_type(&t.code));
-    // Only a single-typed value has an unambiguous wire member name.
-    let value_type_code = value_elem
-        .filter(|elem| elem.types.len() == 1)
-        .and_then(|elem| elem.types.first())
-        .map(|t| t.code.clone());
+    // The wire-faithful type code (single-typed value only) comes from core.
+    let value_type_code = resource.simple_extension_value_type_code();
 
     // Collect nested types for complex extensions
     let nested_types = if is_complex {

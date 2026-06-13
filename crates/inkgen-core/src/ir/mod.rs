@@ -94,6 +94,39 @@ impl ResourceDefinition {
             element.sort();
         }
     }
+
+    /// True if this StructureDefinition defines an Extension (a `constraint`
+    /// derivation on the `Extension` type). FHIR-neutral — any backend that
+    /// emits extension types needs this exact check.
+    pub fn is_extension_definition(&self) -> bool {
+        matches!(self.lineage.derivation, Some(Derivation::Constraint))
+            && self.fhir_type.as_deref() == Some("Extension")
+    }
+
+    /// True if this extension is complex, i.e. it carries sub-extensions
+    /// (`Extension.extension` slices) rather than a single `value[x]`. Reads the
+    /// flat element list, which preserves slices. FHIR-neutral.
+    pub fn extension_is_complex(&self) -> bool {
+        self.flat_elements
+            .iter()
+            .any(|elem| elem.path == "Extension.extension" && elem.slice_name.is_some())
+    }
+
+    /// The FHIR type code of a simple extension's single-typed `Extension.value[x]`
+    /// (e.g. `dateTime`, `Reference`), or `None` when the extension is complex or
+    /// the value is untyped / a multi-type choice. This is the wire-faithful type
+    /// code; mapping it to a language type stays in the backend. FHIR-neutral.
+    pub fn simple_extension_value_type_code(&self) -> Option<String> {
+        if self.extension_is_complex() {
+            return None;
+        }
+        self.flat_elements
+            .iter()
+            .find(|elem| elem.path == "Extension.value[x]")
+            .filter(|elem| elem.types.len() == 1)
+            .and_then(|elem| elem.types.first())
+            .map(|t| t.code.clone())
+    }
 }
 
 /// Representation of a StructureDefinition element.
@@ -542,5 +575,91 @@ mod choice_tests {
         let expanded = expand_choice_elements(vec![choice_element("Patient.active", &["boolean"])]);
         assert_eq!(expanded.len(), 1);
         assert_eq!(expanded[0].path, "Patient.active");
+    }
+
+    fn extension_resource(
+        fhir_type: &str,
+        derivation: Option<Derivation>,
+        flat: Vec<ElementDefinition>,
+    ) -> ResourceDefinition {
+        ResourceDefinition {
+            id: "ext".to_string(),
+            url: "http://example.org/ext".to_string(),
+            name: None,
+            title: None,
+            description: None,
+            version: None,
+            status: None,
+            kind: ResourceKind::ComplexType,
+            fhir_type: Some(fhir_type.to_string()),
+            date: None,
+            lineage: ProfileLineage {
+                base_definition: None,
+                base_id: None,
+                derivation,
+                type_name: None,
+            },
+            elements: Vec::new(),
+            flat_elements: flat,
+            extensions: Vec::new(),
+            invariants: Vec::new(),
+        }
+    }
+
+    fn slice(path: &str, name: &str) -> ElementDefinition {
+        let mut e = choice_element(path, &[]);
+        e.slice_name = Some(name.to_string());
+        e
+    }
+
+    #[test]
+    fn is_extension_definition_requires_constraint_on_extension() {
+        assert!(
+            extension_resource("Extension", Some(Derivation::Constraint), vec![])
+                .is_extension_definition()
+        );
+        assert!(
+            !extension_resource("Patient", Some(Derivation::Constraint), vec![])
+                .is_extension_definition()
+        );
+        assert!(
+            !extension_resource("Extension", Some(Derivation::Specialization), vec![])
+                .is_extension_definition()
+        );
+    }
+
+    #[test]
+    fn extension_complexity_from_sub_extension_slices() {
+        let complex = extension_resource(
+            "Extension",
+            Some(Derivation::Constraint),
+            vec![slice("Extension.extension", "race")],
+        );
+        assert!(complex.extension_is_complex());
+        assert_eq!(complex.simple_extension_value_type_code(), None);
+
+        let simple = extension_resource(
+            "Extension",
+            Some(Derivation::Constraint),
+            vec![choice_element("Extension.value[x]", &["dateTime"])],
+        );
+        assert!(!simple.extension_is_complex());
+        assert_eq!(
+            simple.simple_extension_value_type_code(),
+            Some("dateTime".to_string())
+        );
+    }
+
+    #[test]
+    fn multi_typed_extension_value_has_no_single_code() {
+        let multi = extension_resource(
+            "Extension",
+            Some(Derivation::Constraint),
+            vec![choice_element(
+                "Extension.value[x]",
+                &["string", "Reference"],
+            )],
+        );
+        assert_eq!(multi.simple_extension_value_type_code(), None);
     }
 }
