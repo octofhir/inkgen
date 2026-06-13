@@ -1010,20 +1010,30 @@ impl TypescriptGenerator {
         for valueset_artifact in &descriptor.inventory.value_sets {
             // Resolve the ValueSet by canonical URL
             if let Some(canonical_url) = &valueset_artifact.canonical_url {
-                match manager.resolve(canonical_url).await {
-                    Ok(resolved) if resolved.resource.resource_type == "ValueSet" => {
+                // Terminology content comes from the package IR (single source of
+                // truth) when present; otherwise resolve via the manager.
+                let vs_content = if let Some(ir) = &self.config.package_ir {
+                    ir.value_sets.get(canonical_url).cloned()
+                } else {
+                    manager
+                        .resolve(canonical_url)
+                        .await
+                        .ok()
+                        .map(|r| r.resource.content)
+                };
+                match vs_content {
+                    Some(content)
+                        if content.get("resourceType").and_then(|v| v.as_str())
+                            == Some("ValueSet") =>
+                    {
                         // Extract type name from ValueSet name or ID
-                        let type_name = resolved
-                            .resource
-                            .content
+                        let type_name = content
                             .get("name")
                             .and_then(|n| n.as_str())
                             .map(naming::pascal_case)
                             .unwrap_or_else(|| {
                                 naming::pascal_case(
-                                    resolved
-                                        .resource
-                                        .content
+                                    content
                                         .get("id")
                                         .and_then(|i| i.as_str())
                                         .unwrap_or("UnknownValueSet"),
@@ -1032,7 +1042,7 @@ impl TypescriptGenerator {
 
                         // Generate TypeScript code
                         match ValueSetInfo::from_valueset(
-                            &resolved.resource.content,
+                            &content,
                             type_name.clone(),
                             Some(self.config.max_valueset_size),
                         ) {
@@ -1042,13 +1052,12 @@ impl TypescriptGenerator {
                                     .to_ascii_lowercase();
                                 let output_path = valuesets_dir.join(format!("{}.ts", file_name));
 
-                                let mut system_url =
-                                    metadata::extract_system_url(&resolved.resource.content)
-                                        .or_else(|| {
-                                            metadata::infer_codesystem_url_from_valueset(
-                                                &info.canonical_url,
-                                            )
-                                        });
+                                let mut system_url = metadata::extract_system_url(&content)
+                                    .or_else(|| {
+                                        metadata::infer_codesystem_url_from_valueset(
+                                            &info.canonical_url,
+                                        )
+                                    });
 
                                 let base_codes: Vec<(String, Option<String>)> = info
                                     .code_info
@@ -1078,14 +1087,25 @@ impl TypescriptGenerator {
                                                 type_name, system
                                             );
                                         } else {
-                                            match manager.resolve(system).await {
-                                                Ok(codesystem)
-                                                    if codesystem.resource.resource_type
-                                                        == "CodeSystem" =>
+                                            let cs_content =
+                                                if let Some(ir) = &self.config.package_ir {
+                                                    ir.value_sets.get(system).cloned()
+                                                } else {
+                                                    manager
+                                                        .resolve(system)
+                                                        .await
+                                                        .ok()
+                                                        .map(|r| r.resource.content)
+                                                };
+                                            match cs_content {
+                                                Some(cs)
+                                                    if cs
+                                                        .get("resourceType")
+                                                        .and_then(|v| v.as_str())
+                                                        == Some("CodeSystem") =>
                                                 {
-                                                    let meta = metadata::load_codesystem_metadata(
-                                                        &codesystem.resource.content,
-                                                    );
+                                                    let meta =
+                                                        metadata::load_codesystem_metadata(&cs);
                                                     if system_url.is_none() {
                                                         system_url = meta.url.clone();
                                                     }
@@ -1093,16 +1113,16 @@ impl TypescriptGenerator {
                                                     enhanced_codes =
                                                         metadata::enhance_codes(&base_codes, &meta);
                                                 }
-                                                Ok(_) => {
+                                                Some(_) => {
                                                     warn!(
                                                         "Resolved resource is not a CodeSystem: {}",
                                                         system
                                                     );
                                                 }
-                                                Err(err) => {
+                                                None => {
                                                     warn!(
-                                                        "Failed to resolve CodeSystem {} for {}: {}",
-                                                        system, type_name, err
+                                                        "Failed to resolve CodeSystem {} for {}",
+                                                        system, type_name
                                                     );
                                                 }
                                             }
@@ -1219,11 +1239,11 @@ impl TypescriptGenerator {
                             }
                         }
                     }
-                    Ok(_) => {
+                    Some(_) => {
                         warn!("Resolved resource is not a ValueSet: {}", canonical_url);
                     }
-                    Err(e) => {
-                        warn!("Failed to resolve ValueSet {}: {}", canonical_url, e);
+                    None => {
+                        warn!("Failed to resolve ValueSet: {}", canonical_url);
                     }
                 }
             } else {
