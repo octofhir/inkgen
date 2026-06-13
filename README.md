@@ -54,7 +54,7 @@ implemented are listed as **Planned** in the matrix below.
 | Slicing / discriminators | ⚠️ Partial | modeled in IR; backend coverage evolving |
 | Example Rust backend | 🧪 Experimental | `inkgen-rust` is a skeleton; `generate()` is a stub |
 | `PackageIr` handed to backends | 🗺️ Planned | backends currently consume a provider |
-| `inspect ir` command | ✅ Implemented | dumps resolved IR as JSON; `explain` / report planned |
+| `inspect ir` + generation report | ✅ Implemented | IR-as-JSON; `generate --report` writes report.md + file map; `explain` planned |
 | Python / C# / other backends | 🗺️ Planned | — |
 | WASM plugins | 🗺️ Planned | RFC stage |
 
@@ -205,8 +205,11 @@ contract (handing backends a fully-lowered IR) is described in the
 - **Diff** — `inkgen diff` shows a unified diff between two output directories.
 - **Inspect** — `inkgen inspect ir <canonical>` resolves a structure and prints
   its IR as JSON (logs go to stderr, so stdout pipes cleanly into `jq`).
-- **Planned** — generation reports and on-disk JSON debug artifacts (file map,
-  diagnostics). Tracked in the roadmap.
+- **Report** — `inkgen generate typescript --report` writes
+  `.inkgen/debug/report.md` (inputs, timing, file count/size) and
+  `generated-file-map.json` (every generated file with its byte size).
+- **Planned** — richer diagnostics (skipped/unsupported constructs, renamed
+  symbols) require generator instrumentation. Tracked in the roadmap.
 
 ---
 

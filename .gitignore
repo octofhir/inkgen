@@ -21,3 +21,6 @@ Thumbs.db
 *.tmp
 *.temp
 generated
+
+# InkGen debug artifacts (generation reports, IR dumps)
+.inkgen/

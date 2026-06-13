@@ -97,6 +97,9 @@ struct GenerateTypescriptArgs {
     /// Output directory (defaults to `generated/`).
     #[arg(long)]
     output: Option<PathBuf>,
+    /// Write a generation report and debug artifacts to `.inkgen/debug/`.
+    #[arg(long)]
+    report: bool,
 }
 
 #[derive(Args, Debug)]
@@ -502,19 +505,122 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
     );
     let generator = TypescriptGenerator::new(generator_config);
 
+    // Capture package summary for the optional report before consuming descriptors.
+    let report_packages: Vec<(String, usize)> = descriptors
+        .iter()
+        .map(|d| (d.id.to_string(), d.resource_count))
+        .collect();
+
     // Phase 3: Generate with filtering
     info!("Phase 3: Generating TypeScript code with filtering...");
+    let started = std::time::Instant::now();
     for descriptor in descriptors {
         generator
             .generate(&*service, &descriptor, &provider_config)
             .await
             .with_context(|| format!("failed to generate for {}", descriptor.id))?;
     }
+    let elapsed = started.elapsed();
+
+    let output_dir = generator.config().output_dir.clone();
+    info!("TypeScript generation complete in {}", output_dir.display());
+
+    if args.report {
+        write_generation_report(&output_dir, &report_packages, elapsed)
+            .context("failed to write generation report")?;
+    }
+    Ok(())
+}
+
+/// Write a generation report and a generated-file map to `.inkgen/debug/` in the
+/// current working directory (the call site) — never the Rust `target/` dir.
+fn write_generation_report(
+    output_dir: &std::path::Path,
+    packages: &[(String, usize)],
+    elapsed: std::time::Duration,
+) -> Result<()> {
+    let debug_dir = PathBuf::from(".inkgen").join("debug");
+    fs::create_dir_all(&debug_dir)
+        .with_context(|| format!("failed to create {}", debug_dir.display()))?;
+
+    // Collect generated files (relative path + byte size), sorted for determinism.
+    let mut files: Vec<(String, u64)> = Vec::new();
+    collect_files(output_dir, output_dir, &mut files)?;
+    files.sort_by(|a, b| a.0.cmp(&b.0));
+    let total_bytes: u64 = files.iter().map(|(_, size)| size).sum();
+
+    // generated-file-map.json
+    let file_map: Vec<serde_json::Value> = files
+        .iter()
+        .map(|(path, size)| serde_json::json!({ "path": path, "bytes": size }))
+        .collect();
+    let file_map_path = debug_dir.join("generated-file-map.json");
+    fs::write(
+        &file_map_path,
+        serde_json::to_string_pretty(&file_map).context("serialize file map")?,
+    )
+    .with_context(|| format!("failed to write {}", file_map_path.display()))?;
+
+    // report.md
+    let mut report = String::new();
+    report.push_str("# InkGen generation report\n\n");
+    report.push_str(&format!("- Output directory: `{}`\n", output_dir.display()));
+    report.push_str(&format!(
+        "- Generation time: {:.3}s\n",
+        elapsed.as_secs_f64()
+    ));
+    report.push_str(&format!("- Generated files: {}\n", files.len()));
+    report.push_str(&format!("- Total output size: {} bytes\n\n", total_bytes));
+
+    report.push_str("## Input packages\n\n");
+    report.push_str("| Package | Resources |\n|---|---|\n");
+    for (id, count) in packages {
+        report.push_str(&format!("| {} | {} |\n", id, count));
+    }
+    report.push_str("\n## Generated files\n\n");
+    report.push_str("See `generated-file-map.json` for the full list with sizes.\n");
+
+    let report_path = debug_dir.join("report.md");
+    fs::write(&report_path, &report)
+        .with_context(|| format!("failed to write {}", report_path.display()))?;
 
     info!(
-        "TypeScript generation complete in {}",
-        generator.config().output_dir.display()
+        "Wrote generation report to {} ({} files)",
+        report_path.display(),
+        files.len()
     );
+    Ok(())
+}
+
+/// Recursively collect files under `dir` as (path-relative-to-`root`, size).
+fn collect_files(
+    root: &std::path::Path,
+    dir: &std::path::Path,
+    out: &mut Vec<(String, u64)>,
+) -> Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(dir).with_context(|| format!("failed to read {}", dir.display()))? {
+        let entry = entry?;
+        let path = entry.path();
+        // Skip dependency/build directories that are not generated artifacts.
+        let name = entry.file_name();
+        if name == "node_modules" || name == "target" {
+            continue;
+        }
+        if path.is_dir() {
+            collect_files(root, &path, out)?;
+        } else {
+            let rel = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            out.push((rel, size));
+        }
+    }
     Ok(())
 }
 
