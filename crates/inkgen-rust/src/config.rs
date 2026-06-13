@@ -4,7 +4,7 @@ use serde::Deserialize;
 use std::path::PathBuf;
 
 /// Configuration for Rust code generation
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct RustGeneratorConfig {
     /// Output directory for generated files
     pub output_dir: PathBuf,

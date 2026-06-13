@@ -90,6 +90,17 @@ struct GenerateArgs {
 enum GenerateSubcommand {
     /// Generate TypeScript SDK artifacts.
     Typescript(GenerateTypescriptArgs),
+    /// Generate Rust SDK artifacts (reference backend on the PackageIr contract).
+    Rust(GenerateRustArgs),
+}
+
+#[derive(Args, Debug)]
+struct GenerateRustArgs {
+    #[command(flatten)]
+    shared: SharedCacheArgs,
+    /// Output directory (defaults to `generated/rust`).
+    #[arg(long)]
+    output: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -228,6 +239,7 @@ async fn main() -> Result<()> {
         Commands::Fetch(args) => fetch_command(args).await,
         Commands::Generate(args) => match args.command {
             GenerateSubcommand::Typescript(ts_args) => generate_typescript(ts_args).await,
+            GenerateSubcommand::Rust(rust_args) => generate_rust(rust_args).await,
         },
         Commands::Inspect(args) => match args.command {
             InspectSubcommand::Ir(ir_args) => inspect_ir(ir_args).await,
@@ -585,6 +597,94 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
         write_generation_report(&output_dir, &report_packages, elapsed)
             .context("failed to write generation report")?;
     }
+    Ok(())
+}
+
+/// Generate a Rust SDK via the reference backend on the `PackageIr` contract.
+///
+/// Unlike `generate_typescript` (which still runs the provider-based pipeline),
+/// this path builds a `PackageIr` once in core and hands it to a `Backend` that
+/// makes zero provider/resolver calls — the proof the IR is language-neutral.
+async fn generate_rust(args: GenerateRustArgs) -> Result<()> {
+    use inkgen_core::{Backend, build_package_ir};
+    use inkgen_rust::{RustGenerator, RustGeneratorConfig};
+
+    let context = ProjectContext::load(args.shared.config.clone())?;
+    context.validate()?;
+    let cache_config = context.build_cache_config(
+        args.shared.packages_dir.clone(),
+        args.shared.cache_dir.clone(),
+        args.shared.registry_url.clone(),
+    )?;
+
+    let packages = select_requests(&context.package_requests(), &args.shared.packages);
+    if packages.is_empty() {
+        warn!("No packages matched the provided filters.");
+        return Ok(());
+    }
+    if args.shared.dry_run {
+        info!("dry run: would generate Rust for packages:");
+        for request in &packages {
+            info!("  - {}", request.id);
+        }
+        return Ok(());
+    }
+
+    let cache = Arc::new(build_cache(cache_config).await?);
+    let resolver = inkgen_core::PackageResolver::new(cache.clone());
+    let mode = if args.shared.offline {
+        InstallMode::OfflineOnly
+    } else {
+        InstallMode::OnlinePreferred
+    };
+    let descriptors = resolver.ensure_packages(&packages, mode).await?;
+    let service = BaseStructureService::from_project_config(cache.clone(), context.manifest());
+    let provider_config = context.manifest().structure_config();
+
+    let output_dir = args
+        .output
+        .clone()
+        .unwrap_or_else(|| context.default_output_dir().join("rust"));
+
+    let backend = RustGenerator::new(RustGeneratorConfig::new(output_dir.clone()));
+
+    for descriptor in &descriptors {
+        // Build the IR once, in core. The backend never touches the provider.
+        let ir = build_package_ir(
+            &service,
+            descriptor,
+            &provider_config,
+            Some(descriptor.id.version.clone()),
+            Vec::new(),
+        )
+        .await
+        .with_context(|| format!("failed to build PackageIr for {}", descriptor.id))?;
+
+        let output = backend
+            .generate(&ir)
+            .map_err(|err| anyhow::anyhow!("rust backend failed: {err}"))?;
+
+        // Core owns writing: deterministic order, create parent dirs.
+        fs::create_dir_all(&output_dir)
+            .with_context(|| format!("failed to create {}", output_dir.display()))?;
+        let mut files: Vec<(&String, &String)> = output.files.iter().collect();
+        files.sort_by(|a, b| a.0.cmp(b.0));
+        for (rel, content) in files {
+            let path = output_dir.join(rel);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&path, content)
+                .with_context(|| format!("failed to write {}", path.display()))?;
+        }
+        info!(
+            "Rust backend: wrote {} file(s) for {} to {}",
+            output.len(),
+            descriptor.id,
+            output_dir.display()
+        );
+    }
+
     Ok(())
 }
 

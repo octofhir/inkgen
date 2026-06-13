@@ -10,10 +10,12 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 
 inkgen-core = { path = "../inkgen-core" }
 
 [dev-dependencies]
+indexmap = { workspace = true }
 insta = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
 tempfile = { workspace = true }
