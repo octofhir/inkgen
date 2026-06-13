@@ -69,6 +69,8 @@ impl PackageCacheConfig {
             packages_dir: self.packages_dir.clone(),
             max_cache_size: "2GB".to_string(),
             connection_pool_size: self.connection_pool_size,
+            // Keep shared $HOME/.fhir mirroring off (avoids cross-tool races).
+            fhir_cache_compat: false,
         }
     }
 
@@ -77,6 +79,11 @@ impl PackageCacheConfig {
             url: self.registry_url.clone(),
             timeout: 30,
             retry_attempts: 3,
+            fallbacks: vec!["https://packages2.fhir.org/packages".to_string()],
+            extra: Vec::new(),
+            token_env: None,
+            // Parallel download cap (perf): 16 is the canonical-manager default.
+            parallel_downloads: 16,
         }
     }
 }
