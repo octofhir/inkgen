@@ -680,19 +680,8 @@ async fn generate_rust(args: GenerateRustArgs) -> Result<()> {
             .generate(&ir)
             .map_err(|err| anyhow::anyhow!("rust backend failed: {err}"))?;
 
-        // Core owns writing: deterministic order, create parent dirs.
-        fs::create_dir_all(&output_dir)
-            .with_context(|| format!("failed to create {}", output_dir.display()))?;
-        let mut files: Vec<(&String, &String)> = output.files.iter().collect();
-        files.sort_by(|a, b| a.0.cmp(b.0));
-        for (rel, content) in files {
-            let path = output_dir.join(rel);
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::write(&path, content)
-                .with_context(|| format!("failed to write {}", path.display()))?;
-        }
+        // Core owns writing.
+        write_generation_output(&output_dir, &output)?;
         info!(
             "Rust backend: wrote {} file(s) for {} to {}",
             output.len(),
