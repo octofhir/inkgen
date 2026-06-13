@@ -44,12 +44,18 @@ pub struct SlicePattern {
 }
 
 /// Extract all slice patterns from a resource definition.
+///
+/// Reads `flat_elements` — the flattened snapshot — rather than the nested
+/// `elements` tree: for profiles the nested tree is sparse (constraints and
+/// slice members live only in the flat snapshot), so the nested view misses
+/// slicing entirely. The flat list carries the slicing parent, its slice
+/// members, and their cardinality/fixed/pattern for every definition.
 pub fn detect_slices(resource: &ResourceDefinition) -> Vec<SlicePattern> {
     let mut patterns = Vec::new();
 
-    for element in &resource.elements {
+    for element in &resource.flat_elements {
         if let Some(slicing) = &element.slicing {
-            let mut slices = find_slices_for_parent(&resource.elements, &element.path);
+            let mut slices = find_slices_for_parent(&resource.flat_elements, &element.path);
 
             if !slices.is_empty() {
                 let is_open = slicing.rules.to_lowercase() == "open"
