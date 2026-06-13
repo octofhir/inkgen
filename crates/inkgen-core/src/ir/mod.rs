@@ -330,6 +330,42 @@ impl BindingDefinition {
     }
 }
 
+/// How a coded element's binding lowers to a type.
+///
+/// FHIR-neutral: every backend makes the same call from the same rule
+/// (`required`/`extensible` + a resolvable ValueSet → enumerate; otherwise keep
+/// the base primitive), then maps the canonical name to its own identifier.
+/// Resolved once by [`crate::package_ir::PackageIr::lower_binding`] against the
+/// package's resolved ValueSets.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BindingLowering {
+    /// The binding enumerates (required/extensible) and its ValueSet resolves to
+    /// a concrete set of codes — lower to a closed type named after the ValueSet.
+    Enumerated {
+        /// Canonical URL of the bound ValueSet.
+        value_set_url: String,
+        /// FHIR-neutral canonical type name (ValueSet `name`, else `id`, else
+        /// `UnknownValueSet`). The backend applies its own identifier casing and
+        /// sanitization — this string is deliberately not pre-cased.
+        type_name: String,
+    },
+    /// The element keeps its base primitive type. `reason` is provenance for the
+    /// `explain` surface.
+    Open { reason: OpenReason },
+}
+
+/// Why a binding did not lower to an enumerated type (provenance for `explain`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OpenReason {
+    /// Binding is `preferred`/`example` — advisory only, no closed type.
+    AdvisoryStrength,
+    /// Strong binding, but the bound ValueSet could not be resolved to codes.
+    ValueSetUnresolved,
+    /// No binding, or the binding carries no ValueSet URL.
+    NoValueSet,
+}
+
 /// Binding strength enumeration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

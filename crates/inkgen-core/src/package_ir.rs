@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::canonical_map::CanonicalTypeMap;
-use crate::ir::ResourceDefinition;
+use crate::ir::{BindingDefinition, BindingLowering, OpenReason, ResourceDefinition};
 use crate::search::SearchParameterInfo;
 use crate::services::{StructureDefinitionProvider, StructureFilter};
 use crate::{
@@ -89,6 +89,51 @@ impl PackageIr {
             .get(name)
             .and_then(|url| self.types.get(url))
     }
+
+    /// Resolve how a coded element's binding lowers to a type.
+    ///
+    /// FHIR-neutral (P1-02): the decision a TS union, Rust enum or Python
+    /// `Literal` all make, resolved once here against the package's
+    /// [`value_sets`](Self::value_sets). `required`/`extensible` bindings whose
+    /// ValueSet resolves enumerate; everything else keeps the base primitive,
+    /// with an [`OpenReason`] for provenance. The returned `type_name` is the
+    /// canonical (un-cased) ValueSet name — the backend applies its own
+    /// identifier casing.
+    pub fn lower_binding(&self, binding: &BindingDefinition) -> BindingLowering {
+        if !binding.is_enumerable() {
+            return BindingLowering::Open {
+                reason: OpenReason::AdvisoryStrength,
+            };
+        }
+        let Some(url) = &binding.value_set else {
+            return BindingLowering::Open {
+                reason: OpenReason::NoValueSet,
+            };
+        };
+        match self.value_sets.get(url) {
+            Some(vs) if vs.get("resourceType").and_then(Value::as_str) == Some("ValueSet") => {
+                BindingLowering::Enumerated {
+                    value_set_url: url.clone(),
+                    type_name: value_set_type_name(vs),
+                }
+            }
+            _ => BindingLowering::Open {
+                reason: OpenReason::ValueSetUnresolved,
+            },
+        }
+    }
+}
+
+/// The FHIR-neutral canonical type name of a ValueSet: its `name`, else `id`,
+/// else `UnknownValueSet`. Matches the name the TS ValueSet emitter derives, so
+/// `pascal_case` of this equals the generated ValueSet type identifier.
+fn value_set_type_name(value_set: &Value) -> String {
+    value_set
+        .get("name")
+        .and_then(Value::as_str)
+        .or_else(|| value_set.get("id").and_then(Value::as_str))
+        .unwrap_or("UnknownValueSet")
+        .to_string()
 }
 
 /// A construct that could not be lowered, recorded for transparency (`explain`).
@@ -271,6 +316,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ir::BindingStrength;
 
     #[test]
     fn generation_output_collects_files() {
@@ -306,5 +352,99 @@ mod tests {
         assert!(ir.get("http://example/Patient").is_none());
         assert_eq!(ir.types().count(), 0);
         assert_eq!(ir.contract_version, CONTRACT_VERSION);
+    }
+
+    fn ir_with_value_sets(value_sets: IndexMap<String, Value>) -> PackageIr {
+        PackageIr {
+            contract_version: CONTRACT_VERSION,
+            id: "test".to_string(),
+            fhir_version: None,
+            dependencies: vec![],
+            types: IndexMap::new(),
+            canonical_index: IndexMap::new(),
+            type_map: CanonicalTypeMap::default(),
+            structures: vec![],
+            value_sets,
+            search_parameters: vec![],
+            package_descriptor: None,
+            diagnostics: vec![],
+        }
+    }
+
+    fn binding(strength: BindingStrength, value_set: Option<&str>) -> BindingDefinition {
+        BindingDefinition {
+            strength,
+            value_set: value_set.map(str::to_string),
+            description: None,
+            additional: IndexMap::new(),
+        }
+    }
+
+    #[test]
+    fn lower_binding_enumerates_required_with_resolvable_value_set() {
+        let url = "http://hl7.org/fhir/ValueSet/administrative-gender";
+        let mut vs = IndexMap::new();
+        vs.insert(
+            url.to_string(),
+            serde_json::json!({ "resourceType": "ValueSet", "name": "AdministrativeGender" }),
+        );
+        let ir = ir_with_value_sets(vs);
+        assert_eq!(
+            ir.lower_binding(&binding(BindingStrength::Required, Some(url))),
+            BindingLowering::Enumerated {
+                value_set_url: url.to_string(),
+                type_name: "AdministrativeGender".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn lower_binding_falls_back_to_id_then_unknown() {
+        let url = "http://example.org/ValueSet/vs";
+        let mut vs = IndexMap::new();
+        vs.insert(
+            url.to_string(),
+            serde_json::json!({ "resourceType": "ValueSet", "id": "my-vs" }),
+        );
+        let ir = ir_with_value_sets(vs);
+        assert_eq!(
+            ir.lower_binding(&binding(BindingStrength::Extensible, Some(url))),
+            BindingLowering::Enumerated {
+                value_set_url: url.to_string(),
+                type_name: "my-vs".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn lower_binding_open_reasons() {
+        let ir = ir_with_value_sets(IndexMap::new());
+        // Advisory strength → no enumeration regardless of ValueSet.
+        assert_eq!(
+            ir.lower_binding(&binding(
+                BindingStrength::Preferred,
+                Some("http://x/ValueSet/y")
+            )),
+            BindingLowering::Open {
+                reason: OpenReason::AdvisoryStrength
+            }
+        );
+        // Strong binding, no ValueSet URL.
+        assert_eq!(
+            ir.lower_binding(&binding(BindingStrength::Required, None)),
+            BindingLowering::Open {
+                reason: OpenReason::NoValueSet
+            }
+        );
+        // Strong binding, ValueSet URL unresolved.
+        assert_eq!(
+            ir.lower_binding(&binding(
+                BindingStrength::Required,
+                Some("http://x/ValueSet/missing")
+            )),
+            BindingLowering::Open {
+                reason: OpenReason::ValueSetUnresolved
+            }
+        );
     }
 }

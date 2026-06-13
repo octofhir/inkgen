@@ -11,7 +11,8 @@ use inkgen_core::config::{
     FilterMode, PackageEntry, ProfileMethodConfig, ProjectFilesConfig, sanitize_package_name,
 };
 use inkgen_core::ir::{
-    Derivation, ElementDefinition, ElementMax, ElementType, ResourceDefinition, ResourceKind,
+    BindingDefinition, BindingLowering, Derivation, ElementDefinition, ElementMax, ElementType,
+    ResourceDefinition, ResourceKind,
 };
 use inkgen_core::{
     DependencyAnalyzer, FhirTypeRegistry, GenerationOutput, PackageCache, PackageDescriptor,
@@ -49,6 +50,31 @@ fn is_external_code_system(url: &str) -> bool {
     EXTERNAL_CODE_SYSTEMS
         .iter()
         .any(|prefix| url.starts_with(prefix))
+}
+
+/// Resolve a coded element's binding to the TypeScript ValueSet type name it
+/// lowers to, or `None` when it keeps its base primitive.
+///
+/// The FHIR-neutral decision (enumerate vs. base primitive, and which ValueSet)
+/// comes from `PackageIr::lower_binding` in inkgen-core. The backend keeps only
+/// the language-specific parts: the gate that the ValueSet type was *actually
+/// generated* (`valueset_url_to_type` — accounts for size limits / external
+/// systems) and the identifier casing (`pascal_case`).
+fn enumerated_valueset_type(
+    config: &TypescriptGeneratorConfig,
+    binding: &BindingDefinition,
+    valueset_url_to_type: &HashMap<String, String>,
+) -> Option<String> {
+    let ir = config.package_ir.as_ref()?;
+    match ir.lower_binding(binding) {
+        BindingLowering::Enumerated {
+            value_set_url,
+            type_name,
+        } if valueset_url_to_type.contains_key(&value_set_url) => {
+            Some(naming::pascal_case(&type_name))
+        }
+        _ => None,
+    }
 }
 pub use imports::TypeRegistry;
 
@@ -2858,13 +2884,13 @@ fn build_render_structure(
 
             // Check if this element has a ValueSet binding that lowers to a
             // closed/enumerated type (required/extensible). The decision is
-            // FHIR-neutral and lives in inkgen-core.
+            // FHIR-neutral and lives in inkgen-core (`PackageIr::lower_binding`).
             let mut used_valueset_schema = false;
             if let Some(binding) = &element.binding
-                && binding.is_enumerable()
-                && let Some(valueset_url) = &binding.value_set
-                && let Some(vs_type_name) = valueset_url_to_type.get(valueset_url)
+                && let Some(vs_type_name) =
+                    enumerated_valueset_type(config, binding, valueset_url_to_type)
             {
+                let vs_type_name = &vs_type_name;
                 // Use z.enum for ValueSet-bound fields
                 let values_name = format!("{}Values", vs_type_name);
                 let base_info = crate::zod::ZodSchemaInfo {
@@ -3505,11 +3531,10 @@ fn map_field_with_nested_context(
     let mut final_type_expr = type_expr.clone();
 
     if let Some(binding) = &element.binding {
-        // Only enumerable bindings (required/extensible) lower to the ValueSet
-        // type; the decision is FHIR-neutral and lives in inkgen-core.
-        if binding.is_enumerable()
-            && let Some(valueset_url) = &binding.value_set
-            && let Some(vs_type_name) = valueset_url_to_type.get(valueset_url)
+        // Only enumerable bindings (required/extensible) with a generated
+        // ValueSet type lower to the closed type; the decision is FHIR-neutral
+        // and lives in inkgen-core (`PackageIr::lower_binding`).
+        if let Some(vs_type_name) = enumerated_valueset_type(config, binding, valueset_url_to_type)
         {
             // Replace FhirCode/code with the specific ValueSet type
             final_type_expr = if is_array {
@@ -3521,7 +3546,7 @@ fn map_field_with_nested_context(
             type_dependencies.push(vs_type_name.clone());
 
             // Add import for the ValueSet type from valuesets/ directory
-            let file_name = naming::snake_case(vs_type_name)
+            let file_name = naming::snake_case(&vs_type_name)
                 .replace('_', "-")
                 .to_ascii_lowercase();
             imports.insert(
