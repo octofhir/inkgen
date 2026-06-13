@@ -52,8 +52,10 @@ export function get{{ ext.type_name }}(resource: any): {{ ext.type_name }}{% if 
 
 {%- if ext.cardinality_max != 1 %}
   return Array.isArray(ext) ? ext : [ext];
+{%- elif ext.value_member %}
+  return ext.{{ ext.value_member }} !== undefined ? { value: ext.{{ ext.value_member }} } : undefined;
 {%- else %}
-  return ext.valueXXX || ext;
+  return ext;
 {%- endif %}
 }
 
@@ -76,6 +78,11 @@ export function set{{ ext.type_name }}(resource: any, value: {{ ext.type_name }}
     url: '{{ ext.url }}',
     ...v
   })));
+{%- elif ext.value_member %}
+  resource.extension.push({
+    url: '{{ ext.url }}',
+    {{ ext.value_member }}: value.value,
+  });
 {%- else %}
   resource.extension.push({
     url: '{{ ext.url }}',

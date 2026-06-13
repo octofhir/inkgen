@@ -9,7 +9,9 @@
 use crate::naming;
 use crate::nested::NestedTypeInfo;
 use indexmap::IndexMap;
-use inkgen_core::ir::{ElementDefinition, ExtensionDefinition, ResourceDefinition};
+use inkgen_core::ir::{
+    ElementDefinition, ExtensionDefinition, ResourceDefinition, choice_variant_name,
+};
 use serde::Serialize;
 
 /// Metadata extracted from an extension definition for TypeScript rendering.
@@ -32,6 +34,11 @@ pub struct RenderExtension {
     /// which is the (lossy) TypeScript type — `dateTime` and `string` both map to
     /// the TS `string`, so the code is needed to pick the right member.
     pub value_type_code: Option<String>,
+    /// Wire-correct value member name for a single-typed simple extension
+    /// (`valueDateTime`, `valueReference`), derived from `value_type_code` via the
+    /// core `choice_variant_name`. `None` for complex / untyped / multi-type
+    /// extensions, where the accessor returns the raw extension instead.
+    pub value_member: Option<String>,
     /// Nested types (for complex extensions)
     pub nested_types: Vec<NestedTypeInfo>,
     /// Extension cardinality (min/max)
@@ -143,6 +150,9 @@ fn create_render_extension_from_resource(resource: &ResourceDefinition) -> Optio
         contexts,
         is_complex,
         value_type,
+        value_member: value_type_code
+            .as_deref()
+            .map(|code| choice_variant_name("value", code)),
         value_type_code,
         nested_types,
         cardinality_min: 0,
@@ -235,6 +245,7 @@ fn extract_extension_slices_from_elements(
                         is_complex: false,     // Will be determined later if needed
                         value_type: None,      // Will be populated if simple extension
                         value_type_code: None, // Will be populated if simple extension
+                        value_member: None,    // Will be populated if simple extension
                         nested_types: Vec::new(), // Will be populated if complex
                         contexts: Vec::new(),  // Could extract from element path
                         cardinality_min: element.cardinality.min,
@@ -305,6 +316,9 @@ fn create_render_extension(ext_def: &ExtensionDefinition) -> Option<RenderExtens
         contexts,
         is_complex,
         value_type,
+        value_member: value_type_code
+            .as_deref()
+            .map(|code| choice_variant_name("value", code)),
         value_type_code,
         nested_types,
         cardinality_min,
