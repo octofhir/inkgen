@@ -18,6 +18,12 @@ pub struct SliceInfo {
     pub discriminator_value: Option<String>,
     /// The discriminator type value (for type discriminators).
     pub discriminator_type: Option<String>,
+    /// For an `exists` discriminator: whether this slice requires the
+    /// discriminating element to be present (`Some(true)`, `min >= 1`), forbids
+    /// it (`Some(false)`, `max == 0`), or it does not apply / is undetermined
+    /// (`None`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discriminator_exists: Option<bool>,
     /// Whether this slice has a fixed constraint.
     pub has_fixed: bool,
 }
@@ -43,7 +49,7 @@ pub fn detect_slices(resource: &ResourceDefinition) -> Vec<SlicePattern> {
 
     for element in &resource.elements {
         if let Some(slicing) = &element.slicing {
-            let slices = find_slices_for_parent(&resource.elements, &element.path);
+            let mut slices = find_slices_for_parent(&resource.elements, &element.path);
 
             if !slices.is_empty() {
                 let is_open = slicing.rules.to_lowercase() == "open"
@@ -51,6 +57,17 @@ pub fn detect_slices(resource: &ResourceDefinition) -> Vec<SlicePattern> {
 
                 let discriminator = slicing.discriminators.first().cloned();
                 let discriminator_kind = discriminator.as_ref().and_then(|d| d.kind);
+
+                // For an `exists` discriminator, resolve per slice whether the
+                // discriminating element must be present.
+                if discriminator_kind == Some(DiscriminatorType::Exists)
+                    && let Some(disc) = &discriminator
+                {
+                    for slice in &mut slices {
+                        slice.discriminator_exists =
+                            detect_exists(resource, &element.path, &slice.name, &disc.path);
+                    }
+                }
 
                 patterns.push(SlicePattern {
                     path: element.path.clone(),
@@ -75,9 +92,45 @@ fn find_slices_for_parent(elements: &[ElementDefinition], parent_path: &str) -> 
             name: elem.slice_name.as_ref().unwrap().clone(),
             discriminator_value: extract_discriminator_value(elem),
             discriminator_type: extract_discriminator_type(elem),
+            discriminator_exists: None,
             has_fixed: elem.fixed.is_some(),
         })
         .collect()
+}
+
+/// Resolve an `exists` discriminator for one slice: does the slice require the
+/// element at `disc_path` (relative to the sliced element `parent_path`) to be
+/// present? Reads `flat_elements`, whose ids retain the slice name
+/// (`Observation.component:systolic.code`).
+fn detect_exists(
+    resource: &ResourceDefinition,
+    parent_path: &str,
+    slice_name: &str,
+    disc_path: &str,
+) -> Option<bool> {
+    // `$this` discriminates on the slice element itself; otherwise the
+    // discriminating element is the slice child at `{parent_path}.{disc_path}`.
+    let (target_path, id_marker) = if disc_path == "$this" {
+        (parent_path.to_string(), format!(":{slice_name}"))
+    } else {
+        (
+            format!("{parent_path}.{disc_path}"),
+            format!(":{slice_name}."),
+        )
+    };
+
+    let elem = resource
+        .flat_elements
+        .iter()
+        .find(|e| e.path == target_path && e.id.contains(&id_marker))?;
+
+    if matches!(elem.cardinality.max, super::ElementMax::Finite(0)) {
+        Some(false)
+    } else if elem.cardinality.min >= 1 {
+        Some(true)
+    } else {
+        None
+    }
 }
 
 /// Extract the discriminator value from a slice element (value discriminators).
@@ -176,5 +229,97 @@ mod tests {
         let url = "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity";
         let el = slice_element("ethnicity", None, Some(json!({ "url": url })));
         assert_eq!(extract_discriminator_value(&el), Some(url.to_string()));
+    }
+
+    fn flat_element(id: &str, path: &str, min: u32, max: ElementMax) -> ElementDefinition {
+        let mut e = slice_element("x", None, None);
+        e.id = id.to_string();
+        e.path = path.to_string();
+        e.slice_name = None;
+        e.cardinality = ElementCardinality { min, max };
+        e
+    }
+
+    fn resource_with_flat(flat: Vec<ElementDefinition>) -> ResourceDefinition {
+        use crate::ir::{ProfileLineage, ResourceKind};
+        ResourceDefinition {
+            id: "Observation".to_string(),
+            url: "http://hl7.org/fhir/StructureDefinition/Observation".to_string(),
+            name: None,
+            title: None,
+            description: None,
+            version: None,
+            status: None,
+            kind: ResourceKind::Resource,
+            fhir_type: Some("Observation".to_string()),
+            date: None,
+            lineage: ProfileLineage::default(),
+            elements: Vec::new(),
+            flat_elements: flat,
+            extensions: Vec::new(),
+            invariants: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn exists_true_when_slice_requires_element() {
+        let r = resource_with_flat(vec![flat_element(
+            "Observation.component:systolic.code",
+            "Observation.component.code",
+            1,
+            ElementMax::Finite(1),
+        )]);
+        assert_eq!(
+            detect_exists(&r, "Observation.component", "systolic", "code"),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn exists_false_when_slice_forbids_element() {
+        let r = resource_with_flat(vec![flat_element(
+            "Observation.component:systolic.code",
+            "Observation.component.code",
+            0,
+            ElementMax::Finite(0),
+        )]);
+        assert_eq!(
+            detect_exists(&r, "Observation.component", "systolic", "code"),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn exists_none_when_unconstrained_or_missing() {
+        let r = resource_with_flat(vec![flat_element(
+            "Observation.component:systolic.code",
+            "Observation.component.code",
+            0,
+            ElementMax::Finite(1),
+        )]);
+        assert_eq!(
+            detect_exists(&r, "Observation.component", "systolic", "code"),
+            None
+        );
+        // No matching flat element at all.
+        let empty = resource_with_flat(Vec::new());
+        assert_eq!(
+            detect_exists(&empty, "Observation.component", "systolic", "code"),
+            None
+        );
+    }
+
+    #[test]
+    fn exists_this_targets_the_slice_element() {
+        let r = resource_with_flat(vec![flat_element(
+            "Observation.component:systolic",
+            "Observation.component",
+            1,
+            ElementMax::Finite(1),
+        )]);
+        assert_eq!(
+            detect_exists(&r, "Observation.component", "systolic", "$this"),
+            Some(true)
+        );
     }
 }

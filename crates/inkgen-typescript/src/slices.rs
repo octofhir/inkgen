@@ -202,6 +202,7 @@ mod tests {
             name: "codeExt".to_string(),
             discriminator_value: Some("http://example.org/code".to_string()),
             discriminator_type: None,
+            discriminator_exists: None,
             has_fixed: true,
         };
 
