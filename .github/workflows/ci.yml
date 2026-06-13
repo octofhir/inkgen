@@ -94,6 +94,35 @@ jobs:
       - name: Review snapshots
         run: cargo insta test --all --check
 
+  typecheck-generated:
+    name: Typecheck generated TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Generate TypeScript SDK (hl7.fhir.r4.core, profiles off)
+        run: cargo run --release -p inkgen-cli -- generate typescript --config ci-typecheck.toml
+
+      - name: Install generated package dependencies
+        working-directory: generated
+        run: npm install --no-package-lock
+
+      - name: Typecheck generated output
+        working-directory: generated
+        run: npx tsc --noEmit
+
   build:
     name: Build
     runs-on: ${{ matrix.os }}
