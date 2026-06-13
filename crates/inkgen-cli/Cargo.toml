@@ -31,6 +31,7 @@ assert_cmd = "2.0"
 predicates = "3.1"
 tempfile = { workspace = true }
 criterion = { workspace = true }
+indexmap = { workspace = true }
 
 [[bench]]
 name = "codegen"

@@ -1211,3 +1211,118 @@ fn doctor_command() -> Result<()> {
         Err(anyhow::anyhow!("Environment validation failed"))
     }
 }
+
+#[cfg(test)]
+mod explain_tests {
+    use super::mapping_rationale;
+    use indexmap::IndexMap;
+    use inkgen_core::ir::{
+        BindingDefinition, BindingStrength, ElementCardinality, ElementDefinition, ElementMax,
+        ElementType,
+    };
+
+    fn element() -> ElementDefinition {
+        ElementDefinition {
+            id: "X".to_string(),
+            path: "X".to_string(),
+            slice_name: None,
+            short: None,
+            definition: None,
+            comment: None,
+            requirements: None,
+            cardinality: ElementCardinality {
+                min: 0,
+                max: ElementMax::Finite(1),
+            },
+            types: Vec::new(),
+            content_reference: None,
+            binding: None,
+            invariants: Vec::new(),
+            fixed: None,
+            pattern: None,
+            default_value: None,
+            example_values: Vec::new(),
+            must_support: false,
+            is_summary: false,
+            slicing: None,
+            extension: Vec::new(),
+            additional_fields: IndexMap::new(),
+            children: Vec::new(),
+            parent_path: None,
+            depth: 0,
+            is_backbone: false,
+        }
+    }
+
+    fn ty(code: &str) -> ElementType {
+        ElementType {
+            code: code.to_string(),
+            profiles: Vec::new(),
+            target_profiles: Vec::new(),
+            aggregation: Vec::new(),
+            versioning: None,
+        }
+    }
+
+    fn binding(strength: BindingStrength) -> BindingDefinition {
+        BindingDefinition {
+            strength,
+            value_set: Some("http://example.org/vs".to_string()),
+            description: None,
+            additional: IndexMap::new(),
+        }
+    }
+
+    #[test]
+    fn required_binding_is_closed_union() {
+        let mut e = element();
+        e.types = vec![ty("code")];
+        e.binding = Some(binding(BindingStrength::Required));
+        let r = mapping_rationale(&e);
+        assert!(r.contains("CLOSED union"), "got: {r}");
+        assert!(r.contains("http://example.org/vs"));
+    }
+
+    #[test]
+    fn extensible_binding_is_closed_union() {
+        let mut e = element();
+        e.types = vec![ty("code")];
+        e.binding = Some(binding(BindingStrength::Extensible));
+        assert!(mapping_rationale(&e).contains("CLOSED union"));
+    }
+
+    #[test]
+    fn preferred_binding_is_open_union() {
+        let mut e = element();
+        e.types = vec![ty("code")];
+        e.binding = Some(binding(BindingStrength::Preferred));
+        let r = mapping_rationale(&e);
+        assert!(r.contains("OPEN union"), "got: {r}");
+    }
+
+    #[test]
+    fn choice_type_is_variant_union() {
+        let mut e = element();
+        e.types = vec![ty("Quantity"), ty("CodeableConcept"), ty("string")];
+        let r = mapping_rationale(&e);
+        assert!(r.contains("choice type"), "got: {r}");
+        assert!(r.contains("3 variants"));
+        assert!(r.contains("Quantity | CodeableConcept | string"));
+    }
+
+    #[test]
+    fn content_reference_is_reported() {
+        let mut e = element();
+        e.content_reference = Some("#X.item".to_string());
+        assert!(mapping_rationale(&e).contains("content reference"));
+    }
+
+    #[test]
+    fn plain_type_maps_directly() {
+        let mut e = element();
+        e.types = vec![ty("string")];
+        let r = mapping_rationale(&e);
+        assert!(r.contains("string"));
+        assert!(!r.contains("union"));
+    }
+}

@@ -1351,6 +1351,7 @@ dependencies = [
  "clap_complete",
  "criterion",
  "dirs",
+ "indexmap",
  "inkgen-core",
  "inkgen-typescript",
  "predicates",
