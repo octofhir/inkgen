@@ -1,4 +1,5 @@
 pub mod profile;
+pub mod slicing;
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -6,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub use profile::{
     ExtensionValueType, FixedValue, MustSupportElement, ProfileDefinition, ProfileExtension,
 };
+pub use slicing::{SliceInfo, SlicePattern, detect_slices};
 
 /// Kind of StructureDefinition represented by the IR.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

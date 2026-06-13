@@ -6,39 +6,12 @@
 //! - Generating TypeScript discriminated union types
 //! - Creating type guard functions for slice discrimination
 
-use inkgen_core::ir::{
-    DiscriminatorType, ElementDefinition, ResourceDefinition, SliceDiscriminator,
-};
-use serde::Serialize;
-use serde_json::Value;
+use inkgen_core::ir::ElementDefinition;
 
-/// Information about a single slice within a sliced element.
-#[derive(Debug, Clone, Serialize)]
-pub struct SliceInfo {
-    /// Slice name (e.g., "codeExt", "valueExt")
-    pub name: String,
-    /// The discriminator value for this slice (if value discriminator)
-    pub discriminator_value: Option<String>,
-    /// The discriminator type value (if type discriminator)
-    pub discriminator_type: Option<String>,
-    /// Whether this slice has a fixed constraint
-    pub has_fixed: bool,
-}
-
-/// Pattern of slicing found in a parent element.
-#[derive(Debug, Clone, Serialize)]
-pub struct SlicePattern {
-    /// Path to the sliced element (e.g., "Extension.extension")
-    pub path: String,
-    /// The discriminator used for slicing
-    pub discriminator: Option<SliceDiscriminator>,
-    /// Information about each slice
-    pub slices: Vec<SliceInfo>,
-    /// Whether this is open slicing (allows unspecified values)
-    pub is_open: bool,
-    /// Discriminator kind enum (if available)
-    pub discriminator_kind: Option<DiscriminatorType>,
-}
+// Slice DETECTION (SlicePattern, SliceInfo, detect_slices) is FHIR-neutral and
+// now lives in inkgen-core; this module keeps only the TypeScript rendering of
+// the detected slices. Re-exported so existing `slices::…` paths keep working.
+pub use inkgen_core::ir::{SliceInfo, SlicePattern, detect_slices};
 
 /// Type information for a discriminated union variant.
 #[derive(Debug, Clone)]
@@ -79,110 +52,6 @@ pub struct SliceTypeGuard {
     pub return_type: String,
     /// Guard condition
     pub condition: String,
-}
-
-/// Extract all slice patterns from a resource definition.
-pub fn detect_slices(resource: &ResourceDefinition) -> Vec<SlicePattern> {
-    let mut patterns = Vec::new();
-
-    // Find all parent elements that have slicing metadata
-    for element in &resource.elements {
-        if let Some(slicing) = &element.slicing {
-            // Find all child slices for this parent
-            let slices = find_slices_for_parent(&resource.elements, &element.path);
-
-            if !slices.is_empty() {
-                let is_open = slicing.rules.to_lowercase() == "open"
-                    || slicing.rules.to_lowercase() == "openat";
-
-                let discriminator = slicing.discriminators.first().cloned();
-                let discriminator_kind = discriminator.as_ref().and_then(|d| d.kind);
-
-                patterns.push(SlicePattern {
-                    path: element.path.clone(),
-                    discriminator,
-                    slices,
-                    is_open,
-                    discriminator_kind,
-                });
-            }
-        }
-    }
-
-    patterns
-}
-
-/// Find all slices for a given parent element path.
-fn find_slices_for_parent(elements: &[ElementDefinition], parent_path: &str) -> Vec<SliceInfo> {
-    elements
-        .iter()
-        .filter(|elem| elem.path == parent_path && elem.slice_name.is_some())
-        .map(|elem| SliceInfo {
-            name: elem.slice_name.as_ref().unwrap().clone(),
-            discriminator_value: extract_discriminator_value(elem),
-            discriminator_type: extract_discriminator_type(elem),
-            has_fixed: elem.fixed.is_some(),
-        })
-        .collect()
-}
-
-/// Extract the discriminator value from a slice element (for value discriminators).
-fn extract_discriminator_value(element: &ElementDefinition) -> Option<String> {
-    // First, try to extract from fixed value
-    if let Some(fixed) = &element.fixed {
-        match fixed {
-            Value::Object(map) => {
-                // For value discriminators, try to extract the discriminator field value
-                // Common discriminator fields: url, system, code, value
-                if let Some(Value::String(url)) = map.get("url") {
-                    return Some(url.clone());
-                }
-                if let Some(Value::String(system)) = map.get("system") {
-                    return Some(system.clone());
-                }
-                if let Some(Value::String(code)) = map.get("code") {
-                    return Some(code.clone());
-                }
-            }
-            Value::String(s) => {
-                return Some(s.clone());
-            }
-            _ => {}
-        }
-    }
-
-    // Try pattern if fixed is not available
-    if let Some(pattern) = &element.pattern {
-        match pattern {
-            Value::Object(map) => {
-                if let Some(Value::String(url)) = map.get("url") {
-                    return Some(url.clone());
-                }
-                if let Some(Value::String(system)) = map.get("system") {
-                    return Some(system.clone());
-                }
-                if let Some(Value::String(code)) = map.get("code") {
-                    return Some(code.clone());
-                }
-            }
-            Value::String(s) => {
-                return Some(s.clone());
-            }
-            _ => {}
-        }
-    }
-
-    None
-}
-
-/// Extract the discriminator type from a slice element (for type discriminators).
-fn extract_discriminator_type(element: &ElementDefinition) -> Option<String> {
-    // If there are specific types defined, use the first one
-    if !element.types.is_empty() {
-        return Some(element.types[0].code.clone());
-    }
-
-    None
 }
 
 /// Generate a discriminated union type from a slice pattern.
@@ -347,95 +216,5 @@ mod tests {
         assert_eq!(guard.input_type, "ExtensionSlice");
         assert!(guard.condition.contains("url"));
         assert!(guard.condition.contains("http://example.org/code"));
-    }
-
-    #[test]
-    fn test_extract_discriminator_value_from_fixed_url() {
-        use inkgen_core::ir::{ElementCardinality, ElementMax};
-        use serde_json::json;
-
-        let element = ElementDefinition {
-            id: "Extension.extension:race".to_string(),
-            path: "Extension.extension".to_string(),
-            slice_name: Some("race".to_string()),
-            fixed: Some(json!({
-                "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race"
-            })),
-            pattern: None,
-            cardinality: ElementCardinality {
-                min: 0,
-                max: ElementMax::Finite(1),
-            },
-            types: Vec::new(),
-            short: None,
-            definition: None,
-            comment: None,
-            requirements: None,
-            content_reference: None,
-            binding: None,
-            invariants: Vec::new(),
-            default_value: None,
-            example_values: Vec::new(),
-            must_support: false,
-            is_summary: false,
-            slicing: None,
-            extension: Vec::new(),
-            additional_fields: indexmap::IndexMap::new(),
-            children: Vec::new(),
-            parent_path: None,
-            depth: 0,
-            is_backbone: false,
-        };
-
-        let discriminator_value = extract_discriminator_value(&element);
-        assert_eq!(
-            discriminator_value,
-            Some("http://hl7.org/fhir/us/core/StructureDefinition/us-core-race".to_string())
-        );
-    }
-
-    #[test]
-    fn test_extract_discriminator_value_from_pattern_url() {
-        use inkgen_core::ir::{ElementCardinality, ElementMax};
-        use serde_json::json;
-
-        let element = ElementDefinition {
-            id: "Extension.extension:ethnicity".to_string(),
-            path: "Extension.extension".to_string(),
-            slice_name: Some("ethnicity".to_string()),
-            fixed: None,
-            pattern: Some(json!({
-                "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity"
-            })),
-            cardinality: ElementCardinality {
-                min: 0,
-                max: ElementMax::Finite(1),
-            },
-            types: Vec::new(),
-            short: None,
-            definition: None,
-            comment: None,
-            requirements: None,
-            content_reference: None,
-            binding: None,
-            invariants: Vec::new(),
-            default_value: None,
-            example_values: Vec::new(),
-            must_support: false,
-            is_summary: false,
-            slicing: None,
-            extension: Vec::new(),
-            additional_fields: indexmap::IndexMap::new(),
-            children: Vec::new(),
-            parent_path: None,
-            depth: 0,
-            is_backbone: false,
-        };
-
-        let discriminator_value = extract_discriminator_value(&element);
-        assert_eq!(
-            discriminator_value,
-            Some("http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity".to_string())
-        );
     }
 }
