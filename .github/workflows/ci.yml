@@ -112,15 +112,20 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Generate TypeScript SDK (hl7.fhir.r4.core)
-        run: cargo run --release -p inkgen-cli -- generate typescript
+      - name: Generate TypeScript SDK twice (hl7.fhir.r4.core)
+        run: |
+          cargo run --release -p inkgen-cli -- generate typescript --output gen-a
+          cargo run --release -p inkgen-cli -- generate typescript --output gen-b
+
+      - name: Assert deterministic output (byte-identical runs)
+        run: diff -rq gen-a gen-b
 
       - name: Install generated package dependencies
-        working-directory: generated
+        working-directory: gen-a
         run: npm install --no-package-lock
 
       - name: Typecheck generated output
-        working-directory: generated
+        working-directory: gen-a
         run: npx tsc --noEmit
 
   build:

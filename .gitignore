@@ -21,6 +21,9 @@ Thumbs.db
 *.tmp
 *.temp
 generated
+# CI determinism-check output dirs
+gen-a/
+gen-b/
 
 # InkGen debug artifacts (generation reports, IR dumps)
 .inkgen/

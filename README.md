@@ -200,7 +200,8 @@ contract (handing backends a fully-lowered IR) is described in the
 ## Determinism & debugging
 
 - **Stable ordering** — IR types sort their elements/extensions/invariants and
-  the provider sorts its structure list, so output is reproducible.
+  the provider sorts its structure list, so output is reproducible. CI enforces
+  this: it generates r4-core twice and fails if the two runs differ.
 - **Snapshots** — `insta` golden tests guard generated output against drift.
 - **Diff** — `inkgen diff` shows a unified diff between two output directories.
 - **Inspect** — `inkgen inspect ir <canonical>` resolves a structure and prints
