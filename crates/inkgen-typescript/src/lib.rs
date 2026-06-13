@@ -2039,8 +2039,9 @@ impl TypescriptGenerator {
 
                     profile_value_exports.push(format!("is{}", profile_info.type_name));
 
-                    // Re-export the slice accessor functions from the barrel.
+                    // Re-export the slice guards + accessors from the barrel.
                     for acc in &slice_accessors {
+                        profile_value_exports.push(acc.guard_name.clone());
                         profile_value_exports.push(acc.fn_name.clone());
                     }
 

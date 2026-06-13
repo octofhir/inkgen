@@ -133,13 +133,15 @@ pub struct ProfileInfo {
 /// sliced array by its resolved value/pattern discriminator.
 #[derive(Debug, Clone)]
 pub struct SliceAccessor {
-    /// Function name (e.g. `getBpSystolicBP`).
+    /// Accessor function name (e.g. `getBpSystolicBP`).
     pub fn_name: String,
+    /// Type-guard function name (e.g. `isBpSystolicBP`).
+    pub guard_name: String,
     /// The sliced array field on the profile (e.g. `component`).
     pub field_name: String,
     /// Doc line describing the discriminator (e.g. `code.coding.code = "8480-6"`).
     pub doc: String,
-    /// The `.find` predicate body, given an `item` lambda parameter.
+    /// The predicate body, given an `item` parameter (may be `boolean | undefined`).
     pub predicate: String,
 }
 
@@ -1234,12 +1236,10 @@ pub fn build_slice_accessors(
                 continue;
             };
             let predicate = slice_predicate("item", &segments, value, 0);
+            let slice_pascal = crate::naming::pascal_case(&slice.name);
             out.push(SliceAccessor {
-                fn_name: format!(
-                    "get{}{}",
-                    profile_type,
-                    crate::naming::pascal_case(&slice.name)
-                ),
+                fn_name: format!("get{profile_type}{slice_pascal}"),
+                guard_name: format!("is{profile_type}{slice_pascal}"),
                 field_name: field_name.clone(),
                 doc: format!("{} = \"{}\"", disc.path, value),
                 predicate,
@@ -1257,14 +1257,29 @@ pub fn build_slice_accessors(
 pub fn render_slice_accessors(accessors: &[SliceAccessor], profile_type: &str) -> String {
     let mut out = String::new();
     for acc in accessors {
-        out.push_str(&format!("\n/** Slice accessor — {} */\n", acc.doc));
+        let item_type = format!(
+            "NonNullable<{}['{}']>[number]",
+            profile_type, acc.field_name
+        );
+
+        // Reusable type guard: matches one array element against the slice's
+        // discriminator. `!!` collapses the `boolean | undefined` an optional
+        // chain can produce.
+        out.push_str(&format!("\n/** Slice guard — {} */\n", acc.doc));
         out.push_str(&format!(
-            "export function {}(resource: {}): NonNullable<{}['{}']>[number] | undefined {{\n",
-            acc.fn_name, profile_type, profile_type, acc.field_name
+            "export function {}(item: {}): boolean {{\n  return !!({});\n}}\n",
+            acc.guard_name, item_type, acc.predicate
+        ));
+
+        // Accessor: the first array element matching the guard.
+        out.push_str(&format!("/** Slice accessor — {} */\n", acc.doc));
+        out.push_str(&format!(
+            "export function {}(resource: {}): {} | undefined {{\n",
+            acc.fn_name, profile_type, item_type
         ));
         out.push_str(&format!(
-            "  return resource.{}?.find((item) => {});\n",
-            acc.field_name, acc.predicate
+            "  return resource.{}?.find({});\n",
+            acc.field_name, acc.guard_name
         ));
         out.push_str("}\n");
     }
