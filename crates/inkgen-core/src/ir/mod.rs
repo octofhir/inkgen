@@ -268,6 +268,18 @@ impl BindingDefinition {
     fn sort(&mut self) {
         // Additional map stays in insertion order via IndexMap
     }
+
+    /// True when this binding constrains the value space enough to lower to a
+    /// closed/enumerated type (the bound ValueSet). Per FHIR, `required` and
+    /// `extensible` bindings enumerate; `preferred`/`example` are advisory and
+    /// lower to the base primitive (`string`/`code`). FHIR-neutral — every
+    /// backend (TS union, Rust enum, Python `Literal`) shares this decision.
+    pub fn is_enumerable(&self) -> bool {
+        matches!(
+            self.strength,
+            BindingStrength::Required | BindingStrength::Extensible
+        )
+    }
 }
 
 /// Binding strength enumeration.
@@ -509,6 +521,20 @@ mod choice_tests {
         for variant in &expanded {
             assert_eq!(variant.cardinality.min, 0);
         }
+    }
+
+    #[test]
+    fn binding_is_enumerable_by_strength() {
+        let binding = |strength| BindingDefinition {
+            strength,
+            value_set: Some("http://hl7.org/fhir/ValueSet/x".to_string()),
+            description: None,
+            additional: IndexMap::new(),
+        };
+        assert!(binding(BindingStrength::Required).is_enumerable());
+        assert!(binding(BindingStrength::Extensible).is_enumerable());
+        assert!(!binding(BindingStrength::Preferred).is_enumerable());
+        assert!(!binding(BindingStrength::Example).is_enumerable());
     }
 
     #[test]

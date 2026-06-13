@@ -2808,48 +2808,41 @@ fn build_render_structure(
         {
             let field_name = crate::zod::element_to_field_name(element);
 
-            // Check if this element has a ValueSet binding with Required/Extensible strength
+            // Check if this element has a ValueSet binding that lowers to a
+            // closed/enumerated type (required/extensible). The decision is
+            // FHIR-neutral and lives in inkgen-core.
             let mut used_valueset_schema = false;
-            if let Some(binding) = &element.binding {
-                use inkgen_core::ir::BindingStrength;
+            if let Some(binding) = &element.binding
+                && binding.is_enumerable()
+                && let Some(valueset_url) = &binding.value_set
+                && let Some(vs_type_name) = valueset_url_to_type.get(valueset_url)
+            {
+                // Use z.enum for ValueSet-bound fields
+                let values_name = format!("{}Values", vs_type_name);
+                let base_info = crate::zod::ZodSchemaInfo {
+                    schema: format!("z.enum({})", values_name),
+                    type_refs: Vec::new(),
+                };
+                let schema_info = crate::zod::apply_cardinality(base_info, &element.cardinality);
 
-                let is_strong_binding = matches!(
-                    binding.strength,
-                    BindingStrength::Required | BindingStrength::Extensible
-                );
+                fields.push(ZodSchemaField {
+                    name: field_name.clone(),
+                    zod_type: schema_info.schema,
+                });
 
-                if is_strong_binding
-                    && let Some(valueset_url) = &binding.value_set
-                    && let Some(vs_type_name) = valueset_url_to_type.get(valueset_url)
-                {
-                    // Use z.enum for ValueSet-bound fields
-                    let values_name = format!("{}Values", vs_type_name);
-                    let base_info = crate::zod::ZodSchemaInfo {
-                        schema: format!("z.enum({})", values_name),
-                        type_refs: Vec::new(),
-                    };
-                    let schema_info =
-                        crate::zod::apply_cardinality(base_info, &element.cardinality);
+                // Add import for the ValueSet Values array
+                // Note: ValueSet Values arrays don't need the Schema suffix,
+                // so we track them separately from schema_type_refs
+                let file_name = naming::snake_case(vs_type_name)
+                    .replace('_', "-")
+                    .to_ascii_lowercase();
+                let valueset_import_path = format!("./valuesets/{}", file_name);
+                valueset_value_imports
+                    .entry(valueset_import_path)
+                    .or_default()
+                    .push(values_name);
 
-                    fields.push(ZodSchemaField {
-                        name: field_name.clone(),
-                        zod_type: schema_info.schema,
-                    });
-
-                    // Add import for the ValueSet Values array
-                    // Note: ValueSet Values arrays don't need the Schema suffix,
-                    // so we track them separately from schema_type_refs
-                    let file_name = naming::snake_case(vs_type_name)
-                        .replace('_', "-")
-                        .to_ascii_lowercase();
-                    let valueset_import_path = format!("./valuesets/{}", file_name);
-                    valueset_value_imports
-                        .entry(valueset_import_path)
-                        .or_default()
-                        .push(values_name);
-
-                    used_valueset_schema = true;
-                }
+                used_valueset_schema = true;
             }
 
             if !used_valueset_schema {
@@ -3437,15 +3430,9 @@ fn map_field_with_nested_context(
     let mut final_type_expr = type_expr.clone();
 
     if let Some(binding) = &element.binding {
-        use inkgen_core::ir::BindingStrength;
-
-        // Only use ValueSet types for Required or Extensible bindings
-        let is_strong_binding = matches!(
-            binding.strength,
-            BindingStrength::Required | BindingStrength::Extensible
-        );
-
-        if is_strong_binding
+        // Only enumerable bindings (required/extensible) lower to the ValueSet
+        // type; the decision is FHIR-neutral and lives in inkgen-core.
+        if binding.is_enumerable()
             && let Some(valueset_url) = &binding.value_set
             && let Some(vs_type_name) = valueset_url_to_type.get(valueset_url)
         {
