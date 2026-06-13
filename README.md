@@ -50,6 +50,7 @@ implemented are listed as **Planned** in the matrix below.
 | Directory diff tooling | ✅ Implemented | `inkgen diff` |
 | Snapshot tests + benchmarks | ✅ Implemented | `insta`, Criterion (`just bench`) |
 | Profile generation (snapshot-based) | ⚠️ Partial | relies on packaged snapshots; differential-only merge is roadmap |
+| Generated TypeScript typechecks in CI | ✅ Implemented | `tsc --noEmit` gate over generated r4-core (incl. profiles) |
 | Slicing / discriminators | ⚠️ Partial | modeled in IR; backend coverage evolving |
 | Example Rust backend | 🧪 Experimental | `inkgen-rust` is a skeleton; `generate()` is a stub |
 | `PackageIr` handed to backends | 🗺️ Planned | backends currently consume a provider |

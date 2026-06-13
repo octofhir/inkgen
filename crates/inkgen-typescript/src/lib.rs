@@ -1982,8 +1982,17 @@ where
                         }
                     });
 
+                    // In interface mode the base types are interfaces, so a
+                    // profile must also be an interface — a TypeScript class
+                    // cannot `extends` an interface. Only emit profile classes
+                    // when the base output is class-based.
+                    let profile_as_class = self.config.profile_classes
+                        && matches!(
+                            self.config.mode,
+                            GenerationMode::Class | GenerationMode::ClassWithBuilder
+                        );
                     let ts_code = profile_info.generate_typescript(
-                        self.config.profile_classes,
+                        profile_as_class,
                         with_methods,
                         self.config.zod_schemas,
                         generation_context.as_ref(),

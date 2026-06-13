@@ -112,8 +112,8 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Generate TypeScript SDK (hl7.fhir.r4.core, profiles off)
-        run: cargo run --release -p inkgen-cli -- generate typescript --config ci-typecheck.toml
+      - name: Generate TypeScript SDK (hl7.fhir.r4.core)
+        run: cargo run --release -p inkgen-cli -- generate typescript
 
       - name: Install generated package dependencies
         working-directory: generated
