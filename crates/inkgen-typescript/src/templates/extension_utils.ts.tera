@@ -226,7 +226,7 @@ export function getExtensionValue<T = any>(
   if (!ext) {
     return undefined;
   }
-  return (ext as any)[valueField];
+  return (ext as unknown as Record<string, unknown>)[valueField] as T | undefined;
 }
 
 /**

@@ -170,7 +170,7 @@ impl ValueSetInfo {
     /// export type AdministrativeGender = typeof AdministrativeGenderValues[number];
     ///
     /// export function isAdministrativeGender(value: string): value is AdministrativeGender {
-    ///   return AdministrativeGenderValues.includes(value as any);
+    ///   return (AdministrativeGenderValues as readonly string[]).includes(value);
     /// }
     ///
     /// export const AdministrativeGenderDefinitions = {
@@ -243,7 +243,7 @@ impl ValueSetInfo {
             guard_name, self.type_name
         ));
         output.push_str(&format!(
-            "  return {}.includes(value as any);\n",
+            "  return ({} as readonly string[]).includes(value);\n",
             values_name
         ));
         output.push_str("}\n");
@@ -453,7 +453,7 @@ mod tests {
         assert!(output.contains("export type Gender = typeof GenderValues[number];"));
         assert!(!output.contains("| (string & {})")); // Should be closed, not open
         assert!(output.contains("export function isGender(value: string): value is Gender"));
-        assert!(output.contains("return GenderValues.includes(value as any);"));
+        assert!(output.contains("return (GenderValues as readonly string[]).includes(value);"));
         assert!(output.contains("/**"));
         assert!(output.contains("* Gender"));
         assert!(output.contains("* Gender codes"));

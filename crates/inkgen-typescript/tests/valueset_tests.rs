@@ -59,7 +59,7 @@ fn test_valueset_code_generation() {
         "Should generate type guard function"
     );
     assert!(
-        generated.contains("return TestStatusValues.includes(value as any)"),
+        generated.contains("return (TestStatusValues as readonly string[]).includes(value)"),
         "Type guard should check array membership"
     );
 
@@ -390,7 +390,7 @@ fn test_type_guard_function_generation() {
         "Should generate type guard function signature"
     );
     assert!(
-        generated.contains("return TestStatusValues.includes(value as any);"),
+        generated.contains("return (TestStatusValues as readonly string[]).includes(value);"),
         "Should use includes() for type checking"
     );
     assert!(generated.contains("}"), "Should close function");

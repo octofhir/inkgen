@@ -16,7 +16,7 @@ export type AccountStatus = typeof AccountStatusValues[number];
  * Type guard for AccountStatus
  */
 export function isAccountStatus(value: string): value is AccountStatus {
-  return AccountStatusValues.includes(value as any);
+  return (AccountStatusValues as readonly string[]).includes(value);
 }
 
 /**

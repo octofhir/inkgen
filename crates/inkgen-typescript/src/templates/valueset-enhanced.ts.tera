@@ -30,7 +30,7 @@ export type {{ valueset.type_name }} = typeof {{ valueset.type_name }}Values[num
  * Type guard for {{ valueset.type_name }}
  */
 export function is{{ valueset.type_name }}(value: string): value is {{ valueset.type_name }} {
-  return {{ valueset.type_name }}Values.includes(value as any);
+  return ({{ valueset.type_name }}Values as readonly string[]).includes(value);
 }
 
 {# Enhanced metadata with definitions and comments #}

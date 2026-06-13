@@ -17,7 +17,7 @@ export type AdministrativeGender = typeof AdministrativeGenderValues[number] | (
  * Type guard for AdministrativeGender
  */
 export function isAdministrativeGender(value: string): value is AdministrativeGender {
-  return AdministrativeGenderValues.includes(value as any);
+  return (AdministrativeGenderValues as readonly string[]).includes(value);
 }
 
 /**

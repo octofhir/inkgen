@@ -695,7 +695,7 @@ impl ProfileInfo {
                     member, value_type
                 )),
                 None => output.push_str(&format!(
-                    "    return (ext as any)?.value as {} | undefined;\n",
+                    "    return (ext as unknown as Record<string, unknown> | undefined)?.value as {} | undefined;\n",
                     value_type
                 )),
             }
@@ -1061,28 +1061,34 @@ impl ProfileInfo {
         ));
 
         for nested in &extension.nested_types {
-            let value_field = match nested.base_type.as_str() {
-                "string" => "valueString",
-                "number" => "valueInteger",
-                "boolean" => "valueBoolean",
-                "Duration" => "valueDuration",
-                "Period" => "valuePeriod",
-                "CodeableConcept" => "valueCodeableConcept",
-                "Coding" => "valueCoding",
-                "Reference" => "valueReference",
-                "Quantity" => "valueQuantity",
-                _ => "value",
-            };
-
             output.push_str(&format!(
                 "  const {} = ext.extension.find(e => e.url === '{}');\n",
                 nested.type_name, nested.type_name
             ));
-            // Cast to 'any' to access value[x] properties like valueDuration, valueInteger, etc.
-            output.push_str(&format!(
-                "  if ({}) result.{} = ({} as any).{} as {};\n\n",
-                nested.type_name, nested.type_name, nested.type_name, value_field, nested.base_type
-            ));
+            // Read the wire-correct value member (`valueCode`,
+            // `valueCodeableConcept`, …) from the sub-extension's FHIR type code
+            // via the core naming — not a hardcoded TS-type→member table (which
+            // was incomplete and lossy: `code`/`uri`/`string` all map to the TS
+            // `string` but serialize as distinct `value*` members). `Extension`
+            // declares every `value[x]` member, so the read is typed, no cast.
+            match nested.value_type_code.as_deref() {
+                Some(code) => {
+                    let member = inkgen_core::ir::choice_variant_name("value", code);
+                    output.push_str(&format!(
+                        "  if ({n}) result.{n} = {n}.{m} as {t};\n\n",
+                        n = nested.type_name,
+                        m = member,
+                        t = nested.base_type
+                    ));
+                }
+                // Untyped (multi-type choice) sub-extension: no single value
+                // member is known, so fall back to a dynamic read.
+                None => output.push_str(&format!(
+                    "  if ({n}) result.{n} = ({n} as unknown as Record<string, unknown>).value as {t};\n\n",
+                    n = nested.type_name,
+                    t = nested.base_type
+                )),
+            }
         }
 
         output.push_str(&format!("  return result as {};\n", input_type_name));

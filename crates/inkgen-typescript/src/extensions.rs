@@ -175,19 +175,26 @@ fn collect_nested_from_elements_flat(flat_elements: &[ElementDefinition]) -> Vec
         {
             // The next few elements should be the child elements of this slice
             // Look for the value[x] element immediately following
-            let value_type = flat_elements
+            // Scan this slice's children up to the next sibling slice header
+            // (another `Extension.extension`) for its `value[x]`. A fixed-size
+            // window misses it: `id`, `extension`, and `url` precede `value[x]`.
+            let value_type_code = flat_elements
                 .iter()
                 .skip(idx + 1)
-                .take(3)
+                .take_while(|e| e.path != "Extension.extension")
                 .find(|e| e.path == "Extension.extension.value[x]")
                 .and_then(|value_elem| value_elem.types.first())
-                .map(|t| element_type_to_typescript_from_type(&t.code))
+                .map(|t| t.code.clone());
+            let value_type = value_type_code
+                .as_deref()
+                .map(element_type_to_typescript_from_type)
                 .unwrap_or_else(|| "unknown".to_string());
 
             nested_types.push(NestedTypeInfo {
                 type_name: slice_name.clone(),
                 element_path: element.path.clone(),
                 base_type: value_type.clone(),
+                value_type_code,
                 children: vec![],
                 doc_comment: element.definition.clone().or_else(|| element.short.clone()),
                 depth: 0,
@@ -383,20 +390,18 @@ fn collect_extension_nested_types(ext_def: &ExtensionDefinition) -> Vec<NestedTy
         {
             // Find the corresponding value[x] element for this slice
             let value_elem_path = format!("{}.value[x]", element.path);
-            let value_type = ext_def
+            let value_type_code = ext_def
                 .elements
                 .iter()
                 .find(|e| {
                     e.path == value_elem_path
                         || e.path.starts_with(&format!("{}.value", element.path))
                 })
-                .and_then(|value_elem| {
-                    // Get the first type from the element's types
-                    value_elem
-                        .types
-                        .first()
-                        .map(|t| element_type_to_typescript_from_type(&t.code))
-                })
+                .and_then(|value_elem| value_elem.types.first())
+                .map(|t| t.code.clone());
+            let value_type = value_type_code
+                .as_deref()
+                .map(element_type_to_typescript_from_type)
                 .unwrap_or_else(|| "unknown".to_string());
 
             // Get cardinality
@@ -411,6 +416,7 @@ fn collect_extension_nested_types(ext_def: &ExtensionDefinition) -> Vec<NestedTy
                 type_name: slice_name.clone(),
                 element_path: element.path.clone(),
                 base_type: value_type.clone(),
+                value_type_code,
                 children: vec![], // Sub-extensions don't have children
                 doc_comment: element.definition.clone().or_else(|| element.short.clone()),
                 depth: 0,

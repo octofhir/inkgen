@@ -17,7 +17,7 @@ export type ConditionSeverity = typeof ConditionSeverityValues[number] | (string
  * Type guard for ConditionSeverity
  */
 export function isConditionSeverity(value: string): value is ConditionSeverity {
-  return ConditionSeverityValues.includes(value as any);
+  return (ConditionSeverityValues as readonly string[]).includes(value);
 }
 
 /**

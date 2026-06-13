@@ -14,6 +14,12 @@ pub struct NestedTypeInfo {
     pub element_path: String,
     /// Base type (typically "BackboneElement" or "Element")
     pub base_type: String,
+    /// Raw FHIR type code of a sub-extension's single-typed `value[x]`
+    /// (e.g. `code`, `CodeableConcept`), used to build the wire-correct value
+    /// member name (`valueCode`, `valueCodeableConcept`) via the core
+    /// `choice_variant_name`. `None` for backbone elements and complex /
+    /// untyped sub-extensions, where there is no single value member.
+    pub value_type_code: Option<String>,
     /// Child elements that become fields in this type
     pub children: Vec<ElementDefinition>,
     /// Documentation comment from the element
@@ -79,6 +85,7 @@ impl<'a> NestedTypeCollector<'a> {
                 type_name,
                 element_path: element.path.clone(),
                 base_type,
+                value_type_code: None,
                 children: element.children.clone(),
                 doc_comment,
                 depth: element.depth,

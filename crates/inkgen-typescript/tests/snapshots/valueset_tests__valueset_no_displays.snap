@@ -10,5 +10,5 @@ export type SimpleCodeSystem = typeof SimpleCodeSystemValues[number];
  * Type guard for SimpleCodeSystem
  */
 export function isSimpleCodeSystem(value: string): value is SimpleCodeSystem {
-  return SimpleCodeSystemValues.includes(value as any);
+  return (SimpleCodeSystemValues as readonly string[]).includes(value);
 }

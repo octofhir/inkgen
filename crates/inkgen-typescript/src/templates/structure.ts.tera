@@ -177,7 +177,7 @@ export type {{ slice.path | split(pat=".") | last | title }}Slice =
 export function is{{ slice_info.name | title }}Slice(
   value: {{ slice.path | split(pat=".") | last | title }}Slice
 ): value is Extract<{{ slice.path | split(pat=".") | last | title }}Slice, { {{ discriminator_field }}: "{{ slice_info.discriminator_value }}" }> {
-  return (value as any).{{ discriminator_field }} === "{{ slice_info.discriminator_value }}";
+  return value.{{ discriminator_field }} === "{{ slice_info.discriminator_value }}";
 }
 {%- endif %}
 {% endfor %}
