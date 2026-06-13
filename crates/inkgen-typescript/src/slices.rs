@@ -203,6 +203,7 @@ mod tests {
             discriminator_value: Some("http://example.org/code".to_string()),
             discriminator_type: None,
             discriminator_exists: None,
+            discriminator_values: Vec::new(),
             has_fixed: true,
         };
 

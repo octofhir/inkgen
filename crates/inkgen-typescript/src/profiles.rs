@@ -1231,20 +1231,39 @@ pub fn build_slice_accessors(
         else {
             continue;
         };
-        let segments = discriminator_segments(definition, &pattern.path, &disc.path);
-
         for slice in &pattern.slices {
-            let Some(value) = &slice.discriminator_value else {
+            // A slice may pin several discriminator paths (e.g. `bp` matches
+            // both `code.coding.code` and `code.coding.system`). Match all of
+            // them. Fall back to the single resolved value for slices whose
+            // value came from the header (extension `url` slices).
+            let pairs: Vec<(String, String)> = if !slice.discriminator_values.is_empty() {
+                slice.discriminator_values.clone()
+            } else if let Some(value) = &slice.discriminator_value {
+                vec![(disc.path.clone(), value.clone())]
+            } else {
                 continue;
             };
-            let predicate = slice_predicate("item", &segments, value, 0);
+
+            let predicate = pairs
+                .iter()
+                .map(|(path, value)| {
+                    let segs = discriminator_segments(definition, &pattern.path, path);
+                    slice_predicate("item", &segs, value, 0)
+                })
+                .collect::<Vec<_>>()
+                .join(" && ");
+            let doc = pairs
+                .iter()
+                .map(|(path, value)| format!("{path} = \"{value}\""))
+                .collect::<Vec<_>>()
+                .join(", ");
             let slice_pascal = crate::naming::pascal_case(&slice.name);
             out.push(SliceAccessor {
                 fn_name: format!("get{profile_type}{slice_pascal}"),
                 guard_name: format!("is{profile_type}{slice_pascal}"),
                 array_access: array_access.clone(),
                 item_type: item_type.clone(),
-                doc: format!("{} = \"{}\"", disc.path, value),
+                doc,
                 predicate,
             });
         }

@@ -24,6 +24,12 @@ pub struct SliceInfo {
     /// (`None`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub discriminator_exists: Option<bool>,
+    /// All resolved value/pattern discriminators for this slice as
+    /// `(discriminator path, fixed value)` — a slice may discriminate on more
+    /// than one path (e.g. `bp` matches both `code.coding.code` and
+    /// `code.coding.system`). `discriminator_value` mirrors the first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub discriminator_values: Vec<(String, String)>,
     /// Whether this slice has a fixed constraint.
     pub has_fixed: bool,
 }
@@ -83,13 +89,22 @@ pub fn detect_slices(resource: &ResourceDefinition) -> Vec<SlicePattern> {
                 if matches!(
                     discriminator_kind,
                     Some(DiscriminatorType::Value | DiscriminatorType::Pattern)
-                ) && let Some(disc) = &discriminator
-                {
+                ) {
                     for slice in &mut slices {
-                        if slice.discriminator_value.is_none() {
-                            slice.discriminator_value =
-                                detect_value(resource, &element.path, &slice.name, &disc.path);
+                        // Resolve every value/pattern discriminator (a slice may
+                        // pin more than one path, e.g. code + system).
+                        let mut values = Vec::new();
+                        for disc in &slicing.discriminators {
+                            if let Some(v) =
+                                detect_value(resource, &element.path, &slice.name, &disc.path)
+                            {
+                                values.push((disc.path.clone(), v));
+                            }
                         }
+                        if slice.discriminator_value.is_none() {
+                            slice.discriminator_value = values.first().map(|(_, v)| v.clone());
+                        }
+                        slice.discriminator_values = values;
                     }
                 }
 
@@ -117,6 +132,7 @@ fn find_slices_for_parent(elements: &[ElementDefinition], parent_path: &str) -> 
             discriminator_value: extract_discriminator_value(elem),
             discriminator_type: extract_discriminator_type(elem),
             discriminator_exists: None,
+            discriminator_values: Vec::new(),
             has_fixed: elem.fixed.is_some(),
         })
         .collect()
@@ -311,6 +327,82 @@ mod tests {
             extensions: Vec::new(),
             invariants: Vec::new(),
         }
+    }
+
+    #[test]
+    fn detect_slices_resolves_multiple_value_discriminators() {
+        use crate::ir::SlicingInfo;
+
+        let mut parent = flat_element(
+            "Observation.component",
+            "Observation.component",
+            2,
+            ElementMax::Unbounded,
+        );
+        parent.slicing = Some(SlicingInfo {
+            discriminators: vec![
+                SliceDiscriminator {
+                    discriminator_type: "value".to_string(),
+                    path: "code.coding.code".to_string(),
+                    kind: Some(DiscriminatorType::Value),
+                },
+                SliceDiscriminator {
+                    discriminator_type: "value".to_string(),
+                    path: "code.coding.system".to_string(),
+                    kind: Some(DiscriminatorType::Value),
+                },
+            ],
+            ordered: false,
+            rules: "open".to_string(),
+        });
+
+        let mut member = flat_element(
+            "Observation.component:SystolicBP",
+            "Observation.component",
+            1,
+            ElementMax::Finite(1),
+        );
+        member.slice_name = Some("SystolicBP".to_string());
+
+        let mut code_el = flat_element(
+            "Observation.component:SystolicBP.code.coding.code",
+            "Observation.component.code.coding.code",
+            1,
+            ElementMax::Finite(1),
+        );
+        code_el.fixed = Some(json!("8480-6"));
+
+        let mut sys_el = flat_element(
+            "Observation.component:SystolicBP.code.coding.system",
+            "Observation.component.code.coding.system",
+            1,
+            ElementMax::Finite(1),
+        );
+        sys_el.fixed = Some(json!("http://loinc.org"));
+
+        let r = resource_with_flat(vec![parent, member, code_el, sys_el]);
+        let patterns = detect_slices(&r);
+        let pattern = patterns
+            .iter()
+            .find(|p| p.path == "Observation.component")
+            .expect("component slice pattern");
+        let slice = pattern
+            .slices
+            .iter()
+            .find(|s| s.name == "SystolicBP")
+            .expect("SystolicBP slice");
+        assert_eq!(
+            slice.discriminator_values,
+            vec![
+                ("code.coding.code".to_string(), "8480-6".to_string()),
+                (
+                    "code.coding.system".to_string(),
+                    "http://loinc.org".to_string()
+                ),
+            ]
+        );
+        // back-compat: the single value mirrors the first discriminator.
+        assert_eq!(slice.discriminator_value, Some("8480-6".to_string()));
     }
 
     #[test]
