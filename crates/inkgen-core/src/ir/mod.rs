@@ -211,6 +211,13 @@ pub fn expand_choice_elements(elements: Vec<ElementDefinition>) -> Vec<ElementDe
                     let mut variant = element.clone();
                     variant.path = format!("{prefix}{member}");
                     variant.types = vec![ty.clone()];
+                    // Each variant is individually optional on the wire: a choice
+                    // serializes at most one member, so a required choice
+                    // (min >= 1) must not force every member. The "at least one"
+                    // constraint is enforced per choice group by the backend, not
+                    // per member. Without this a required value[x] would demand
+                    // all variants simultaneously.
+                    variant.cardinality.min = 0;
                     variant
                 })
                 .collect();
@@ -489,6 +496,18 @@ mod choice_tests {
         for variant in &expanded {
             assert_eq!(variant.id, "Patient.deceased[x]");
             assert!(!variant.path.contains("[x]"));
+        }
+    }
+
+    #[test]
+    fn expanded_variants_are_individually_optional() {
+        // A required choice (min=1) must not force every variant.
+        let mut required = choice_element("Q.answer[x]", &["boolean", "string"]);
+        required.cardinality.min = 1;
+        let expanded = expand_choice_elements(vec![required]);
+        assert_eq!(expanded.len(), 2);
+        for variant in &expanded {
+            assert_eq!(variant.cardinality.min, 0);
         }
     }
 

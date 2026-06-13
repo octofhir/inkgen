@@ -826,20 +826,15 @@ struct ZodSchemaField {
     zod_type: String,
 }
 
-/// Accumulator for choice (`value[x]`) variant members sharing one origin id.
-struct ChoiceGroupAccum {
-    members: Vec<String>,
-    min: u32,
-}
-
 /// A `value[x]` choice group surfaced to the Zod template so `parse{Type}` can
-/// enforce that at most one variant member is present.
+/// enforce the FHIR choice constraint: at most one variant present, or exactly
+/// one when the choice is required.
 #[derive(Debug, Clone, Serialize)]
 struct RenderChoiceGroup {
     /// Emitted field names of the variants (e.g. `deceasedBoolean`, `deceasedDateTime`).
     members: Vec<String>,
-    /// Whether the choice is required (min ≥ 1). Reserved for a future
-    /// exactly-one refinement; the current template enforces at-most-one only.
+    /// Whether the choice is required (pre-expansion min ≥ 1). Required choices
+    /// must have exactly one member present; optional choices at most one.
     required: bool,
 }
 
@@ -2786,12 +2781,24 @@ fn build_render_structure(
             add_schema_type_ref(&mut schema_type_refs, type_ref);
         }
 
+        // Choice (`value[x]`) ids whose pre-expansion cardinality is required
+        // (min >= 1). `expand_choice_elements` lowers every variant to min 0
+        // (each member is individually optional on the wire), so the
+        // required-ness of the choice as a whole must be read here, before
+        // expansion, to drive the exactly-one refinement.
+        let required_choice_ids: std::collections::HashSet<String> =
+            top_level_element_refs(definition)
+                .iter()
+                .filter(|element| element.path.ends_with("[x]") && element.cardinality.min >= 1)
+                .map(|element| element.id.clone())
+                .collect();
+
         // Group emitted choice (`value[x]`) variant members by their shared
         // origin element id. `expand_choice_elements` clones the `value[x]`
         // element per type and only rewrites path/types, so every variant keeps
         // the original id ending in `[x]` (e.g. `Patient.deceased[x]`). Members
         // accumulate in field-emission order, which is deterministic.
-        let mut choice_members: IndexMap<String, ChoiceGroupAccum> = IndexMap::new();
+        let mut choice_members: IndexMap<String, Vec<String>> = IndexMap::new();
 
         for element in top_level_elements(definition)
             .iter()
@@ -2883,16 +2890,13 @@ fn build_render_structure(
                         schema_info.schema
                     };
 
-                    // Record choice-variant membership for the at-most-one
-                    // refinement (only emitted fields are referenced).
+                    // Record choice-variant membership for the choice refinement
+                    // (only emitted fields are referenced).
                     if element.id.ends_with("[x]") {
-                        let accum = choice_members.entry(element.id.clone()).or_insert_with(|| {
-                            ChoiceGroupAccum {
-                                members: Vec::new(),
-                                min: element.cardinality.min,
-                            }
-                        });
-                        accum.members.push(field_name.clone());
+                        choice_members
+                            .entry(element.id.clone())
+                            .or_default()
+                            .push(field_name.clone());
                     }
 
                     fields.push(ZodSchemaField {
@@ -2905,11 +2909,11 @@ fn build_render_structure(
 
         // A choice group only needs a runtime guard when it has ≥2 variants.
         let choice_groups: Vec<RenderChoiceGroup> = choice_members
-            .into_values()
-            .filter(|accum| accum.members.len() >= 2)
-            .map(|accum| RenderChoiceGroup {
-                members: accum.members,
-                required: accum.min >= 1,
+            .into_iter()
+            .filter(|(_, members)| members.len() >= 2)
+            .map(|(id, members)| RenderChoiceGroup {
+                members,
+                required: required_choice_ids.contains(&id),
             })
             .collect();
 
