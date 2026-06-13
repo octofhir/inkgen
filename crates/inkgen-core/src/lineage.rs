@@ -240,6 +240,7 @@ mod tests {
                 type_name: Some("Patient".to_string()),
             },
             elements: Vec::new(),
+            flat_elements: Vec::new(),
             extensions: Vec::new(),
             invariants: Vec::new(),
         };

@@ -13,8 +13,8 @@ export class USCorePatientProfile extends Patient {
   readonly __profile = 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient';
 
   // Fixed value constraints
-  /** Fixed value: true */
-  declare active: true;
+  /** Fixed value: "M" */
+  declare maritalStatus: "M";
 
   // Must-support elements (required by profile)
   /** Required by profile: Patient.identifier */

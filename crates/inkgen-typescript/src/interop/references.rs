@@ -223,7 +223,7 @@ pub fn collect_resource_types(structure_names: &[String]) -> Vec<String> {
     // Add resource types from structures
     for name in structure_names {
         // Only include types that look like resources (PascalCase, not ending in common suffixes)
-        if name.chars().next().map_or(false, |c| c.is_uppercase())
+        if name.chars().next().is_some_and(|c| c.is_uppercase())
             && !name.ends_with("Type")
             && !name.ends_with("Element")
         {

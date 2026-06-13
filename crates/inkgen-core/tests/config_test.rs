@@ -41,6 +41,7 @@ fn test_package_entry_folder_name() {
         include_urls: vec![],
         exclude_resources: vec![],
         exclude_urls: vec![],
+        source: None,
     };
     assert_eq!(entry.folder_name(), "my-custom-folder");
 
@@ -54,6 +55,7 @@ fn test_package_entry_folder_name() {
         include_urls: vec![],
         exclude_resources: vec![],
         exclude_urls: vec![],
+        source: None,
     };
     assert_eq!(entry.folder_name(), "us-core");
 }
@@ -147,6 +149,7 @@ fn test_should_include_resource_all_mode() {
         include_urls: vec![],
         exclude_resources: vec![],
         exclude_urls: vec![],
+        source: None,
     };
 
     assert!(
@@ -169,6 +172,7 @@ fn test_should_include_resource_none_mode() {
         include_urls: vec![],
         exclude_resources: vec![],
         exclude_urls: vec![],
+        source: None,
     };
 
     assert!(
@@ -188,6 +192,7 @@ fn test_should_include_resource_include_mode() {
         include_urls: vec!["http://hl7.org/fhir/StructureDefinition/Observation".to_string()],
         exclude_resources: vec![],
         exclude_urls: vec![],
+        source: None,
     };
 
     // Include by name
@@ -214,6 +219,7 @@ fn test_should_include_resource_exclude_mode() {
         name: "hl7.fhir.r4.core".to_string(),
         version: "4.0.1".to_string(),
         folder: None,
+        source: None,
         filter: FilterMode::Exclude,
         include_resources: vec![],
         include_urls: vec![],
@@ -248,6 +254,7 @@ fn test_should_include_by_filter_dependencies_mode() {
         include_urls: vec![],
         exclude_resources: vec![],
         exclude_urls: vec![],
+        source: None,
     };
 
     // Should only include if it's a dependency

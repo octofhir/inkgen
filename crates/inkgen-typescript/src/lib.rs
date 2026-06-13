@@ -421,7 +421,12 @@ pub mod naming {
         }
 
         // If starts with a digit, prefix with underscore
-        let result = if name.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+        let result = if name
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_digit())
+            .unwrap_or(false)
+        {
             format!("_{}", name)
         } else {
             name.to_string()
@@ -1204,7 +1209,7 @@ impl TypescriptGenerator {
             || summary
                 .type_code
                 .as_deref()
-                .is_some_and(|tc| tc != &definition.id && !definition.id.eq_ignore_ascii_case(tc));
+                .is_some_and(|tc| tc != definition.id && !definition.id.eq_ignore_ascii_case(tc));
 
         if is_profile_like {
             naming::pascal_case(&definition.id)
@@ -1257,7 +1262,7 @@ impl TypescriptGenerator {
             if let Some(type_registry) = &self.config.type_registry {
                 // TypeRegistry uses PascalCase names, but FhirTypeRegistry uses lowercase
                 // Convert to PascalCase for lookup
-                let pascal_name = if type_name.chars().next().map_or(false, |c| c.is_lowercase()) {
+                let pascal_name = if type_name.chars().next().is_some_and(|c| c.is_lowercase()) {
                     let mut chars = type_name.chars();
                     match chars.next() {
                         None => type_name.to_string(),
@@ -1742,7 +1747,7 @@ where
             // this is likely a profile even if kind says ComplexType (e.g., MoneyQuantity, SimpleQuantity)
             let is_profile_like = summary.kind == StructureKind::Profile
                 || summary.type_code.as_deref().is_some_and(|tc| {
-                    tc != &definition.id && !definition.id.eq_ignore_ascii_case(tc)
+                    tc != definition.id && !definition.id.eq_ignore_ascii_case(tc)
                 });
 
             let type_name = if is_profile_like {
@@ -1846,15 +1851,15 @@ where
         // This ensures all FHIR types are resolvable, even if not being generated in this package
         // No hardcoded lists - everything comes from the canonical manager
         for type_name in canonical_type_map.all_names() {
-            if !name_to_stem.contains_key(type_name) {
-                if let Some(entry) = canonical_type_map.get_by_name(type_name) {
-                    debug!(
-                        "Pre-populating '{}' from CanonicalTypeMap (stem='{}')",
-                        type_name, entry.file_stem
-                    );
-                    name_to_stem.insert(type_name.to_string(), entry.file_stem.clone());
-                    name_to_file.insert(type_name.to_string(), format!("{}.ts", entry.file_stem));
-                }
+            if !name_to_stem.contains_key(type_name)
+                && let Some(entry) = canonical_type_map.get_by_name(type_name)
+            {
+                debug!(
+                    "Pre-populating '{}' from CanonicalTypeMap (stem='{}')",
+                    type_name, entry.file_stem
+                );
+                name_to_stem.insert(type_name.to_string(), entry.file_stem.clone());
+                name_to_file.insert(type_name.to_string(), format!("{}.ts", entry.file_stem));
             }
         }
         info!(
@@ -2184,48 +2189,48 @@ fn write_package(package: &PackageOutput) -> Result<()> {
         .with_context(|| "failed to write utils/extensions.ts")?;
 
     // Write interop utilities if enabled
-    if package.generate_interop {
-        if let Some(config) = &package.interop_config {
-            let generator = interop::InteropGenerator::new(
-                package.resource_types.clone(),
-                package.search_parameters.clone(),
-                config,
-            );
-            if generator.is_enabled() {
-                // Generate main interop.ts with references, dates, and bundles (but not search)
-                let mut interop_code = generator.generate_without_search(config);
+    if package.generate_interop
+        && let Some(config) = &package.interop_config
+    {
+        let generator = interop::InteropGenerator::new(
+            package.resource_types.clone(),
+            package.search_parameters.clone(),
+            config,
+        );
+        if generator.is_enabled() {
+            // Generate main interop.ts with references, dates, and bundles (but not search)
+            let mut interop_code = generator.generate_without_search(config);
 
-                // Generate search parameters in separate directory if enabled
-                if config.search_config.interfaces || config.search_config.url_builders {
-                    let search_dir = utils_dir.join("search");
-                    fs::create_dir_all(&search_dir).with_context(|| {
-                        format!("failed to create search directory {}", search_dir.display())
-                    })?;
+            // Generate search parameters in separate directory if enabled
+            if config.search_config.interfaces || config.search_config.url_builders {
+                let search_dir = utils_dir.join("search");
+                fs::create_dir_all(&search_dir).with_context(|| {
+                    format!("failed to create search directory {}", search_dir.display())
+                })?;
 
-                    let search_helpers = interop::search::SearchHelpers::new(
-                        package.resource_types.clone(),
-                        package.search_parameters.clone(),
-                        &config.search_config,
-                    );
+                let search_helpers = interop::search::SearchHelpers::new(
+                    package.resource_types.clone(),
+                    package.search_parameters.clone(),
+                    &config.search_config,
+                );
 
-                    // Generate split files
-                    let search_files = search_helpers.generate_all_split();
-                    for (file_name, content) in search_files {
-                        let file_path = search_dir.join(&file_name);
-                        fs::write(&file_path, content)
-                            .with_context(|| format!("failed to write search/{}", file_name))?;
-                    }
-
-                    // Add re-export from search directory
-                    interop_code
-                        .push_str("\n\n// Re-export search parameters from separate directory\n");
-                    interop_code.push_str("export * from './search';\n");
+                // Generate split files
+                let search_files = search_helpers.generate_all_split();
+                for (file_name, content) in search_files {
+                    let file_path = search_dir.join(&file_name);
+                    fs::write(&file_path, content)
+                        .with_context(|| format!("failed to write search/{}", file_name))?;
                 }
 
-                // Write main interop.ts
-                fs::write(utils_dir.join("interop.ts"), interop_code)
-                    .with_context(|| "failed to write utils/interop.ts")?;
+                // Add re-export from search directory
+                interop_code
+                    .push_str("\n\n// Re-export search parameters from separate directory\n");
+                interop_code.push_str("export * from './search';\n");
             }
+
+            // Write main interop.ts
+            fs::write(utils_dir.join("interop.ts"), interop_code)
+                .with_context(|| "failed to write utils/interop.ts")?;
         }
     }
 
@@ -2332,7 +2337,6 @@ fn write_package(package: &PackageOutput) -> Result<()> {
     fs::write(package.path.join("index.ts"), index_content)?;
     Ok(())
 }
-
 
 /// Extract all FHIR primitive type names from a type expression
 /// Handles simple types (FhirString), optional types (FhirBoolean | undefined),
@@ -3172,9 +3176,10 @@ fn top_level_elements(definition: &ResourceDefinition) -> Vec<&ElementDefinition
         .find(|elem| elem.path == definition.id)
         .or_else(|| {
             // For logical resources, the element paths may use 'name' instead of 'id'
-            definition.name.as_ref().and_then(|name| {
-                definition.elements.iter().find(|elem| elem.path == *name)
-            })
+            definition
+                .name
+                .as_ref()
+                .and_then(|name| definition.elements.iter().find(|elem| elem.path == *name))
         })
         .or_else(|| {
             // Fallback: use the first element with no dots (root element)
@@ -3207,10 +3212,18 @@ fn top_level_elements(definition: &ResourceDefinition) -> Vec<&ElementDefinition
 
     // Fallback to flat structure: find elements at depth 1 (sorted for determinism)
     // Determine the root path prefix - try id, then name, then first element's root
-    let root_path = if definition.elements.iter().any(|e| e.path.starts_with(&format!("{}.", definition.id))) {
+    let root_path = if definition
+        .elements
+        .iter()
+        .any(|e| e.path.starts_with(&format!("{}.", definition.id)))
+    {
         definition.id.clone()
     } else if let Some(name) = &definition.name {
-        if definition.elements.iter().any(|e| e.path.starts_with(&format!("{}.", name))) {
+        if definition
+            .elements
+            .iter()
+            .any(|e| e.path.starts_with(&format!("{}.", name)))
+        {
             name.clone()
         } else {
             definition.id.clone()
@@ -3421,14 +3434,14 @@ fn ensure_type_import(
     // CRITICAL: Check type_registry FIRST for correct cross-package imports
     // The type_registry has the authoritative package folder for each type.
     // name_to_stem may contain types from all packages but doesn't track which package they're from.
-    if let Some(registry) = type_registry {
-        if let Some((pkg_folder, stem)) = registry.get(type_name) {
-            imports.insert(
-                type_name.to_string(),
-                (pkg_folder.to_string(), stem.to_string()),
-            );
-            return;
-        }
+    if let Some(registry) = type_registry
+        && let Some((pkg_folder, stem)) = registry.get(type_name)
+    {
+        imports.insert(
+            type_name.to_string(),
+            (pkg_folder.to_string(), stem.to_string()),
+        );
+        return;
     }
 
     // Fallback: use name_to_stem for types not in registry (e.g., locally defined nested types)
@@ -3950,7 +3963,7 @@ mod tests {
         );
         assert!(content.contains("import { z } from 'zod'"));
         assert!(content.contains("export const FhirStringSchema = z.string()"));
-        assert!(content.contains("export const FhirDateSchema = z.string().regex"));
+        assert!(content.contains("export const FhirDateSchema = z.iso.date()"));
         assert!(content.contains("export function fhirString(value: string): FhirString"));
         assert!(content.contains("return FhirStringSchema.parse(value) as FhirString"));
     }

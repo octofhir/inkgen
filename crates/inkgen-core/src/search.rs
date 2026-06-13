@@ -145,7 +145,7 @@ impl SearchParameterInfo {
     ///
     /// Returns the code with underscores replaced by spaces and title-cased.
     pub fn display_name(&self) -> String {
-        self.code.replace('-', " ").replace('_', " ")
+        self.code.replace(['-', '_'], " ")
     }
 
     /// Check if this parameter applies to a specific resource type.

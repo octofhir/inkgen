@@ -355,6 +355,7 @@ mod tests {
                 type_name: Some("Patient".to_string()),
             },
             elements: vec![],
+            flat_elements: vec![],
             extensions: vec![],
             invariants: vec![],
         };
@@ -397,6 +398,7 @@ mod tests {
                 type_name: Some("Patient".to_string()),
             },
             elements: vec![],
+            flat_elements: vec![],
             extensions: vec![],
             invariants: vec![],
         };

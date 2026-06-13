@@ -1956,6 +1956,1903 @@ expression: "to_value(definition).expect(\"serialize\")"
   ],
   "extensions": [],
   "fhir_type": "Patient",
+  "flat_elements": [
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": null,
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Demographics and other administrative information about an individual or animal receiving care or other health-related services.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient",
+      "invariants": [
+        "dom-2",
+        "dom-3",
+        "dom-4",
+        "dom-5",
+        "dom-6"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient",
+      "pattern": null,
+      "requirements": null,
+      "short": "Information about an individual or animal receiving health care services",
+      "slice_name": null,
+      "slicing": null,
+      "types": []
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": "The only time that a resource does not have an id is when it is being submitted to the server using a create operation.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "The logical id of the resource, as used in the URL for the resource. Once assigned, this value never changes.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.id",
+      "invariants": [],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.id",
+      "pattern": null,
+      "requirements": null,
+      "short": "Logical id of this artifact",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "http://hl7.org/fhirpath/System.String",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": null,
+      "content_reference": null,
+      "default_value": null,
+      "definition": "The metadata about the resource. This is content that is maintained by the infrastructure. Changes to the content might not always be associated with version changes to the resource.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.meta",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.meta",
+      "pattern": null,
+      "requirements": null,
+      "short": "Metadata about the resource",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Meta",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": "Asserting this rule set restricts the content to be only understood by a limited set of trading partners. This inherently limits the usefulness of the data in the long term. However, the existing health eco-system is highly fractured, and not yet ready to define, collect, and exchange data in a generally computable sense. Wherever possible, implementers and/or specification writers should avoid using this element. Often, when used, the URL is a reference to an implementation guide that defines these special rules as part of it's narrative along with other profiles, value sets, etc.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "A reference to a set of rules that were followed when the resource was constructed, and which must be understood when processing the content. Often, this is a reference to an implementation guide that defines the special rules along with other profiles etc.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.implicitRules",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.implicitRules",
+      "pattern": null,
+      "requirements": null,
+      "short": "A set of rules under which this content was created",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "uri",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": {
+        "additional": {
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-maxValueSet",
+              "valueCanonical": "http://hl7.org/fhir/ValueSet/all-languages"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+              "valueString": "Language"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-isCommonBinding",
+              "valueBoolean": true
+            }
+          ]
+        },
+        "description": "A human language.",
+        "strength": "preferred",
+        "value_set": "http://hl7.org/fhir/ValueSet/languages"
+      },
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": "Language is provided to support indexing and accessibility (typically, services such as text to speech use the language tag). The html language tag in the narrative applies  to the narrative. The language tag on the resource may be used to specify the language of other presentations generated from the data in the resource. Not all the content has to be in the base language. The Resource.language should not be assumed to apply to the narrative automatically. If a language is specified, it should it also be specified on the div element in the html (see rules in HTML5 for information about the relationship between xml:lang and the html lang attribute).",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "The base language in which the resource is written.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.language",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.language",
+      "pattern": null,
+      "requirements": null,
+      "short": "Language of the resource content",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "code",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": "Contained resources do not have narrative. Resources that are not contained SHOULD have a narrative. In some cases, a resource may only have text with little or no additional discrete data (as long as all minOccurs=1 elements are satisfied).  This may be necessary for data from legacy systems where information is captured as a \"text blob\" or where text is additionally entered raw or narrated and encoded information is added later.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "A human-readable narrative that contains a summary of the resource and can be used to represent the content of the resource to a human. The narrative need not encode all the structured data, but is required to contain sufficient detail to make it \"clinically safe\" for a human to just read the narrative. Resource definitions may define what content should be represented in the narrative to ensure clinical safety.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.text",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.text",
+      "pattern": null,
+      "requirements": null,
+      "short": "Text summary of the resource, for human interpretation",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Narrative",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "This should never be done when the content can be identified properly, as once identification is lost, it is extremely difficult (and context dependent) to restore it again. Contained resources may have profiles and tags In their meta elements, but SHALL NOT have security labels.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "These resources do not have an independent existence apart from the resource that contains them - they cannot be identified independently, and nor can they have their own independent transaction scope.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.contained",
+      "invariants": [],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.contained",
+      "pattern": null,
+      "requirements": null,
+      "short": "Contained, inline Resources",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Resource",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "There can be no stigma associated with the use of extensions by any application, project, or standard - regardless of the institution or jurisdiction that uses or defines the extensions.  The use of extensions is what allows the FHIR specification to retain a core level of simplicity for everyone.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "May be used to represent additional information that is not part of the basic definition of the resource. To make the use of extensions safe and manageable, there is a strict set of governance  applied to the definition and use of extensions. Though any implementer can define an extension, there is a set of requirements that SHALL be met as part of the definition of the extension.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.extension",
+      "invariants": [
+        "ele-1",
+        "ext-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.extension",
+      "pattern": null,
+      "requirements": null,
+      "short": "Additional content defined by implementations",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Extension",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "There can be no stigma associated with the use of extensions by any application, project, or standard - regardless of the institution or jurisdiction that uses or defines the extensions.  The use of extensions is what allows the FHIR specification to retain a core level of simplicity for everyone.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "May be used to represent additional information that is not part of the basic definition of the resource and that modifies the understanding of the element that contains it and/or the understanding of the containing element's descendants. Usually modifier elements provide negation or qualification. To make the use of extensions safe and manageable, there is a strict set of governance applied to the definition and use of extensions. Though any implementer is allowed to define an extension, there is a set of requirements that SHALL be met as part of the definition of the extension. Applications processing a resource are required to check for modifier extensions.\n\nModifier extensions SHALL NOT change the meaning of any elements on Resource or DomainResource (including cannot change the meaning of modifierExtension itself).",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.modifierExtension",
+      "invariants": [
+        "ele-1",
+        "ext-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.modifierExtension",
+      "pattern": null,
+      "requirements": "Modifier extensions allow for extensions that *cannot* be safely ignored to be clearly distinguished from the vast majority of extensions which can be safely ignored.  This promotes interoperability by eliminating the need for implementers to prohibit the presence of extensions. For further information, see the [definition of modifier extensions](extensibility.html#modifierExtension).",
+      "short": "Extensions that cannot be ignored",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Extension",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": null,
+      "content_reference": null,
+      "default_value": null,
+      "definition": "An identifier for this patient.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.identifier",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.identifier",
+      "pattern": null,
+      "requirements": "Patients are almost always assigned specific numerical identifiers.",
+      "short": "An identifier for this patient",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Identifier",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": "If a record is inactive, and linked to an active record, then future patient/record updates should occur on the other patient.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Whether this patient record is in active use. \nMany systems use this property to mark as non-current patients, such as those that have not been seen for a period of time based on an organization's business rules.\n\nIt is often used to filter patient lists to exclude inactive patients\n\nDeceased patients may also be marked as inactive for the same reasons, but may be active for some time after death.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.active",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.active",
+      "pattern": null,
+      "requirements": "Need to be able to mark a patient record as not to be used because it was created in error.",
+      "short": "Whether this patient's record is in active use",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "boolean",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "A patient may have multiple names with different uses or applicable periods. For animals, the name is a \"HumanName\" in the sense that is assigned and used by humans and has the same patterns.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "A name associated with the individual.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.name",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.name",
+      "pattern": null,
+      "requirements": "Need to be able to track the patient by multiple names. Examples are your official name and a partner name.",
+      "short": "A name associated with the patient",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "HumanName",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "A Patient may have multiple ways to be contacted with different uses or applicable periods.  May need to have options for contacting the person urgently and also to help with identification. The address might not go directly to the individual, but may reach another party that is able to proxy for the patient (i.e. home phone, or pet owner's phone).",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "A contact detail (e.g. a telephone number or an email address) by which the individual may be contacted.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.telecom",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.telecom",
+      "pattern": null,
+      "requirements": "People have (primary) ways to contact them in some way such as phone, email.",
+      "short": "A contact detail for the individual",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "ContactPoint",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": {
+        "additional": {
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+              "valueString": "AdministrativeGender"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-isCommonBinding",
+              "valueBoolean": true
+            }
+          ]
+        },
+        "description": "The gender of a person used for administrative purposes.",
+        "strength": "required",
+        "value_set": "http://hl7.org/fhir/ValueSet/administrative-gender|4.0.1"
+      },
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": "The gender might not match the biological sex as determined by genetics or the individual's preferred identification. Note that for both humans and particularly animals, there are other legitimate possibilities than male and female, though the vast majority of systems and contexts only support male and female.  Systems providing decision support or enforcing business rules should ideally do this on the basis of Observations dealing with the specific sex or gender aspect of interest (anatomical, chromosomal, social, etc.)  However, because these observations are infrequently recorded, defaulting to the administrative gender is common practice.  Where such defaulting occurs, rule enforcement should allow for the variation between administrative and biological, chromosomal and other gender aspects.  For example, an alert about a hysterectomy on a male should be handled as a warning or overridable error, not a \"hard\" error.  See the Patient Gender and Sex section for additional information about communicating patient gender and sex.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Administrative Gender - the gender that the patient is considered to have for administration and record keeping purposes.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.gender",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.gender",
+      "pattern": null,
+      "requirements": "Needed for identification of the individual, in combination with (at least) name and birth date.",
+      "short": "male | female | other | unknown",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "code",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": "At least an estimated year should be provided as a guess if the real DOB is unknown  There is a standard extension \"patient-birthTime\" available that should be used where Time is required (such as in maternity/infant care systems).",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "The date of birth for the individual.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.birthDate",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.birthDate",
+      "pattern": null,
+      "requirements": "Age of the individual drives many clinical processes.",
+      "short": "The date of birth for the individual",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "date",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": "If there's no value in the instance, it means there is no statement on whether or not the individual is deceased. Most systems will interpret the absence of a value as a sign of the person being alive.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Indicates if the individual is deceased or not.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.deceased[x]",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.deceased[x]",
+      "pattern": null,
+      "requirements": "The fact that a patient is deceased influences the clinical process. Also, in human communication and relation management it is necessary to know whether the person is alive.",
+      "short": "Indicates if the individual is deceased or not",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "boolean",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        },
+        {
+          "aggregation": [],
+          "code": "dateTime",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "Patient may have multiple addresses with different uses or applicable periods.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "An address for the individual.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.address",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.address",
+      "pattern": null,
+      "requirements": "May need to keep track of patient addresses for contacting, billing or reporting requirements and also to help with identification.",
+      "short": "An address for the individual",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Address",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": {
+        "additional": {
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+              "valueString": "MaritalStatus"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-isCommonBinding",
+              "valueBoolean": true
+            }
+          ]
+        },
+        "description": "The domestic partnership status of a person.",
+        "strength": "extensible",
+        "value_set": "http://hl7.org/fhir/ValueSet/marital-status"
+      },
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": null,
+      "content_reference": null,
+      "default_value": null,
+      "definition": "This field contains a patient's most recent marital (civil) status.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.maritalStatus",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.maritalStatus",
+      "pattern": null,
+      "requirements": "Most, if not all systems capture it.",
+      "short": "Marital (civil) status of a patient",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "CodeableConcept",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": "Where the valueInteger is provided, the number is the birth number in the sequence. E.g. The middle birth in triplets would be valueInteger=2 and the third born would have valueInteger=3 If a boolean value was provided for this triplets example, then all 3 patient records would have valueBoolean=true (the ordering is not indicated).",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Indicates whether the patient is part of a multiple (boolean) or indicates the actual birth order (integer).",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.multipleBirth[x]",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.multipleBirth[x]",
+      "pattern": null,
+      "requirements": "For disambiguation of multiple-birth children, especially relevant where the care provider doesn't meet the patient, such as labs.",
+      "short": "Whether patient is part of a multiple birth",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "boolean",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        },
+        {
+          "aggregation": [],
+          "code": "integer",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "Guidelines:\n* Use id photos, not clinical photos.\n* Limit dimensions to thumbnail.\n* Keep byte count low to ease resource updates.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Image of the patient.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.photo",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.photo",
+      "pattern": null,
+      "requirements": "Many EHR systems have the capability to capture an image of the patient. Fits with newer social media usage too.",
+      "short": "Image of the patient",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Attachment",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "Contact covers all kinds of contact parties: family members, business contacts, guardians, caregivers. Not applicable to register pedigree and family ties beyond use of having contact.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "A contact party (e.g. guardian, partner, friend) for the patient.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-explicit-type-name",
+          "value": "Contact"
+        }
+      ],
+      "fixed": null,
+      "id": "Patient.contact",
+      "invariants": [
+        "ele-1",
+        "pat-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.contact",
+      "pattern": null,
+      "requirements": "Need to track people you can contact about the patient.",
+      "short": "A contact party (e.g. guardian, partner, friend) for the patient",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "BackboneElement",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": null,
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Unique id for the element within a resource (for internal references). This may be any string value that does not contain spaces.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.contact.id",
+      "invariants": [],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.contact.id",
+      "pattern": null,
+      "requirements": null,
+      "short": "Unique id for inter-element referencing",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "http://hl7.org/fhirpath/System.String",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "There can be no stigma associated with the use of extensions by any application, project, or standard - regardless of the institution or jurisdiction that uses or defines the extensions.  The use of extensions is what allows the FHIR specification to retain a core level of simplicity for everyone.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "May be used to represent additional information that is not part of the basic definition of the element. To make the use of extensions safe and manageable, there is a strict set of governance  applied to the definition and use of extensions. Though any implementer can define an extension, there is a set of requirements that SHALL be met as part of the definition of the extension.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.contact.extension",
+      "invariants": [
+        "ele-1",
+        "ext-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.contact.extension",
+      "pattern": null,
+      "requirements": null,
+      "short": "Additional content defined by implementations",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Extension",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "There can be no stigma associated with the use of extensions by any application, project, or standard - regardless of the institution or jurisdiction that uses or defines the extensions.  The use of extensions is what allows the FHIR specification to retain a core level of simplicity for everyone.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "May be used to represent additional information that is not part of the basic definition of the element and that modifies the understanding of the element in which it is contained and/or the understanding of the containing element's descendants. Usually modifier elements provide negation or qualification. To make the use of extensions safe and manageable, there is a strict set of governance applied to the definition and use of extensions. Though any implementer can define an extension, there is a set of requirements that SHALL be met as part of the definition of the extension. Applications processing a resource are required to check for modifier extensions.\n\nModifier extensions SHALL NOT change the meaning of any elements on Resource or DomainResource (including cannot change the meaning of modifierExtension itself).",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.contact.modifierExtension",
+      "invariants": [
+        "ele-1",
+        "ext-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.contact.modifierExtension",
+      "pattern": null,
+      "requirements": "Modifier extensions allow for extensions that *cannot* be safely ignored to be clearly distinguished from the vast majority of extensions which can be safely ignored.  This promotes interoperability by eliminating the need for implementers to prohibit the presence of extensions. For further information, see the [definition of modifier extensions](extensibility.html#modifierExtension).",
+      "short": "Extensions that cannot be ignored even if unrecognized",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Extension",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": {
+        "additional": {
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+              "valueString": "ContactRelationship"
+            }
+          ]
+        },
+        "description": "The nature of the relationship between a patient and a contact person for that patient.",
+        "strength": "extensible",
+        "value_set": "http://hl7.org/fhir/ValueSet/patient-contactrelationship"
+      },
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": null,
+      "content_reference": null,
+      "default_value": null,
+      "definition": "The nature of the relationship between the patient and the contact person.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.contact.relationship",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.contact.relationship",
+      "pattern": null,
+      "requirements": "Used to determine which contact person is the most relevant to approach, depending on circumstances.",
+      "short": "The kind of relationship",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "CodeableConcept",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": null,
+      "content_reference": null,
+      "default_value": null,
+      "definition": "A name associated with the contact person.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.contact.name",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.contact.name",
+      "pattern": null,
+      "requirements": "Contact persons need to be identified by name, but it is uncommon to need details about multiple other names for that contact person.",
+      "short": "A name associated with the contact person",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "HumanName",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "Contact may have multiple ways to be contacted with different uses or applicable periods.  May need to have options for contacting the person urgently, and also to help with identification.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "A contact detail for the person, e.g. a telephone number or an email address.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.contact.telecom",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.contact.telecom",
+      "pattern": null,
+      "requirements": "People have (primary) ways to contact them in some way such as phone, email.",
+      "short": "A contact detail for the person",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "ContactPoint",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": null,
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Address for the contact person.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.contact.address",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.contact.address",
+      "pattern": null,
+      "requirements": "Need to keep track where the contact person can be contacted per postal mail or visited.",
+      "short": "Address for the contact person",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Address",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": {
+        "additional": {
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+              "valueString": "AdministrativeGender"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-isCommonBinding",
+              "valueBoolean": true
+            }
+          ]
+        },
+        "description": "The gender of a person used for administrative purposes.",
+        "strength": "required",
+        "value_set": "http://hl7.org/fhir/ValueSet/administrative-gender|4.0.1"
+      },
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": null,
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Administrative Gender - the gender that the contact person is considered to have for administration and record keeping purposes.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.contact.gender",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.contact.gender",
+      "pattern": null,
+      "requirements": "Needed to address the person correctly.",
+      "short": "male | female | other | unknown",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "code",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": null,
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Organization on behalf of which the contact is acting or for which the contact is working.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.contact.organization",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.contact.organization",
+      "pattern": null,
+      "requirements": "For guardians or business related contacts, the organization is relevant.",
+      "short": "Organization that is associated with the contact",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Reference",
+          "profiles": [],
+          "target_profiles": [
+            "http://hl7.org/fhir/StructureDefinition/Organization"
+          ],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": null,
+      "content_reference": null,
+      "default_value": null,
+      "definition": "The period during which this contact person or organization is valid to be contacted relating to this patient.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.contact.period",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.contact.period",
+      "pattern": null,
+      "requirements": null,
+      "short": "The period during which this contact person or organization is valid to be contacted relating to this patient",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Period",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "If no language is specified, this *implies* that the default local language is spoken.  If you need to convey proficiency for multiple modes, then you need multiple Patient.Communication associations.   For animals, language is not a relevant field, and should be absent from the instance. If the Patient does not speak the default local language, then the Interpreter Required Standard can be used to explicitly declare that an interpreter is required.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "A language which may be used to communicate with the patient about his or her health.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.communication",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.communication",
+      "pattern": null,
+      "requirements": "If a patient does not speak the local language, interpreters may be required, so languages spoken and proficiency are important things to keep track of both for patient and other persons of interest.",
+      "short": "A language which may be used to communicate with the patient about his or her health",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "BackboneElement",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": null,
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Unique id for the element within a resource (for internal references). This may be any string value that does not contain spaces.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.communication.id",
+      "invariants": [],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.communication.id",
+      "pattern": null,
+      "requirements": null,
+      "short": "Unique id for inter-element referencing",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "http://hl7.org/fhirpath/System.String",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "There can be no stigma associated with the use of extensions by any application, project, or standard - regardless of the institution or jurisdiction that uses or defines the extensions.  The use of extensions is what allows the FHIR specification to retain a core level of simplicity for everyone.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "May be used to represent additional information that is not part of the basic definition of the element. To make the use of extensions safe and manageable, there is a strict set of governance  applied to the definition and use of extensions. Though any implementer can define an extension, there is a set of requirements that SHALL be met as part of the definition of the extension.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.communication.extension",
+      "invariants": [
+        "ele-1",
+        "ext-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.communication.extension",
+      "pattern": null,
+      "requirements": null,
+      "short": "Additional content defined by implementations",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Extension",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "There can be no stigma associated with the use of extensions by any application, project, or standard - regardless of the institution or jurisdiction that uses or defines the extensions.  The use of extensions is what allows the FHIR specification to retain a core level of simplicity for everyone.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "May be used to represent additional information that is not part of the basic definition of the element and that modifies the understanding of the element in which it is contained and/or the understanding of the containing element's descendants. Usually modifier elements provide negation or qualification. To make the use of extensions safe and manageable, there is a strict set of governance applied to the definition and use of extensions. Though any implementer can define an extension, there is a set of requirements that SHALL be met as part of the definition of the extension. Applications processing a resource are required to check for modifier extensions.\n\nModifier extensions SHALL NOT change the meaning of any elements on Resource or DomainResource (including cannot change the meaning of modifierExtension itself).",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.communication.modifierExtension",
+      "invariants": [
+        "ele-1",
+        "ext-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.communication.modifierExtension",
+      "pattern": null,
+      "requirements": "Modifier extensions allow for extensions that *cannot* be safely ignored to be clearly distinguished from the vast majority of extensions which can be safely ignored.  This promotes interoperability by eliminating the need for implementers to prohibit the presence of extensions. For further information, see the [definition of modifier extensions](extensibility.html#modifierExtension).",
+      "short": "Extensions that cannot be ignored even if unrecognized",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Extension",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": {
+        "additional": {
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-maxValueSet",
+              "valueCanonical": "http://hl7.org/fhir/ValueSet/all-languages"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+              "valueString": "Language"
+            },
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-isCommonBinding",
+              "valueBoolean": true
+            }
+          ]
+        },
+        "description": "A human language.",
+        "strength": "preferred",
+        "value_set": "http://hl7.org/fhir/ValueSet/languages"
+      },
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 1
+      },
+      "comment": "The structure aa-BB with this exact casing is one the most widely used notations for locale. However not all systems actually code this but instead have it as free text. Hence CodeableConcept instead of code as the data type.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "The ISO-639-1 alpha 2 code in lower case for the language, optionally followed by a hyphen and the ISO-3166-1 alpha 2 code for the region in upper case; e.g. \"en\" for English, or \"en-US\" for American English versus \"en-EN\" for England English.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.communication.language",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.communication.language",
+      "pattern": null,
+      "requirements": "Most systems in multilingual countries will want to convey language. Not all systems actually need the regional dialect.",
+      "short": "The language which can be used to communicate with the patient about his or her health",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "CodeableConcept",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": "This language is specifically identified for communicating healthcare information.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Indicates whether or not the patient prefers this language (over other languages he masters up a certain level).",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.communication.preferred",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.communication.preferred",
+      "pattern": null,
+      "requirements": "People that master multiple languages up to certain level may prefer one or more, i.e. feel more confident in communicating in a particular language making other languages sort of a fall back method.",
+      "short": "Language preference indicator",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "boolean",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "This may be the primary care provider (in a GP context), or it may be a patient nominated care manager in a community/disability setting, or even organization that will provide people to perform the care provider roles.  It is not to be used to record Care Teams, these should be in a CareTeam resource that may be linked to the CarePlan or EpisodeOfCare resources.\nMultiple GPs may be recorded against the patient for various reasons, such as a student that has his home GP listed along with the GP at university during the school semesters, or a \"fly-in/fly-out\" worker that has the onsite GP also included with his home GP to remain aware of medical issues.\n\nJurisdictions may decide that they can profile this down to 1 if desired, or 1 per type.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Patient's nominated care provider.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.generalPractitioner",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.generalPractitioner",
+      "pattern": null,
+      "requirements": null,
+      "short": "Patient's nominated primary care provider",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Reference",
+          "profiles": [],
+          "target_profiles": [
+            "http://hl7.org/fhir/StructureDefinition/Organization",
+            "http://hl7.org/fhir/StructureDefinition/Practitioner",
+            "http://hl7.org/fhir/StructureDefinition/PractitionerRole"
+          ],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": "There is only one managing organization for a specific patient record. Other organizations will have their own Patient record, and may use the Link property to join the records together (or a Person resource which can include confidence ratings for the association).",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Organization that is the custodian of the patient record.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.managingOrganization",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.managingOrganization",
+      "pattern": null,
+      "requirements": "Need to know who recognizes this patient record, manages and updates it.",
+      "short": "Organization that is the custodian of the patient record",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Reference",
+          "profiles": [],
+          "target_profiles": [
+            "http://hl7.org/fhir/StructureDefinition/Organization"
+          ],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "There is no assumption that linked patient records have mutual links.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Link to another patient resource that concerns the same actual patient.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.link",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.link",
+      "pattern": null,
+      "requirements": "There are multiple use cases:   \n\n* Duplicate patient records due to the clerical errors associated with the difficulties of identifying humans consistently, and \n* Distribution of patient information across multiple servers.",
+      "short": "Link to another patient resource that concerns the same actual person",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "BackboneElement",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 0
+      },
+      "comment": null,
+      "content_reference": null,
+      "default_value": null,
+      "definition": "Unique id for the element within a resource (for internal references). This may be any string value that does not contain spaces.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.link.id",
+      "invariants": [],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.link.id",
+      "pattern": null,
+      "requirements": null,
+      "short": "Unique id for inter-element referencing",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "http://hl7.org/fhirpath/System.String",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "There can be no stigma associated with the use of extensions by any application, project, or standard - regardless of the institution or jurisdiction that uses or defines the extensions.  The use of extensions is what allows the FHIR specification to retain a core level of simplicity for everyone.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "May be used to represent additional information that is not part of the basic definition of the element. To make the use of extensions safe and manageable, there is a strict set of governance  applied to the definition and use of extensions. Though any implementer can define an extension, there is a set of requirements that SHALL be met as part of the definition of the extension.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.link.extension",
+      "invariants": [
+        "ele-1",
+        "ext-1"
+      ],
+      "is_backbone": false,
+      "is_summary": false,
+      "must_support": false,
+      "path": "Patient.link.extension",
+      "pattern": null,
+      "requirements": null,
+      "short": "Additional content defined by implementations",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Extension",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": "unbounded",
+        "min": 0
+      },
+      "comment": "There can be no stigma associated with the use of extensions by any application, project, or standard - regardless of the institution or jurisdiction that uses or defines the extensions.  The use of extensions is what allows the FHIR specification to retain a core level of simplicity for everyone.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "May be used to represent additional information that is not part of the basic definition of the element and that modifies the understanding of the element in which it is contained and/or the understanding of the containing element's descendants. Usually modifier elements provide negation or qualification. To make the use of extensions safe and manageable, there is a strict set of governance applied to the definition and use of extensions. Though any implementer can define an extension, there is a set of requirements that SHALL be met as part of the definition of the extension. Applications processing a resource are required to check for modifier extensions.\n\nModifier extensions SHALL NOT change the meaning of any elements on Resource or DomainResource (including cannot change the meaning of modifierExtension itself).",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.link.modifierExtension",
+      "invariants": [
+        "ele-1",
+        "ext-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.link.modifierExtension",
+      "pattern": null,
+      "requirements": "Modifier extensions allow for extensions that *cannot* be safely ignored to be clearly distinguished from the vast majority of extensions which can be safely ignored.  This promotes interoperability by eliminating the need for implementers to prohibit the presence of extensions. For further information, see the [definition of modifier extensions](extensibility.html#modifierExtension).",
+      "short": "Extensions that cannot be ignored even if unrecognized",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Extension",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": null,
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 1
+      },
+      "comment": "Referencing a RelatedPerson here removes the need to use a Person record to associate a Patient and RelatedPerson as the same individual.",
+      "content_reference": null,
+      "default_value": null,
+      "definition": "The other patient resource that the link refers to.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.link.other",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.link.other",
+      "pattern": null,
+      "requirements": null,
+      "short": "The other patient or related person resource that the link refers to",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "Reference",
+          "profiles": [],
+          "target_profiles": [
+            "http://hl7.org/fhir/StructureDefinition/Patient",
+            "http://hl7.org/fhir/StructureDefinition/RelatedPerson"
+          ],
+          "versioning": null
+        }
+      ]
+    },
+    {
+      "additional_fields": {},
+      "binding": {
+        "additional": {
+          "extension": [
+            {
+              "url": "http://hl7.org/fhir/StructureDefinition/elementdefinition-bindingName",
+              "valueString": "LinkType"
+            }
+          ]
+        },
+        "description": "The type of link between this patient resource and another patient resource.",
+        "strength": "required",
+        "value_set": "http://hl7.org/fhir/ValueSet/link-type|4.0.1"
+      },
+      "cardinality": {
+        "max": {
+          "finite": 1
+        },
+        "min": 1
+      },
+      "comment": null,
+      "content_reference": null,
+      "default_value": null,
+      "definition": "The type of link between this patient resource and another patient resource.",
+      "depth": 0,
+      "example_values": [],
+      "extension": [],
+      "fixed": null,
+      "id": "Patient.link.type",
+      "invariants": [
+        "ele-1"
+      ],
+      "is_backbone": false,
+      "is_summary": true,
+      "must_support": false,
+      "path": "Patient.link.type",
+      "pattern": null,
+      "requirements": null,
+      "short": "replaced-by | replaces | refer | seealso",
+      "slice_name": null,
+      "slicing": null,
+      "types": [
+        {
+          "aggregation": [],
+          "code": "code",
+          "profiles": [],
+          "target_profiles": [],
+          "versioning": null
+        }
+      ]
+    }
+  ],
   "id": "Patient",
   "invariants": [
     {

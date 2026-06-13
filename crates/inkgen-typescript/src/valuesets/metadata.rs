@@ -48,25 +48,21 @@ pub struct EnhancedValueSetInfo {
 /// 2. expansion.contains[0].system (fallback)
 pub fn extract_system_url(valueset_json: &Value) -> Option<String> {
     // Try compose.include first
-    if let Some(compose) = valueset_json.get("compose") {
-        if let Some(include) = compose.get("include").and_then(|v| v.as_array()) {
-            if let Some(first_include) = include.first() {
-                if let Some(system) = first_include.get("system").and_then(|v| v.as_str()) {
-                    return Some(system.to_string());
-                }
-            }
-        }
+    if let Some(compose) = valueset_json.get("compose")
+        && let Some(include) = compose.get("include").and_then(|v| v.as_array())
+        && let Some(first_include) = include.first()
+        && let Some(system) = first_include.get("system").and_then(|v| v.as_str())
+    {
+        return Some(system.to_string());
     }
 
     // Fallback to expansion
-    if let Some(expansion) = valueset_json.get("expansion") {
-        if let Some(contains) = expansion.get("contains").and_then(|v| v.as_array()) {
-            if let Some(first_contain) = contains.first() {
-                if let Some(system) = first_contain.get("system").and_then(|v| v.as_str()) {
-                    return Some(system.to_string());
-                }
-            }
-        }
+    if let Some(expansion) = valueset_json.get("expansion")
+        && let Some(contains) = expansion.get("contains").and_then(|v| v.as_array())
+        && let Some(first_contain) = contains.first()
+        && let Some(system) = first_contain.get("system").and_then(|v| v.as_str())
+    {
+        return Some(system.to_string());
     }
 
     None
@@ -104,14 +100,11 @@ pub fn load_codesystem_metadata(codesystem_json: &Value) -> CodeSystemMetadata {
                 let mut comments = Vec::new();
                 if let Some(extensions) = concept.get("extension").and_then(|v| v.as_array()) {
                     for ext in extensions {
-                        if let Some(ext_url) = ext.get("url").and_then(|v| v.as_str()) {
-                            if ext_url.contains("codesystem-concept-comments") {
-                                if let Some(comment) =
-                                    ext.get("valueString").and_then(|v| v.as_str())
-                                {
-                                    comments.push(comment.to_string());
-                                }
-                            }
+                        if let Some(ext_url) = ext.get("url").and_then(|v| v.as_str())
+                            && ext_url.contains("codesystem-concept-comments")
+                            && let Some(comment) = ext.get("valueString").and_then(|v| v.as_str())
+                        {
+                            comments.push(comment.to_string());
                         }
                     }
                 }

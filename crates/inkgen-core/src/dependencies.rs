@@ -287,6 +287,7 @@ mod tests {
                 type_name: None,
             },
             elements: vec![],
+            flat_elements: vec![],
             extensions: vec![],
             invariants: vec![],
         }

@@ -709,13 +709,22 @@ fn test_profile_from_resource_definition() {
         elements: vec![
             create_test_element("Patient", 0, 1, false, None),
             create_test_element("Patient.identifier", 1, usize::MAX, true, None),
-            create_test_element("Patient.active", 0, 1, false, Some(serde_json::json!(true))),
+            // String fixed value: numeric/bool fixed values are intentionally
+            // skipped (they conflict with branded primitive types).
+            create_test_element(
+                "Patient.gender",
+                0,
+                1,
+                false,
+                Some(serde_json::json!("female")),
+            ),
         ],
+        flat_elements: vec![],
         extensions: vec![],
         invariants: vec![],
     };
 
-    let profile = ProfileInfo::from_resource_definition(&definition)
+    let profile = ProfileInfo::from_resource_definition(&definition, &indexmap::IndexMap::new())
         .expect("Should create ProfileInfo from constraint profile");
 
     assert_eq!(profile.type_name, "USCorePatientProfile");
@@ -727,7 +736,7 @@ fn test_profile_from_resource_definition() {
             .contains(&"Patient.identifier".to_string())
     );
     assert_eq!(profile.fixed_elements.len(), 1);
-    assert_eq!(profile.fixed_elements[0].field_name, "active");
+    assert_eq!(profile.fixed_elements[0].field_name, "gender");
     assert_eq!(profile.constrained_elements.len(), 1);
     assert!(profile.constrained_elements[0].makes_required);
 }
@@ -753,11 +762,12 @@ fn test_profile_from_non_constraint_definition() {
             type_name: None,
         },
         elements: vec![],
+        flat_elements: vec![],
         extensions: vec![],
         invariants: vec![],
     };
 
-    let profile = ProfileInfo::from_resource_definition(&definition);
+    let profile = ProfileInfo::from_resource_definition(&definition, &indexmap::IndexMap::new());
     assert!(
         profile.is_none(),
         "Should return None for non-constraint definitions"

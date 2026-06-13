@@ -261,21 +261,26 @@ mod tests {
         );
         assert_eq!(fhir_to_zod_type("decimal").schema, "z.number()");
         assert!(fhir_to_zod_type("id").schema.contains("regex"));
-        assert!(fhir_to_zod_type("date").schema.contains("regex"));
+        // Date/time primitives use Zod 4 top-level ISO helpers.
+        assert_eq!(fhir_to_zod_type("date").schema, "z.iso.date()");
     }
 
     #[test]
     fn test_fhir_to_zod_complex_types() {
+        // Complex types are wrapped in z.lazy() to tolerate circular references.
         let identifier_info = fhir_to_zod_type("Identifier");
-        assert_eq!(identifier_info.schema, "IdentifierSchema");
+        assert_eq!(identifier_info.schema, "z.lazy(() => IdentifierSchema)");
         assert_eq!(identifier_info.type_refs, vec!["Identifier"]);
 
         let human_name_info = fhir_to_zod_type("HumanName");
-        assert_eq!(human_name_info.schema, "HumanNameSchema");
+        assert_eq!(human_name_info.schema, "z.lazy(() => HumanNameSchema)");
         assert_eq!(human_name_info.type_refs, vec!["HumanName"]);
 
         let codeable_concept_info = fhir_to_zod_type("CodeableConcept");
-        assert_eq!(codeable_concept_info.schema, "CodeableConceptSchema");
+        assert_eq!(
+            codeable_concept_info.schema,
+            "z.lazy(() => CodeableConceptSchema)"
+        );
         assert_eq!(codeable_concept_info.type_refs, vec!["CodeableConcept"]);
     }
 

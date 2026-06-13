@@ -329,7 +329,7 @@ mod tests {
 
         assert!(code.contains("createAdministrativeGenderCoding"));
         assert!(!code.contains("Metadata"));
-        assert!(code.contains("display,"));
+        assert!(code.contains("display:"));
     }
 
     #[test]

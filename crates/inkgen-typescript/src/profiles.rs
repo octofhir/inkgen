@@ -15,14 +15,71 @@ use crate::naming;
 
 /// TypeScript reserved words that cannot be used as property names in class declarations.
 const TS_RESERVED_WORDS: &[&str] = &[
-    "break", "case", "catch", "class", "const", "continue", "debugger", "default",
-    "delete", "do", "else", "enum", "export", "extends", "false", "finally", "for",
-    "function", "if", "import", "in", "instanceof", "module", "new", "null", "return",
-    "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while",
-    "with", "yield", "let", "static", "implements", "interface", "package", "private",
-    "protected", "public", "any", "boolean", "number", "string", "symbol", "type",
-    "namespace", "abstract", "as", "async", "await", "constructor", "declare", "from",
-    "get", "is", "of", "require", "set",
+    "break",
+    "case",
+    "catch",
+    "class",
+    "const",
+    "continue",
+    "debugger",
+    "default",
+    "delete",
+    "do",
+    "else",
+    "enum",
+    "export",
+    "extends",
+    "false",
+    "finally",
+    "for",
+    "function",
+    "if",
+    "import",
+    "in",
+    "instanceof",
+    "module",
+    "new",
+    "null",
+    "return",
+    "super",
+    "switch",
+    "this",
+    "throw",
+    "true",
+    "try",
+    "typeof",
+    "var",
+    "void",
+    "while",
+    "with",
+    "yield",
+    "let",
+    "static",
+    "implements",
+    "interface",
+    "package",
+    "private",
+    "protected",
+    "public",
+    "any",
+    "boolean",
+    "number",
+    "string",
+    "symbol",
+    "type",
+    "namespace",
+    "abstract",
+    "as",
+    "async",
+    "await",
+    "constructor",
+    "declare",
+    "from",
+    "get",
+    "is",
+    "of",
+    "require",
+    "set",
 ];
 
 /// Sanitize a field name for TypeScript compatibility.
@@ -870,7 +927,10 @@ impl ProfileInfo {
             // Use 'as any' to bypass TypeScript's strict Extension type checking
             // Extension.value is a union but we need to set value[x] properties like valueDuration
             output.push_str("    subExtensions.push({\n");
-            output.push_str(&format!("      url: '{}' as FhirString,\n", nested.type_name));
+            output.push_str(&format!(
+                "      url: '{}' as FhirString,\n",
+                nested.type_name
+            ));
             output.push_str(&format!(
                 "      {}: input.{}\n",
                 value_field, nested.type_name
@@ -1037,7 +1097,9 @@ fn is_direct_child(path: &str, base_type: &str) -> bool {
     }
     // Check there's exactly one segment after base_type
     // e.g., "Patient.name" -> "name" (one segment), "Patient.name.given" -> "name.given" (two segments)
-    let suffix = path.strip_prefix(base_type).and_then(|s| s.strip_prefix('.'));
+    let suffix = path
+        .strip_prefix(base_type)
+        .and_then(|s| s.strip_prefix('.'));
     match suffix {
         Some(s) => !s.contains('.'),
         None => false,
@@ -1062,11 +1124,7 @@ fn extract_constraints(
                 must_support.push(element.path.clone());
             }
 
-            let raw_field_name = element
-                .path
-                .split('.')
-                .next_back()
-                .unwrap_or(&element.path);
+            let raw_field_name = element.path.split('.').next_back().unwrap_or(&element.path);
             let field_name = sanitize_field_name(raw_field_name);
 
             // Skip primitive element extensions (e.g., _type, _module)
@@ -1330,14 +1388,10 @@ mod tests {
             json_to_typescript_literal(&json!("test")),
             Some("\"test\"".to_string())
         );
-        assert_eq!(
-            json_to_typescript_literal(&json!(42)),
-            Some("42".to_string())
-        );
-        assert_eq!(
-            json_to_typescript_literal(&json!(true)),
-            Some("true".to_string())
-        );
+        // Numbers and booleans are intentionally skipped: literal numeric/bool
+        // fixed values conflict with branded primitive types.
+        assert_eq!(json_to_typescript_literal(&json!(42)), None);
+        assert_eq!(json_to_typescript_literal(&json!(true)), None);
         assert_eq!(
             json_to_typescript_literal(&json!(null)),
             Some("null".to_string())
@@ -1373,11 +1427,13 @@ mod tests {
                 type_name: None,
             },
             elements: vec![],
+            flat_elements: vec![],
             extensions: vec![],
             invariants: vec![],
         };
 
-        let profile = ProfileInfo::from_resource_definition(&definition);
+        let profile =
+            ProfileInfo::from_resource_definition(&definition, &indexmap::IndexMap::new());
         assert!(profile.is_none());
     }
 
@@ -1405,13 +1461,17 @@ mod tests {
             elements: vec![
                 create_test_element("Patient", 0, 1, false, None),
                 create_test_element("Patient.identifier", 1, usize::MAX, true, None),
-                create_test_element("Patient.active", 0, 1, false, Some(json!(true))),
+                // String fixed value: numeric/bool fixed values are intentionally
+                // skipped (they conflict with branded primitive types).
+                create_test_element("Patient.gender", 0, 1, false, Some(json!("female"))),
             ],
+            flat_elements: vec![],
             extensions: vec![],
             invariants: vec![],
         };
 
-        let profile = ProfileInfo::from_resource_definition(&definition).unwrap();
+        let profile =
+            ProfileInfo::from_resource_definition(&definition, &indexmap::IndexMap::new()).unwrap();
         assert_eq!(profile.type_name, "USCorePatientProfile");
         assert_eq!(profile.base_type, "Patient");
         assert_eq!(profile.title, Some("US Core Patient Profile".to_string()));
@@ -1421,8 +1481,8 @@ mod tests {
                 .contains(&"Patient.identifier".to_string())
         );
         assert_eq!(profile.fixed_elements.len(), 1);
-        assert_eq!(profile.fixed_elements[0].field_name, "active");
-        assert_eq!(profile.fixed_elements[0].fixed_value, "true");
+        assert_eq!(profile.fixed_elements[0].field_name, "gender");
+        assert_eq!(profile.fixed_elements[0].fixed_value, "\"female\"");
         assert_eq!(profile.constrained_elements.len(), 1);
         assert!(profile.constrained_elements[0].makes_required);
     }
@@ -1517,12 +1577,11 @@ mod tests {
         assert!(output_interface.contains("readonly __profileUrl"));
         assert!(!output_interface.contains("getUSCoreRace()"));
 
-        // Test Zod schema generation
+        // Test Zod schema generation. Profile schemas use z.intersection() over
+        // the base schema (Zod .extend() does not compose with branded primitives).
         let output_with_zod = profile.generate_typescript(false, false, true, None);
-        assert!(
-            output_with_zod.contains("export const USCorePatientSchema = PatientSchema.extend({")
-        );
-        assert!(output_with_zod.contains("identifier: z.array(z.unknown()).min(1)"));
+        assert!(output_with_zod.contains("export const USCorePatientSchema = z.intersection("));
+        assert!(output_with_zod.contains("PatientSchema,"));
     }
 
     fn create_test_element(

@@ -340,7 +340,8 @@ mod tests {
         );
         assert_eq!(fhir_to_zod_type("decimal").schema, "z.number()");
         assert!(fhir_to_zod_type("id").schema.contains("regex"));
-        assert!(fhir_to_zod_type("date").schema.contains("regex"));
+        // Date/time primitives use Zod 4 top-level ISO helpers.
+        assert_eq!(fhir_to_zod_type("date").schema, "z.iso.date()");
     }
 
     #[test]

@@ -32,6 +32,7 @@ fn create_test_tera() -> Tera {
 fn create_test_profile_definition() -> ResourceDefinition {
     ResourceDefinition {
         id: "us-core-patient".to_string(),
+        flat_elements: vec![],
         url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient".to_string(),
         name: Some("USCorePatientProfile".to_string()),
         title: Some("US Core Patient Profile".to_string()),
@@ -84,12 +85,14 @@ fn create_test_profile_definition() -> ResourceDefinition {
                 None,
             ),
             create_element(
-                "Patient.active",
+                "Patient.maritalStatus",
                 0,
                 1,
                 false,
                 None,
-                Some(json!(true)),
+                // String fixed value: numeric/bool fixed values are intentionally
+                // skipped (they conflict with branded primitive types).
+                Some(json!("M")),
             ),
         ],
         extensions: vec![],
@@ -319,7 +322,7 @@ fn test_profile_from_resource_definition_integration() {
     let definition = create_test_profile_definition();
 
     // Extract profile info
-    let profile = ProfileInfo::from_resource_definition(&definition)
+    let profile = ProfileInfo::from_resource_definition(&definition, &indexmap::IndexMap::new())
         .expect("Should create ProfileInfo from constraint profile");
 
     // Verify extraction
@@ -349,8 +352,8 @@ fn test_profile_from_resource_definition_integration() {
 
     // Check fixed value
     assert_eq!(profile.fixed_elements.len(), 1);
-    assert_eq!(profile.fixed_elements[0].field_name, "active");
-    assert_eq!(profile.fixed_elements[0].fixed_value, "true");
+    assert_eq!(profile.fixed_elements[0].field_name, "maritalStatus");
+    assert_eq!(profile.fixed_elements[0].fixed_value, "\"M\"");
 
     // Check constrained elements (min > 0)
     assert!(
@@ -371,7 +374,7 @@ fn test_profile_from_resource_definition_integration() {
         "Should generate class"
     );
     assert!(
-        generated.contains("declare active: true"),
+        generated.contains("declare maritalStatus: \"M\""),
         "Should include fixed value"
     );
     assert!(
@@ -805,7 +808,8 @@ fn test_integration_snapshot_valueset_administrative_gender() {
 #[test]
 fn test_integration_snapshot_profile_from_resource_definition() {
     let definition = create_test_profile_definition();
-    let profile = ProfileInfo::from_resource_definition(&definition).unwrap();
+    let profile =
+        ProfileInfo::from_resource_definition(&definition, &indexmap::IndexMap::new()).unwrap();
 
     let tera = create_test_tera();
     let method_config = ProfileMethodConfig {

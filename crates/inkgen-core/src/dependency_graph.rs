@@ -38,10 +38,10 @@ impl TypeDependencyGraph {
         let mut dependencies = HashSet::new();
 
         // Add base type as dependency if it exists
-        if let Some(base_url) = &def.lineage.base_definition {
-            if let Some(entry) = type_map.get_by_url(base_url) {
-                dependencies.insert(entry.type_name.clone());
-            }
+        if let Some(base_url) = &def.lineage.base_definition
+            && let Some(entry) = type_map.get_by_url(base_url)
+        {
+            dependencies.insert(entry.type_name.clone());
         }
 
         // Extract dependencies from all elements
@@ -115,11 +115,11 @@ impl TypeDependencyGraph {
         }
 
         // Try as canonical URL first
-        if type_code.starts_with("http://") || type_code.starts_with("https://") {
-            if let Some(entry) = type_map.get_by_url(type_code) {
-                deps.insert(entry.type_name.clone());
-                return;
-            }
+        if (type_code.starts_with("http://") || type_code.starts_with("https://"))
+            && let Some(entry) = type_map.get_by_url(type_code)
+        {
+            deps.insert(entry.type_name.clone());
+            return;
         }
 
         // Try as type name

@@ -218,16 +218,15 @@ pub fn collect_invariant_validators(resource: &ResourceDefinition) -> InvariantV
         match create_validation_function(invariant, &resource.id, &invariant.key) {
             Some(func) => validation_functions.push(func),
             None => {
-                let reason = if invariant.expression.is_none() {
-                    "No expression provided".to_string()
-                } else {
-                    let expr = invariant.expression.as_ref().unwrap();
+                let reason = if let Some(expr) = invariant.expression.as_ref() {
                     let complexity = classify_complexity(expr);
                     if matches!(complexity, ExpressionComplexity::Complex) {
                         format!("Expression too complex: {}", complexity.to_string())
                     } else {
                         "Expression not evaluable at runtime".to_string()
                     }
+                } else {
+                    "No expression provided".to_string()
                 };
                 unevaluable_invariants.push((invariant.key.clone(), reason));
             }

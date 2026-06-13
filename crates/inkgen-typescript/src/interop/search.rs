@@ -476,14 +476,12 @@ export interface CommonSearchParams {{
         let mut params_map: HashMap<String, &inkgen_core::SearchParameterInfo> = HashMap::new();
 
         for sp in self.search_parameters.iter() {
-            // Direct match
-            if sp.applies_to(resource_type) {
-                params_map.entry(sp.code.clone()).or_insert(sp);
-            }
-            // Expand DomainResource/Resource parameters to all concrete resources
-            else if (sp.base.contains(&"DomainResource".to_string())
-                || sp.base.contains(&"Resource".to_string()))
-                && !["Resource", "DomainResource"].contains(&resource_type)
+            // Direct match, or expand DomainResource/Resource parameters to all
+            // concrete resources.
+            if sp.applies_to(resource_type)
+                || ((sp.base.contains(&"DomainResource".to_string())
+                    || sp.base.contains(&"Resource".to_string()))
+                    && !["Resource", "DomainResource"].contains(&resource_type))
             {
                 params_map.entry(sp.code.clone()).or_insert(sp);
             }
@@ -875,14 +873,12 @@ export function buildSearchQuery(params: Record<string, any>): string {
         let mut params_map: HashMap<String, &inkgen_core::SearchParameterInfo> = HashMap::new();
 
         for sp in self.search_parameters.iter() {
-            // Direct match
-            if sp.applies_to(resource_type) {
-                params_map.entry(sp.code.clone()).or_insert(sp);
-            }
-            // Expand DomainResource/Resource parameters to all concrete resources
-            else if (sp.base.contains(&"DomainResource".to_string())
-                || sp.base.contains(&"Resource".to_string()))
-                && !["Resource", "DomainResource"].contains(&resource_type)
+            // Direct match, or expand DomainResource/Resource parameters to all
+            // concrete resources.
+            if sp.applies_to(resource_type)
+                || ((sp.base.contains(&"DomainResource".to_string())
+                    || sp.base.contains(&"Resource".to_string()))
+                    && !["Resource", "DomainResource"].contains(&resource_type))
             {
                 params_map.entry(sp.code.clone()).or_insert(sp);
             }

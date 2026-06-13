@@ -209,6 +209,7 @@ mod tests {
     fn test_collect_no_nested_types() {
         let definition = ResourceDefinition {
             id: "SimpleResource".to_string(),
+            flat_elements: vec![],
             url: "http://example.org/SimpleResource".to_string(),
             name: Some("SimpleResource".to_string()),
             title: None,
@@ -263,6 +264,7 @@ mod tests {
     fn test_collect_single_backbone() {
         let definition = ResourceDefinition {
             id: "Patient".to_string(),
+            flat_elements: vec![],
             url: "http://hl7.org/fhir/StructureDefinition/Patient".to_string(),
             name: Some("Patient".to_string()),
             title: None,
@@ -351,6 +353,7 @@ mod tests {
     fn test_collect_nested_backbone() {
         let definition = ResourceDefinition {
             id: "Observation".to_string(),
+            flat_elements: vec![],
             url: "http://hl7.org/fhir/StructureDefinition/Observation".to_string(),
             name: Some("Observation".to_string()),
             title: None,

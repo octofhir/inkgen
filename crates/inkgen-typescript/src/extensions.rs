@@ -71,10 +71,10 @@ pub fn extract_extensions(resource: &ResourceDefinition) -> IndexMap<String, Ren
 
     // For Extension StructureDefinitions (type="Extension", derivation="constraint"):
     // Convert the ResourceDefinition itself to an extension
-    if is_extension_structure_definition(resource) {
-        if let Some(render_ext) = create_render_extension_from_resource(resource) {
-            extensions.insert(resource.url.clone(), render_ext);
-        }
+    if is_extension_structure_definition(resource)
+        && let Some(render_ext) = create_render_extension_from_resource(resource)
+    {
+        extensions.insert(resource.url.clone(), render_ext);
     }
 
     // For profiles: extract extension slices from elements
@@ -160,9 +160,9 @@ fn collect_nested_from_elements_flat(flat_elements: &[ElementDefinition]) -> Vec
 
     for (idx, element) in flat_elements.iter().enumerate() {
         // Look for Extension.extension:sliceName
-        if element.path == "Extension.extension" && element.slice_name.is_some() {
-            let slice_name = element.slice_name.as_ref().unwrap();
-
+        if element.path == "Extension.extension"
+            && let Some(slice_name) = element.slice_name.as_ref()
+        {
             // The next few elements should be the child elements of this slice
             // Look for the value[x] element immediately following
             let value_type = flat_elements
@@ -352,9 +352,9 @@ fn collect_extension_nested_types(ext_def: &ExtensionDefinition) -> Vec<NestedTy
     // Find all Extension.extension:sliceName elements
     for element in &ext_def.elements {
         // Look for extension slices: "Extension.extension:sliceName" or just "Extension.extension"
-        if element.path == "Extension.extension" && element.slice_name.is_some() {
-            let slice_name = element.slice_name.as_ref().unwrap();
-
+        if element.path == "Extension.extension"
+            && let Some(slice_name) = element.slice_name.as_ref()
+        {
             // Find the corresponding value[x] element for this slice
             let value_elem_path = format!("{}.value[x]", element.path);
             let value_type = ext_def
