@@ -1418,39 +1418,52 @@ fn build_match_expr(item: &str, terms: &[DiscTerm]) -> String {
     exprs.join(" && ")
 }
 
-/// Walk `container` from `var`, threading `?.some((vN) => …)` through array
-/// segments and `?.` through single ones, then compare each `(leaf, value)` on
-/// the innermost element (AND-ed). A `.some` reached via optional chaining can
-/// yield `undefined`, so it is coalesced to a clean `boolean` with `?? false`.
+/// Walk `container` from `var` (a defined value — the array element or `item`).
+/// At the first array segment, coalesce the array with `?? []` and recurse
+/// inside `.some(...)`: `.some` on a real array already returns a `boolean`, so
+/// no `?? false` is needed. Segments before an array are single and the leaves
+/// compare directly on the reached element.
 fn walk_to_leaf(
     var: &str,
     container: &[(String, bool)],
     leaves: &[LeafMatch],
     depth: usize,
 ) -> String {
-    let mut expr = var.to_string();
-    for (i, (name, is_array)) in container.iter().enumerate() {
-        if *is_array {
+    match container.iter().position(|(_, is_array)| *is_array) {
+        Some(idx) => {
+            let names: Vec<&str> = container[..=idx].iter().map(|(n, _)| n.as_str()).collect();
+            let access = chain(var, &names);
             let lambda = format!("v{depth}");
-            let inner = walk_to_leaf(&lambda, &container[i + 1..], leaves, depth + 1);
-            return format!("({expr}?.{name}?.some(({lambda}) => {inner}) ?? false)");
+            let inner = walk_to_leaf(&lambda, &container[idx + 1..], leaves, depth + 1);
+            format!("({access} ?? []).some(({lambda}) => {inner})")
         }
-        expr = format!("{expr}?.{name}");
+        None => {
+            let prefix: Vec<&str> = container.iter().map(|(n, _)| n.as_str()).collect();
+            leaves
+                .iter()
+                .map(|(leaf, value)| {
+                    let mut path = prefix.clone();
+                    path.push(leaf);
+                    format!("{} === \"{}\"", chain(var, &path), escape_string(value))
+                })
+                .collect::<Vec<_>>()
+                .join(" && ")
+        }
     }
-    leaf_conditions(&expr, leaves)
 }
 
-/// `expr?.leaf === "value"` for each leaf, AND-ed (parenthesized when several).
-fn leaf_conditions(expr: &str, leaves: &[LeafMatch]) -> String {
-    let conds: Vec<String> = leaves
-        .iter()
-        .map(|(leaf, value)| format!("{expr}?.{leaf} === \"{}\"", escape_string(value)))
-        .collect();
-    if conds.len() == 1 {
-        conds.into_iter().next().unwrap()
-    } else {
-        conds.join(" && ")
+/// Property chain from a defined `var`: the first hop is `.` (safe on the
+/// defined value), each subsequent hop `?.` (it may be undefined) — `var.a?.b`.
+fn chain(var: &str, segments: &[&str]) -> String {
+    let mut expr = var.to_string();
+    for (i, seg) in segments.iter().enumerate() {
+        expr = if i == 0 {
+            format!("{expr}.{seg}")
+        } else {
+            format!("{expr}?.{seg}")
+        };
     }
+    expr
 }
 
 /// Checks if an element path is a direct child of the base type.
@@ -1781,7 +1794,7 @@ mod tests {
         )];
         assert_eq!(
             build_match_expr("item", &terms),
-            "(item?.code?.coding?.some((v0) => v0?.code === \"8480-6\") ?? false)"
+            "(item.code?.coding ?? []).some((v0) => v0.code === \"8480-6\")"
         );
     }
 
@@ -1801,8 +1814,8 @@ mod tests {
         ];
         assert_eq!(
             build_match_expr("item", &terms),
-            "(item?.code?.coding?.some((v0) => v0?.code === \"8480-6\" && \
-             v0?.system === \"http://loinc.org\") ?? false)"
+            "(item.code?.coding ?? []).some((v0) => v0.code === \"8480-6\" && \
+             v0.system === \"http://loinc.org\")"
         );
     }
 
@@ -1811,7 +1824,7 @@ mod tests {
         let terms = vec![term(&[("url", false)], "http://example.org/x")];
         assert_eq!(
             build_match_expr("item", &terms),
-            "item?.url === \"http://example.org/x\""
+            "item.url === \"http://example.org/x\""
         );
     }
 
