@@ -4,13 +4,15 @@
 
 **A Rust-based HL7 FHIR code generator for deterministic, inspectable TypeScript SDKs — generated from FHIR packages, StructureDefinitions, profiles, and implementation guides.**
 
-InkGen turns canonical FHIR packages into type-safe, idiomatic code. The
-TypeScript backend is functional today; the core is built as a multi-language
-platform so additional backends can be added without re-implementing FHIR
-semantics.
+InkGen turns canonical FHIR packages into type-safe, idiomatic code. Core
+resolves a FHIR package once into a language-neutral `PackageIr`; each backend is
+a small pure function of it. The TypeScript backend is full-featured today, and a
+reference Rust backend proves the contract — new backends add a language without
+re-implementing FHIR semantics.
 
-> **Status:** active development. The TypeScript backend works and is tested.
-> APIs may change. Early adopters and contributors welcome.
+> **Status:** active development. The TypeScript backend works and is tested; a
+> reference Rust backend ships. APIs may change. Early adopters and contributors
+> welcome.
 
 ---
 
@@ -22,9 +24,13 @@ semantics.
   raw FHIR.
 - **Deterministic output** — ordered with `IndexMap` and explicit sorting so
   regenerating the same input yields the same files (readable diffs).
-- **Inspectable** — generated output can be diffed and snapshot-tested; richer
-  `explain`/`report` tooling is on the roadmap.
-- **Extensible** — a single `LanguageGenerator` trait is the backend contract.
+- **Inspectable** — generated output can be diffed and snapshot-tested; an
+  `explain` trace and a generation `report` ship today.
+- **Single source of truth** — core resolves a `PackageIr` once (types, type
+  metadata, value sets, search parameters); backends read only from it.
+- **Tiny backend contract** — one synchronous `Backend` trait
+  (`&PackageIr → GenerationOutput`, no I/O, no async, no FHIR resolution). The
+  TypeScript backend and a reference Rust backend both implement it.
 - **Rust performance** — fast, single-binary CLI (`inkgen`).
 
 Each claim above maps to code in `crates/`; capabilities that are not yet
@@ -53,8 +59,9 @@ implemented are listed as **Planned** in the matrix below.
 | Profile generation (snapshot-based) | ⚠️ Partial | relies on packaged snapshots; differential-only merge is roadmap |
 | Generated TypeScript typechecks in CI | ✅ Implemented | `tsc --noEmit` gate over generated r4-core (incl. profiles) |
 | Slicing / discriminators | ⚠️ Partial | modeled in IR; backend coverage evolving |
-| Example Rust backend | 🧪 Experimental | `inkgen-rust` is a skeleton; `generate()` is a stub |
-| `PackageIr` handed to backends | 🗺️ Planned | backends currently consume a provider |
+| `PackageIr` single source of truth | ✅ Implemented | resolved once in core; backends make zero provider/resolver calls |
+| `Backend` contract (`&PackageIr → GenerationOutput`) | ✅ Implemented | sync, no I/O; core writes files |
+| Reference Rust backend | ✅ Implemented | `inkgen generate rust` emits compiling structs from the IR alone |
 | `inspect ir` / `explain` / report | ✅ Implemented | IR-as-JSON; `explain` shows why each field maps as it does; `--report` writes report.md + file map |
 | Python / C# / other backends | 🗺️ Planned | — |
 | WASM plugins | 🗺️ Planned | RFC stage |
@@ -68,17 +75,18 @@ flowchart TD
     A[FHIR Package / IG] --> B[Package Loader + Cache]
     B --> C[Canonical Resolver]
     C --> D[StructureDefinition → IR<br/>profile / lineage]
-    D --> E[Language Backend<br/>TypeScript]
-    E --> F[Formatter + File Writer]
-    F --> G[Generated SDK<br/>./generated]
-    G --> H[Diff / Snapshot]
-    D -. planned .-> I[PackageIr aggregate]
-    E -. planned .-> J[Generation report / explain]
+    D --> E[PackageIr aggregate<br/>types · value sets · search params]
+    E --> F[Backend<br/>TypeScript · Rust]
+    F --> G[GenerationOutput<br/>files in memory]
+    G --> H[Core file writer]
+    H --> I[Generated SDK<br/>./generated]
+    I --> J[Diff / Snapshot / Verify]
 ```
 
-Today, backends receive a structure-definition *provider* and build their model
-from the IR on demand. A shared `PackageIr` aggregate and an explain/report
-surface are planned (see [improvement plan](docs/analysis/inkgen-improvement-plan.md)).
+Core resolves every package input **once** into a `PackageIr` and hands a
+`&PackageIr` to the backend. A backend is a pure function — it reads the IR and
+returns a `GenerationOutput` (files in memory); core owns writing. No backend
+calls the provider or canonical resolver.
 
 ---
 
@@ -149,6 +157,7 @@ inkgen generate typescript [--output <dir>] [--offline] [--dry-run] [--config <p
 | `inkgen config completions <shell>` | emit shell completion scripts |
 | `inkgen fetch` | download & cache configured FHIR packages |
 | `inkgen generate typescript` | generate the TypeScript SDK |
+| `inkgen generate rust` | generate Rust structs via the reference backend |
 | `inkgen inspect ir <canonical>` | resolve a canonical URL and print its IR as JSON |
 | `inkgen explain <canonical>` | explain how each element maps to generated code, and why |
 | `inkgen backends` | list available code-generation backends |
@@ -159,51 +168,46 @@ inkgen generate typescript [--output <dir>] [--offline] [--dry-run] [--config <p
 
 ## Adding a language backend
 
-Implement the `LanguageGenerator` trait from `inkgen-core`. Today the backend
-receives a `StructureDefinitionProvider` and the package descriptor, then loads
-IR (`ResourceDefinition`) per structure:
+Implement the `Backend` trait from `inkgen-core`. It is a pure, synchronous
+function of a resolved `&PackageIr` — no provider, no async, no FHIR resolution.
+Core builds the IR once and writes the files you return:
 
 ```rust
-use async_trait::async_trait;
-use anyhow::Result;
-use inkgen_core::{LanguageGenerator, PackageDescriptor,
-                  StructureDefinitionProvider, StructureProviderConfig};
+use inkgen_core::{Backend, BackendError, GenerationOutput, PackageIr};
 
 pub struct MyBackend { /* config */ }
 
-#[async_trait]
-impl<S> LanguageGenerator<S> for MyBackend
-where
-    S: StructureDefinitionProvider + Sync + Send,
-{
-    async fn generate(
-        &self,
-        service: &S,
-        descriptor: &PackageDescriptor,
-        provider_config: &StructureProviderConfig,
-    ) -> Result<()> {
-        // list structures -> load IR -> render -> write files
-        Ok(())
+impl Backend for MyBackend {
+    fn id(&self) -> &str { "mylang" }
+
+    fn generate(&self, ir: &PackageIr) -> Result<GenerationOutput, BackendError> {
+        let mut out = GenerationOutput::new();
+        for ty in ir.types() {                 // every resolved type
+            // value[x] is already expanded, types/value sets resolved —
+            // just map the IR to your language's strings.
+            out.add_file(format!("{}.mylang", ty.id), render(ty));
+        }
+        Ok(out)
     }
 }
 ```
 
-- Reference implementation: `crates/inkgen-typescript`.
-- Skeleton example: `crates/inkgen-rust` (currently a stub — illustrates the
-  shape, not full generation).
-- The IR you consume lives in `crates/inkgen-core/src/ir`.
+- Reference implementations: `crates/inkgen-typescript` (full SDK) and
+  `crates/inkgen-rust` (`inkgen generate rust` — compact structs, the proof the
+  IR is language-neutral).
+- The IR you consume lives in `crates/inkgen-core/src/ir` and `package_ir.rs`.
+- `GenerationOutput` is a map of relative path → file contents; the CLI writes it.
 
-See [backends docs](docs/book/src/backends/extending.md). A future `PackageIr`
-contract (handing backends a fully-lowered IR) is described in the
-[improvement plan](docs/analysis/inkgen-improvement-plan.md).
+The same serializable `PackageIr` is the basis for future out-of-process and
+WASM plugins (one contract, multiple transports).
 
 ---
 
 ## Determinism & debugging
 
 - **Stable ordering** — IR types sort their elements/extensions/invariants and
-  the provider sorts its structure list, so output is reproducible. CI enforces
-  this: it generates r4-core twice and fails if the two runs differ.
+  the `PackageIr` is key-sorted (types, value sets), so output is reproducible.
+  CI enforces this: it generates r4-core twice and fails if the two runs differ.
 - **Verify it yourself** — `inkgen generate typescript --verify` regenerates into
   a temp dir and fails (non-zero) if the result differs from your output
   directory, without modifying it. See the
@@ -245,7 +249,7 @@ inkgen/
 │   ├── inkgen-cli/         # CLI (binary: `inkgen`)
 │   ├── inkgen-core/        # IR, config, cache, services, traits
 │   ├── inkgen-typescript/  # TypeScript backend (overlays, Zod, interop)
-│   ├── inkgen-rust/        # Example Rust backend (skeleton)
+│   ├── inkgen-rust/        # Reference Rust backend (Backend contract)
 │   └── inkgen-testing/     # Shared test helpers
 ├── docs/book/              # mdBook documentation
 └── .github/workflows/      # CI, docs deploy, release
@@ -260,7 +264,6 @@ inkgen/
 - [Language Backends](docs/book/src/backends/README.md)
 - [Template Overlays](docs/book/src/advanced/overlays.md)
 - [Roadmap](docs/book/src/roadmap.md)
-- [Improvement plan & audit](docs/analysis/inkgen-improvement-plan.md)
 
 Published site: <https://octofhir.github.io/inkgen/>
 
