@@ -100,6 +100,10 @@ struct GenerateTypescriptArgs {
     /// Write a generation report and debug artifacts to `.inkgen/debug/`.
     #[arg(long)]
     report: bool,
+    /// Verify determinism: regenerate into a temp dir and fail if it differs
+    /// from the existing output directory (does not modify the output).
+    #[arg(long)]
+    verify: bool,
 }
 
 #[derive(Args, Debug)]
@@ -493,7 +497,7 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
         descriptors.len()
     );
 
-    let generator_config = TypescriptGeneratorConfig::from_manifest(
+    let mut generator_config = TypescriptGeneratorConfig::from_manifest(
         context.typescript_section(),
         default_output,
         args.output.clone(),
@@ -503,6 +507,18 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
         Some(type_registry),
         Some(cache.clone()),
     );
+
+    // --verify: regenerate into a temp dir and diff against the real output,
+    // without touching it. Hold the TempDir guard until after the comparison.
+    let real_output = generator_config.output_dir.clone();
+    let verify_tmp = if args.verify {
+        let td = tempfile::tempdir().context("failed to create temp dir for --verify")?;
+        generator_config.output_dir = td.path().to_path_buf();
+        Some(td)
+    } else {
+        None
+    };
+
     let generator = TypescriptGenerator::new(generator_config);
 
     // Capture package summary for the optional report before consuming descriptors.
@@ -523,6 +539,31 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
     let elapsed = started.elapsed();
 
     let output_dir = generator.config().output_dir.clone();
+
+    // --verify: compare the freshly generated temp output against the real one.
+    if let Some(tmp) = verify_tmp {
+        let cfg = diff::DiffConfig::new(real_output.clone(), output_dir.clone());
+        let result = diff::diff_directories(&cfg)?;
+        let drift = result.files_added + result.files_removed + result.files_changed;
+        drop(tmp); // clean up temp dir
+        if drift > 0 {
+            anyhow::bail!(
+                "determinism check FAILED against {}: {} added, {} removed, {} changed. \
+                 Regenerate and commit the output, or investigate non-deterministic generation.",
+                real_output.display(),
+                result.files_added,
+                result.files_removed,
+                result.files_changed
+            );
+        }
+        info!(
+            "Determinism verified: regeneration matches {} ({} files identical)",
+            real_output.display(),
+            result.files_identical
+        );
+        return Ok(());
+    }
+
     info!("TypeScript generation complete in {}", output_dir.display());
 
     if args.report {

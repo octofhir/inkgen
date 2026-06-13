@@ -202,6 +202,10 @@ contract (handing backends a fully-lowered IR) is described in the
 - **Stable ordering** — IR types sort their elements/extensions/invariants and
   the provider sorts its structure list, so output is reproducible. CI enforces
   this: it generates r4-core twice and fails if the two runs differ.
+- **Verify it yourself** — `inkgen generate typescript --verify` regenerates into
+  a temp dir and fails (non-zero) if the result differs from your output
+  directory, without modifying it. See the
+  [Determinism Contract](docs/book/src/advanced/determinism.md).
 - **Snapshots** — `insta` golden tests guard generated output against drift.
 - **Diff** — `inkgen diff` shows a unified diff between two output directories.
 - **Inspect** — `inkgen inspect ir <canonical>` resolves a structure and prints

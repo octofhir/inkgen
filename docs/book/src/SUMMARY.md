@@ -17,6 +17,7 @@
   - [Extending Backends](./backends/extending.md)
 
 - [Advanced Topics](./advanced/README.md)
+  - [Determinism Contract](./advanced/determinism.md)
   - [Template Overlays](./advanced/overlays.md)
   - [Profile Customization](./advanced/profiles.md)
   - [Performance Tuning](./advanced/performance.md)
