@@ -335,23 +335,8 @@ fn escape_string(s: &str) -> String {
 /// );
 /// ```
 pub fn url_to_type_name(url: &str) -> String {
-    let segment = url
-        .trim_end_matches('/')
-        .split('/')
-        .next_back()
-        .unwrap_or("ValueSet");
-
-    // Convert kebab-case or snake_case to PascalCase
-    segment
-        .split(&['-', '_'][..])
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-                None => String::new(),
-            }
-        })
-        .collect()
+    // FHIR-neutral lowering lives in inkgen-core so every backend shares it.
+    inkgen_core::ir::url_segment_to_pascal_name(url, "ValueSet")
 }
 
 #[cfg(test)]

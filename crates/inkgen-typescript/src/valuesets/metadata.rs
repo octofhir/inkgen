@@ -191,14 +191,8 @@ pub fn enhance_codes(
 /// - http://hl7.org/fhir/ValueSet/foo → http://hl7.org/fhir/foo
 /// - Works for most standard FHIR ValueSets
 pub fn infer_codesystem_url_from_valueset(valueset_url: &str) -> Option<String> {
-    // Pattern: http://hl7.org/fhir/ValueSet/name → http://hl7.org/fhir/name
-    if let Some(pos) = valueset_url.rfind("/ValueSet/") {
-        let base = &valueset_url[..pos];
-        let name = &valueset_url[pos + 10..]; // Skip "/ValueSet/"
-        return Some(format!("{}/{}", base, name));
-    }
-
-    None
+    // FHIR-neutral lowering lives in inkgen-core so every backend shares it.
+    inkgen_core::ir::infer_codesystem_url_from_valueset(valueset_url)
 }
 
 /// Render a TypeScript metadata block for a ValueSet.
