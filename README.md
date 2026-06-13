@@ -52,6 +52,7 @@ implemented are listed as **Planned** in the matrix below.
 | Profile classes | ✅ Implemented | extension accessors, serialization, validation |
 | Zod schemas | ✅ Implemented | Zod 4 idioms (`z.iso.date()`, `z.intersection()` for profiles) |
 | Branded primitives | ✅ Implemented | opt-in compile-time safety |
+| Primitive extensions (`_field`) | ✅ Implemented | `_x` siblings on interfaces/classes + Zod (`Element`); `is_primitive` decided in `inkgen-core`; `utils/primitive-extensions.ts` alignment helpers + `data-absent-reason` accessor |
 | Interop helpers | ✅ Implemented | typed references, date helpers, bundle traversal, search |
 | Template overlays | ✅ Implemented | customize templates without forking |
 | Directory diff tooling | ✅ Implemented | `inkgen diff` |

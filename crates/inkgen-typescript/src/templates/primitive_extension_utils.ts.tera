@@ -1,0 +1,109 @@
+/**
+ * Primitive extension (`_field`) utilities.
+ *
+ * In FHIR JSON a primitive-valued element `x` may carry a sibling `_x` of type
+ * `Element` holding the primitive's `id` and extensions. For a primitive array,
+ * the companions are a parallel array `_x: (Element | null)[]` aligned by index
+ * with `x`. These helpers keep the value array and its companion array aligned
+ * when reading and writing, and expose the well-known `data-absent-reason`
+ * extension.
+ *
+ * This file is generated and should not be manually edited.
+ */
+
+import type { Element } from '{{ import_prefix }}/element';
+import type { Extension } from '{{ import_prefix }}/extension';
+
+/** A primitive array member paired with its `_x` companion `Element`. */
+export interface PrimitiveEntry<T> {
+  /** The primitive value, or `undefined` when the member is value-absent. */
+  value?: T;
+  /** The companion `Element` (`id`/`extension`), or `undefined` when absent. */
+  element?: Element;
+}
+
+/** A primitive array split into its wire-format value and companion arrays. */
+export interface SplitPrimitives<T> {
+  /** The primitive value array (`x`), `null` where a member has no value. */
+  values?: Array<T | null>;
+  /** The companion array (`_x`), `null` where a member has no id/extension. */
+  companions?: Array<Element | null>;
+}
+
+/**
+ * Align a primitive array `x` with its companion array `_x` into per-member
+ * entries. The two wire arrays are positionally aligned; either may be shorter
+ * or absent, and a companion slot may be `null`.
+ *
+ * @param values - The primitive value array (`x`).
+ * @param companions - The companion array (`_x`).
+ * @returns One {@link PrimitiveEntry} per member, in index order.
+ *
+ * @example
+ * ```typescript
+ * for (const { value, element } of zipPrimitives(name.given, name._given)) {
+ *   // value is the string, element carries any primitive extensions
+ * }
+ * ```
+ */
+export function zipPrimitives<T>(
+  values: ReadonlyArray<T | null> | undefined,
+  companions: ReadonlyArray<Element | null> | undefined,
+): Array<PrimitiveEntry<T>> {
+  const length = Math.max(values?.length ?? 0, companions?.length ?? 0);
+  const entries: Array<PrimitiveEntry<T>> = [];
+  for (let i = 0; i < length; i++) {
+    entries.push({
+      value: values?.[i] ?? undefined,
+      element: companions?.[i] ?? undefined,
+    });
+  }
+  return entries;
+}
+
+/**
+ * Split per-member entries back into the wire-format `x` / `_x` arrays, keeping
+ * them index-aligned. The companion array is omitted entirely when no member
+ * carries an `Element`, matching how FHIR serializes a primitive array with no
+ * primitive extensions.
+ *
+ * @param entries - The per-member entries.
+ * @returns The `values` (`x`) and `companions` (`_x`) arrays.
+ */
+export function unzipPrimitives<T>(
+  entries: ReadonlyArray<PrimitiveEntry<T>>,
+): SplitPrimitives<T> {
+  if (entries.length === 0) {
+    return {};
+  }
+  const values = entries.map((entry) => entry.value ?? null);
+  const companions = entries.map((entry) => entry.element ?? null);
+  return {
+    values,
+    companions: companions.some((companion) => companion !== null)
+      ? companions
+      : undefined,
+  };
+}
+
+/** Canonical URL of the FHIR `data-absent-reason` extension. */
+export const DATA_ABSENT_REASON_URL =
+  'http://hl7.org/fhir/StructureDefinition/data-absent-reason';
+
+/**
+ * Read the `data-absent-reason` code from a primitive's companion `Element`.
+ *
+ * @param element - The companion `Element` (`_x`).
+ * @returns The reason code, or `undefined` when not present.
+ *
+ * @example
+ * ```typescript
+ * const reason = getDataAbsentReason(patient._birthDate); // e.g. 'masked'
+ * ```
+ */
+export function getDataAbsentReason(
+  element: Element | undefined,
+): Extension['valueCode'] {
+  return element?.extension?.find((e) => e.url === DATA_ABSENT_REASON_URL)
+    ?.valueCode;
+}

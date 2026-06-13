@@ -565,6 +565,11 @@ mod templates {
         )
         .expect("extension_utils template");
         tera.add_raw_template(
+            "primitive_extension_utils.ts.tera",
+            include_str!("templates/primitive_extension_utils.ts.tera"),
+        )
+        .expect("primitive_extension_utils template");
+        tera.add_raw_template(
             "profile_helpers.ts.tera",
             include_str!("templates/profile_helpers.ts.tera"),
         )
@@ -2263,6 +2268,14 @@ fn write_package(package: &PackageOutput, files: &mut Vec<(PathBuf, String)>) ->
     utils_context.insert("import_prefix", &utils_import_prefix);
     let utils_content = templates::render("extension_utils.ts.tera", &utils_context)?;
     files.push((utils_dir.join("extensions.ts"), utils_content));
+
+    // Primitive extension (`_field`) alignment + data-absent-reason helpers.
+    let primitive_ext_content =
+        templates::render("primitive_extension_utils.ts.tera", &utils_context)?;
+    files.push((
+        utils_dir.join("primitive-extensions.ts"),
+        primitive_ext_content,
+    ));
 
     // Write interop utilities if enabled
     if package.generate_interop
