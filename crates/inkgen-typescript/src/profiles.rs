@@ -262,12 +262,30 @@ impl ProfileInfo {
             .clone()
             .or_else(|| definition.lineage.type_name.clone())?;
 
-        // Sanitize type_name - names like "CDS Hooks GuidanceResponse" need to become "CdsHooksGuidanceResponse"
-        let raw_name = definition
-            .name
-            .clone()
-            .unwrap_or_else(|| definition.id.clone());
-        let type_name = naming::pascal_case(&raw_name);
+        // Name the profile by its own identity (canonical-URL segment / id), not
+        // the StructureDefinition `name`: FHIR does not guarantee `name` is unique
+        // within a package, and r4-core proves it — multiple extension profiles
+        // are named "Duration", "Period", etc., which collide both with each
+        // other and with the base complex types in the generated barrel. The
+        // URL segment is unique per package. FHIR-neutral lowering, shared via
+        // inkgen-core.
+        let identity_name = if definition.url.is_empty() {
+            naming::pascal_case(&definition.id)
+        } else {
+            inkgen_core::ir::url_segment_to_pascal_name(&definition.url, &definition.id)
+        };
+        // A URL segment can begin with a digit (the `11179-objectClass` family),
+        // which is not a valid TypeScript type identifier. Prefix such names with
+        // the base type to make a valid, still-unique identifier.
+        let type_name = if identity_name
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_digit())
+        {
+            format!("{}{}", naming::pascal_case(&base_type), identity_name)
+        } else {
+            identity_name
+        };
 
         let mut must_support_elements = Vec::new();
         let mut fixed_elements = Vec::new();
@@ -1568,7 +1586,9 @@ mod tests {
 
         let profile =
             ProfileInfo::from_resource_definition(&definition, &indexmap::IndexMap::new()).unwrap();
-        assert_eq!(profile.type_name, "USCorePatientProfile");
+        // Profiles are named by their unique canonical-URL segment, not the
+        // (non-unique) StructureDefinition `name`.
+        assert_eq!(profile.type_name, "UsCorePatient");
         assert_eq!(profile.base_type, "Patient");
         assert_eq!(profile.title, Some("US Core Patient Profile".to_string()));
         assert!(

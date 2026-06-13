@@ -8,7 +8,7 @@ expression: generated
  * The US Core Patient Profile meets the U.S. Core Data for Interoperability (USCDI) requirements
  * @profile http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient
  */
-export class USCorePatientProfile extends Patient {
+export class UsCorePatient extends Patient {
   /** Profile URL for runtime validation */
   readonly __profile = 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient';
 
@@ -45,9 +45,9 @@ export class USCorePatientProfile extends Patient {
    * @param json JSON string to parse
    * @throws {z.ZodError} if validation fails
    */
-  static fromJson(json: string): USCorePatientProfile {
+  static fromJson(json: string): UsCorePatient {
     const parsed = JSON.parse(json);
-    return USCorePatientProfile.fromObject(parsed);
+    return UsCorePatient.fromObject(parsed);
   }
 
   /**
@@ -55,14 +55,14 @@ export class USCorePatientProfile extends Patient {
    * @param obj Object to validate
    * @throws {z.ZodError} if validation fails
    */
-  static fromObject(obj: unknown): USCorePatientProfile {
-    return Object.assign(new USCorePatientProfile(), obj);
+  static fromObject(obj: unknown): UsCorePatient {
+    return Object.assign(new UsCorePatient(), obj);
   }
 }
 
 /**
- * Type guard to check if a value is a USCorePatientProfile
+ * Type guard to check if a value is a UsCorePatient
  */
-export function isUSCorePatientProfile(value: Patient): value is USCorePatientProfile {
+export function isUsCorePatient(value: Patient): value is UsCorePatient {
   return '__profile' in value && value.__profile === 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient';
 }

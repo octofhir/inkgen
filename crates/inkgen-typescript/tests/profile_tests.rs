@@ -731,7 +731,8 @@ fn test_profile_from_resource_definition() {
     let profile = ProfileInfo::from_resource_definition(&definition, &indexmap::IndexMap::new())
         .expect("Should create ProfileInfo from constraint profile");
 
-    assert_eq!(profile.type_name, "USCorePatientProfile");
+    // Named by canonical-URL segment (`us-core-patient`), not the SD `name`.
+    assert_eq!(profile.type_name, "UsCorePatient");
     assert_eq!(profile.base_type, "Patient");
     assert_eq!(profile.title, Some("US Core Patient Profile".to_string()));
     assert!(

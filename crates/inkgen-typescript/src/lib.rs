@@ -1907,14 +1907,21 @@ impl TypescriptGenerator {
         for (summary, definition) in entries {
             let type_name =
                 naming::pascal_case(summary.type_code.as_deref().unwrap_or(&definition.id));
+            // A profile's file is keyed by its own identity, not the base
+            // `type_code`: every profile of a resource shares one `type_code`
+            // (r4-core has 17 `Observation` profiles), so `name_to_stem`
+            // resolves them all to the base stem and they collapse into a
+            // single `profile-observation.ts`. Capture the per-definition stem
+            // before `file_stem` is shadowed below.
+            let definition_stem = file_stem(&definition.id);
             let file_name = name_to_file
                 .get(&type_name)
                 .cloned()
-                .unwrap_or_else(|| format!("{}.ts", file_stem(&definition.id)));
+                .unwrap_or_else(|| format!("{definition_stem}.ts"));
             let file_stem = name_to_stem
                 .get(&type_name)
                 .cloned()
-                .unwrap_or_else(|| file_stem(&definition.id));
+                .unwrap_or_else(|| definition_stem.clone());
 
             // Check if this is a profile (constraint derivation with a different base)
             let is_profile = matches!(definition.lineage.derivation, Some(Derivation::Constraint))
@@ -2006,7 +2013,7 @@ impl TypescriptGenerator {
                         self.config.zod_schemas,
                         generation_context.as_ref(),
                     );
-                    let profile_file_stem = format!("profile-{}", file_stem);
+                    let profile_file_stem = format!("profile-{definition_stem}");
                     let profile_file_name = format!("{}.ts", profile_file_stem);
                     let profile_type_name = profile_info.type_name.clone();
 

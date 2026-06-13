@@ -327,8 +327,9 @@ fn test_profile_from_resource_definition_integration() {
     let profile = ProfileInfo::from_resource_definition(&definition, &indexmap::IndexMap::new())
         .expect("Should create ProfileInfo from constraint profile");
 
-    // Verify extraction
-    assert_eq!(profile.type_name, "USCorePatientProfile");
+    // Verify extraction — profiles are named by canonical-URL segment
+    // (`us-core-patient`), not the (non-unique) SD `name`.
+    assert_eq!(profile.type_name, "UsCorePatient");
     assert_eq!(profile.base_type, "Patient");
     assert_eq!(profile.title, Some("US Core Patient Profile".to_string()));
 
@@ -372,7 +373,7 @@ fn test_profile_from_resource_definition_integration() {
 
     // Verify generated code
     assert!(
-        generated.contains("export class USCorePatientProfile extends Patient"),
+        generated.contains("export class UsCorePatient extends Patient"),
         "Should generate class"
     );
     assert!(
