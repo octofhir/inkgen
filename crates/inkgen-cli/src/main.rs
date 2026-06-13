@@ -37,6 +37,8 @@ enum Commands {
     Generate(GenerateArgs),
     /// Inspect intermediate representation and resolved structures.
     Inspect(InspectArgs),
+    /// Explain how a StructureDefinition maps to generated code, and why.
+    Explain(ExplainArgs),
     /// List available code generation backends.
     Backends,
     /// Manage configuration files.
@@ -131,6 +133,18 @@ struct InspectIrArgs {
 }
 
 #[derive(Args, Debug)]
+struct ExplainArgs {
+    #[command(flatten)]
+    shared: SharedCacheArgs,
+    /// Canonical URL of the StructureDefinition to explain.
+    #[arg(value_name = "CANONICAL")]
+    canonical: String,
+    /// Only explain elements whose path contains this substring.
+    #[arg(long)]
+    element: Option<String>,
+}
+
+#[derive(Args, Debug)]
 struct ConfigArgs {
     #[command(subcommand)]
     command: ConfigSubcommand,
@@ -218,6 +232,7 @@ async fn main() -> Result<()> {
         Commands::Inspect(args) => match args.command {
             InspectSubcommand::Ir(ir_args) => inspect_ir(ir_args).await,
         },
+        Commands::Explain(args) => explain_command(args).await,
         Commands::Backends => list_backends_command(),
         Commands::Config(args) => match args.command {
             ConfigSubcommand::Init(init_args) => config_init(init_args),
@@ -703,6 +718,148 @@ async fn inspect_ir(args: InspectIrArgs) -> Result<()> {
 
     println!("{json}");
     Ok(())
+}
+
+async fn explain_command(args: ExplainArgs) -> Result<()> {
+    let context = ProjectContext::load(args.shared.config.clone())?;
+    context.validate()?;
+    let cache_config = context.build_cache_config(
+        args.shared.packages_dir.clone(),
+        args.shared.cache_dir.clone(),
+        args.shared.registry_url.clone(),
+    )?;
+    let packages = select_requests(&context.package_requests(), &args.shared.packages);
+    let cache = Arc::new(build_cache(cache_config).await?);
+    let resolver = inkgen_core::PackageResolver::new(cache.clone());
+    let mode = if args.shared.offline {
+        InstallMode::OfflineOnly
+    } else {
+        InstallMode::OnlinePreferred
+    };
+    resolver.ensure_packages(&packages, mode).await?;
+
+    let mut service = BaseStructureService::from_project_config(cache.clone(), context.manifest());
+    service.config_mut().include_profiles = true;
+
+    let def = service
+        .load_structure(&args.canonical)
+        .await
+        .with_context(|| format!("failed to resolve {}", args.canonical))?;
+
+    print_explanation(&def, args.element.as_deref());
+    Ok(())
+}
+
+/// Render a human-readable explanation of how a resolved structure maps to code.
+fn print_explanation(def: &inkgen_core::ir::ResourceDefinition, filter: Option<&str>) {
+    println!("# {} — {}", def.name.as_deref().unwrap_or(&def.id), def.url);
+    println!("kind: {:?}", def.kind);
+    if let Some(t) = &def.fhir_type {
+        println!("fhir type: {t}");
+    }
+    if let Some(d) = def.lineage.derivation {
+        println!("derivation: {d:?}");
+    }
+    if let Some(base) = &def.lineage.base_definition {
+        println!("base: {base}");
+    }
+    println!("\nElements (path  [min..max]  → generated mapping):\n");
+
+    let elements = if !def.flat_elements.is_empty() {
+        &def.flat_elements
+    } else {
+        &def.elements
+    };
+    for elem in elements {
+        explain_element(elem, filter);
+    }
+}
+
+fn explain_element(elem: &inkgen_core::ir::ElementDefinition, filter: Option<&str>) {
+    let matches = filter.is_none_or(|f| elem.path.contains(f));
+    if matches {
+        use inkgen_core::ir::ElementMax;
+        let max = match elem.cardinality.max {
+            ElementMax::Finite(n) => n.to_string(),
+            ElementMax::Unbounded => "*".to_string(),
+        };
+        let array = matches!(elem.cardinality.max, ElementMax::Unbounded)
+            || matches!(elem.cardinality.max, ElementMax::Finite(n) if n > 1);
+        let optional = elem.cardinality.min == 0;
+
+        let mut flags = Vec::new();
+        if array {
+            flags.push("array".to_string());
+        }
+        flags.push(if optional { "optional" } else { "required" }.to_string());
+        if elem.must_support {
+            flags.push("mustSupport".to_string());
+        }
+        if elem.fixed.is_some() {
+            flags.push("fixed".to_string());
+        }
+        if elem.pattern.is_some() {
+            flags.push("pattern".to_string());
+        }
+        if let Some(sl) = &elem.slicing {
+            let discs: Vec<&str> = sl.discriminators.iter().map(|d| d.path.as_str()).collect();
+            flags.push(format!("sliced[{}]", discs.join(",")));
+        }
+
+        let indent = "  ".repeat(elem.depth);
+        println!(
+            "{indent}{}  [{}..{}]  {}",
+            elem.path,
+            elem.cardinality.min,
+            max,
+            flags.join(", ")
+        );
+        println!("{indent}    → {}", mapping_rationale(elem));
+    }
+
+    for child in &elem.children {
+        explain_element(child, filter);
+    }
+}
+
+/// Explain *why* an element maps to a particular generated type.
+fn mapping_rationale(elem: &inkgen_core::ir::ElementDefinition) -> String {
+    use inkgen_core::ir::BindingStrength;
+
+    if let Some(cref) = &elem.content_reference {
+        return format!("content reference → reuses the type at {cref}");
+    }
+
+    if elem.types.len() > 1 {
+        let codes: Vec<&str> = elem.types.iter().map(|t| t.code.as_str()).collect();
+        return format!(
+            "choice type (value[x]) → TypeScript union of {} variants: {}",
+            codes.len(),
+            codes.join(" | ")
+        );
+    }
+
+    let type_code = elem
+        .types
+        .first()
+        .map(|t| t.code.as_str())
+        .unwrap_or("(none)");
+
+    if let Some(binding) = &elem.binding {
+        let vs = binding.value_set.as_deref().unwrap_or("(no ValueSet)");
+        return match binding.strength {
+            BindingStrength::Required | BindingStrength::Extensible => format!(
+                "`{type_code}` with {:?} binding → CLOSED union (enum-like) from ValueSet {vs}",
+                binding.strength
+            ),
+            BindingStrength::Preferred | BindingStrength::Example => format!(
+                "`{type_code}` with {:?} binding → OPEN union `… | (string & {{}})` (hint only) from {vs}",
+                binding.strength
+            ),
+        };
+    }
+
+    format!("`{type_code}` → mapped to the corresponding TypeScript type")
 }
 
 fn config_init(args: ConfigInitArgs) -> Result<()> {

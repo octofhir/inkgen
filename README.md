@@ -54,7 +54,7 @@ implemented are listed as **Planned** in the matrix below.
 | Slicing / discriminators | ⚠️ Partial | modeled in IR; backend coverage evolving |
 | Example Rust backend | 🧪 Experimental | `inkgen-rust` is a skeleton; `generate()` is a stub |
 | `PackageIr` handed to backends | 🗺️ Planned | backends currently consume a provider |
-| `inspect ir` + generation report | ✅ Implemented | IR-as-JSON; `generate --report` writes report.md + file map; `explain` planned |
+| `inspect ir` / `explain` / report | ✅ Implemented | IR-as-JSON; `explain` shows why each field maps as it does; `--report` writes report.md + file map |
 | Python / C# / other backends | 🗺️ Planned | — |
 | WASM plugins | 🗺️ Planned | RFC stage |
 
@@ -149,6 +149,7 @@ inkgen generate typescript [--output <dir>] [--offline] [--dry-run] [--config <p
 | `inkgen fetch` | download & cache configured FHIR packages |
 | `inkgen generate typescript` | generate the TypeScript SDK |
 | `inkgen inspect ir <canonical>` | resolve a canonical URL and print its IR as JSON |
+| `inkgen explain <canonical>` | explain how each element maps to generated code, and why |
 | `inkgen backends` | list available code-generation backends |
 | `inkgen diff --old <dir> --new <dir>` | unified diff of two output directories |
 | `inkgen doctor` | check the environment & dependencies |
@@ -210,6 +211,10 @@ contract (handing backends a fully-lowered IR) is described in the
 - **Diff** — `inkgen diff` shows a unified diff between two output directories.
 - **Inspect** — `inkgen inspect ir <canonical>` resolves a structure and prints
   its IR as JSON (logs go to stderr, so stdout pipes cleanly into `jq`).
+- **Explain** — `inkgen explain <canonical> [--element <path>]` shows, per
+  element, the cardinality and *why* it maps the way it does — e.g. a `code`
+  field with a required binding becomes a closed union, a `value[x]` becomes a
+  union of its variants. Answers "why is this field a `string` and not an enum?"
 - **Report** — `inkgen generate typescript --report` writes
   `.inkgen/debug/report.md` (inputs, timing, file count/size) and
   `generated-file-map.json` (every generated file with its byte size).
