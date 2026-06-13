@@ -2,59 +2,173 @@
 
 ![logo](./inkgen-logo.png)
 
-A Rust-based FHIR code generator that transforms canonical FHIR packages into SDKs for multiple programming languages, starting with TypeScript.
+**A Rust-based HL7 FHIR code generator for deterministic, inspectable TypeScript SDKs — generated from FHIR packages, StructureDefinitions, profiles, and implementation guides.**
 
-## Overview
+InkGen turns canonical FHIR packages into type-safe, idiomatic code. The
+TypeScript backend is functional today; the core is built as a multi-language
+platform so additional backends can be added without re-implementing FHIR
+semantics.
 
-InkGen is designed to bridge the gap between FHIR specifications and practical SDK development. It processes canonical FHIR packages and generates type-safe, idiomatic code for target programming languages, enabling developers to work with FHIR resources in a natural way within their preferred development environment.
+> **Status:** active development. The TypeScript backend works and is tested.
+> APIs may change. Early adopters and contributors welcome.
 
-## Project Status
+---
 
-⚠️ **Development Stage**: InkGen is currently in active development. The TypeScript backend is functional and tested, but the project is evolving and APIs may change. We welcome early adopters and contributors!
+## Why InkGen?
 
-### Current Features
+- **FHIR-aware IR** — a serializable intermediate representation models slicing,
+  bindings, extensions, invariants, `value[x]`, cardinality, fixed/pattern
+  values, and `mustSupport`, so backends consume structure instead of re-parsing
+  raw FHIR.
+- **Deterministic output** — ordered with `IndexMap` and explicit sorting so
+  regenerating the same input yields the same files (readable diffs).
+- **Inspectable** — generated output can be diffed and snapshot-tested; richer
+  `explain`/`report` tooling is on the roadmap.
+- **Extensible** — a single `LanguageGenerator` trait is the backend contract.
+- **Rust performance** — fast, single-binary CLI (`inkgen`).
 
-**TypeScript Backend**
-- ✅ CLI provides fetch/generate/config commands powered by the core services
-- ✅ **TypeScript generation is fully functional and tested**: 163 tests passing
-  - Generates interfaces, nested types, profiles, and structural guards
-  - **ValueSet generation**: Type-safe const arrays with union types and type guards
-  - **Profile classes**: Extension accessors, serialization, validation, and Zod schemas
-  - Multiple output modes (interface, class, class_with_builder)
-  - Customizable naming conventions and output directory
-  - Default output to `./generated` directory
+Each claim above maps to code in `crates/`; capabilities that are not yet
+implemented are listed as **Planned** in the matrix below.
 
-**Extensibility & Tooling**
-- ✅ **Extensible Backend Architecture**: Core `LanguageGenerator` trait enabling third-party backends
-- ✅ **Template Overlay System**: Customize built-in templates without forking, with validation and merge strategies
-- ✅ **Example Rust Backend**: Complete skeleton implementing programmatic code generation patterns
-- ✅ **Performance Instrumentation**: Criterion benchmarks with `just bench` recipe for regression detection
-- ✅ **Directory Diff Tooling**: Compare generated outputs with unified diff format and file filtering
-- ✅ **Comprehensive Documentation**: README enhancements, CONTRIBUTING.md guide, and architecture documentation
-- ✅ **Snapshot Testing**: Deterministic output verification with `insta` for regression prevention
+---
 
-### Upcoming Features
-- Template lint command for overlay validation
-- Additional language backends
-- Release automation and documentation site
+## What works today (and what doesn't)
 
-See [Roadmap](docs/book/src/roadmap.md) for planned features and timeline.
+| Capability | Status | Notes |
+|---|---|---|
+| FHIR package loading & caching | ✅ Implemented | via `octofhir-canonical-manager` |
+| Canonical URL resolution | ✅ Implemented | `inkgen-core` services |
+| StructureDefinition → IR | ✅ Implemented | `inkgen-core/src/ir` |
+| TypeScript interfaces | ✅ Implemented | incl. nested / BackboneElement types |
+| TypeScript classes / builders | ✅ Implemented | `interface`, `class`, `class_with_builder` |
+| ValueSet generation | ✅ Implemented | closed unions (required/extensible), open unions (preferred/example) |
+| Profile classes | ✅ Implemented | extension accessors, serialization, validation |
+| Zod schemas | ✅ Implemented | Zod 4 idioms (`z.iso.date()`, `z.intersection()` for profiles) |
+| Branded primitives | ✅ Implemented | opt-in compile-time safety |
+| Interop helpers | ✅ Implemented | typed references, date helpers, bundle traversal, search |
+| Template overlays | ✅ Implemented | customize templates without forking |
+| Directory diff tooling | ✅ Implemented | `inkgen diff` |
+| Snapshot tests + benchmarks | ✅ Implemented | `insta`, Criterion (`just bench`) |
+| Profile generation (snapshot-based) | ⚠️ Partial | relies on packaged snapshots; differential-only merge is roadmap |
+| Slicing / discriminators | ⚠️ Partial | modeled in IR; backend coverage evolving |
+| Example Rust backend | 🧪 Experimental | `inkgen-rust` is a skeleton; `generate()` is a stub |
+| `PackageIr` handed to backends | 🗺️ Planned | backends currently consume a provider |
+| `explain` / `inspect` / report commands | 🗺️ Planned | see roadmap |
+| Python / C# / other backends | 🗺️ Planned | — |
+| WASM plugins | 🗺️ Planned | RFC stage |
 
-## Key Features
+---
 
-### Extensible Backend Architecture
+## Architecture
 
-Define custom language backends by implementing the `LanguageGenerator` trait:
+```mermaid
+flowchart TD
+    A[FHIR Package / IG] --> B[Package Loader + Cache]
+    B --> C[Canonical Resolver]
+    C --> D[StructureDefinition → IR<br/>profile / lineage]
+    D --> E[Language Backend<br/>TypeScript]
+    E --> F[Formatter + File Writer]
+    F --> G[Generated SDK<br/>./generated]
+    G --> H[Diff / Snapshot]
+    D -. planned .-> I[PackageIr aggregate]
+    E -. planned .-> J[Generation report / explain]
+```
+
+Today, backends receive a structure-definition *provider* and build their model
+from the IR on demand. A shared `PackageIr` aggregate and an explain/report
+surface are planned (see [improvement plan](docs/analysis/inkgen-improvement-plan.md)).
+
+---
+
+## Install
+
+```bash
+# From a clone (installs the `inkgen` binary):
+cargo install --path crates/inkgen-cli
+
+# Verify your environment:
+inkgen doctor
+```
+
+Prerequisites: Rust stable (edition 2024). [`just`](https://github.com/casey/just)
+is optional, for the development recipes below.
+
+---
+
+## Quick start
+
+```bash
+inkgen config init                 # create inkgen.toml (use --force to overwrite)
+inkgen fetch                       # download configured FHIR packages
+inkgen generate typescript         # emit TypeScript into ./generated
+```
+
+`inkgen.toml` (created by `config init`) declares packages and TypeScript
+options. The default package is `hl7.fhir.r4.core`. All TypeScript features
+(profiles, ValueSets, guards, Zod, interop) are enabled by default; opt out per
+option.
+
+```toml
+[[packages]]
+name = "hl7.fhir.r4.core"
+version = "4.0.1"
+
+[languages.typescript]
+mode = "interface"                 # interface | class | class_with_builder
+naming_convention = "pascal"       # pascal | camel | snake
+output_structure = "flat"          # flat | by_package
+# output_dir = "generated"         # default: ./generated
+branded_primitives = true
+# structural_guards = false
+# generate_profiles = false
+# generate_valuesets = false
+# zod_schemas = false
+```
+
+### Generate options
+
+```
+inkgen generate typescript [--output <dir>] [--offline] [--dry-run] [--config <path>] [--package <name>]
+```
+
+- `--output <dir>` — override the output directory (default `./generated`)
+- `--offline` — require all packages to be pre-cached (no network)
+- `--dry-run` — show what would be generated without writing files
+- `--package <name>` — restrict to a subset of configured packages
+
+---
+
+## CLI commands
+
+| Command | Purpose |
+|---|---|
+| `inkgen config init` | create a starter `inkgen.toml` (`--force` to overwrite) |
+| `inkgen config validate` | validate the manifest |
+| `inkgen config completions <shell>` | emit shell completion scripts |
+| `inkgen fetch` | download & cache configured FHIR packages |
+| `inkgen generate typescript` | generate the TypeScript SDK |
+| `inkgen backends` | list available code-generation backends |
+| `inkgen diff --old <dir> --new <dir>` | unified diff of two output directories |
+| `inkgen doctor` | check the environment & dependencies |
+
+---
+
+## Adding a language backend
+
+Implement the `LanguageGenerator` trait from `inkgen-core`. Today the backend
+receives a `StructureDefinitionProvider` and the package descriptor, then loads
+IR (`ResourceDefinition`) per structure:
 
 ```rust
-use inkgen_core::{LanguageGenerator, PackageDescriptor, StructureDefinitionProvider, StructureProviderConfig};
+use async_trait::async_trait;
+use anyhow::Result;
+use inkgen_core::{LanguageGenerator, PackageDescriptor,
+                  StructureDefinitionProvider, StructureProviderConfig};
 
-pub struct MyLanguageGenerator {
-    config: MyGeneratorConfig,
-}
+pub struct MyBackend { /* config */ }
 
 #[async_trait]
-impl<S> LanguageGenerator<S> for MyLanguageGenerator
+impl<S> LanguageGenerator<S> for MyBackend
 where
     S: StructureDefinitionProvider + Sync + Send,
 {
@@ -64,223 +178,87 @@ where
         descriptor: &PackageDescriptor,
         provider_config: &StructureProviderConfig,
     ) -> Result<()> {
-        // Your generation logic here
+        // list structures -> load IR -> render -> write files
         Ok(())
     }
 }
 ```
 
-### Template Overlay System
+- Reference implementation: `crates/inkgen-typescript`.
+- Skeleton example: `crates/inkgen-rust` (currently a stub — illustrates the
+  shape, not full generation).
+- The IR you consume lives in `crates/inkgen-core/src/ir`.
 
-Customize TypeScript templates without forking:
+See [backends docs](docs/book/src/backends/extending.md). A future `PackageIr`
+contract (handing backends a fully-lowered IR) is described in the
+[improvement plan](docs/analysis/inkgen-improvement-plan.md).
 
-```toml
-[languages.typescript]
-overlays = ["./templates/my-overlays"]
-```
+---
 
-Overlay files are merged with built-in templates using the same filename. Validation ensures overlays are syntactically correct before generation.
+## Determinism & debugging
 
-### Directory Diff Tool
+- **Stable ordering** — IR types sort their elements/extensions/invariants and
+  the provider sorts its structure list, so output is reproducible.
+- **Snapshots** — `insta` golden tests guard generated output against drift.
+- **Diff** — `inkgen diff` shows a unified diff between two output directories.
+- **Planned** — `inkgen inspect ir <canonical>`, generation reports, and JSON
+  debug artifacts (the IR is already serializable). Tracked in the roadmap.
 
-Compare generated outputs:
+---
+
+## Development
 
 ```bash
-inkgen diff --old ./previous --new ./generated --extension .ts --context 5
+just bootstrap   # install rustfmt + clippy
+just test        # cargo test --all
+just review      # fmt --check + clippy -D warnings + tests
+just bench       # Criterion benchmarks
+just docs-serve  # serve the mdBook locally
 ```
 
-Shows unified diff with statistics on added, removed, and modified files.
+---
 
-### Performance Benchmarks
-
-Run regression benchmarks:
-
-```bash
-just bench
-```
-
-Benchmarks measure IR construction, profile resolution, template rendering, and code generation performance using Criterion.
-
-## Workspace Layout
+## Workspace layout
 
 ```
 inkgen/
 ├── crates/
-│   ├── inkgen-cli/           # CLI with fetch/generate/config/diff commands
-│   ├── inkgen-core/          # Shared types, traits, and services
-│   ├── inkgen-typescript/    # TypeScript backend with overlay support
-│   ├── inkgen-rust/          # Example Rust backend (programmatic generation)
-│   └── inkgen-testing/       # Shared testing helpers
-├── justfile                  # Local automation entrypoints
-└── .github/workflows/        # CI skeleton mirroring `just review`
+│   ├── inkgen-cli/         # CLI (binary: `inkgen`)
+│   ├── inkgen-core/        # IR, config, cache, services, traits
+│   ├── inkgen-typescript/  # TypeScript backend (overlays, Zod, interop)
+│   ├── inkgen-rust/        # Example Rust backend (skeleton)
+│   └── inkgen-testing/     # Shared test helpers
+├── docs/book/              # mdBook documentation
+└── .github/workflows/      # CI, docs deploy, release
 ```
 
-## Prerequisites
-
-- Rust stable toolchain (edition 2024 support)
-- [`just`](https://github.com/casey/just) command runner
-
-Install `just` via cargo:
-
-```bash
-cargo install just
-```
-
-## Quick Start
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/octofhir/inkgen.git
-   cd inkgen
-   ```
-2. Bootstrap local tooling:
-   ```bash
-   just bootstrap
-   ```
-3. Run the default validation suite:
-   ```bash
-   just review
-   ```
-4. Explore the CLI:
-```bash
-cargo run -p inkgen-cli -- help
-```
-
-### Generate TypeScript SDK (MVP)
-
-```bash
-inkgen config init --force                  # create/overwrite inkgen.toml
-inkgen fetch                                # download configured packages
-inkgen generate typescript                  # emit TypeScript into target/inkgen/out/typescript
-```
-
-#### Supported TypeScript Generation Features
-
-- **Resource Interfaces**: Type-safe TypeScript interfaces for all FHIR resources
-- **Nested Types**: BackboneElement types generated as separate exported interfaces
-- **ValueSets**: Type-safe const arrays with union types, type guards, and code definitions
-  - Closed types for Required/Extensible bindings
-  - Open types (with `| (string & {})`) for Preferred/Example bindings
-  - Complete metadata including display names and definitions
-- **Profile Classes**: Classes extending base resources with:
-  - Extension accessors (typed, raw, or both)
-  - Serialization methods (toJson, toObject)
-  - Validation methods (fromJson, fromObject)
-  - Zod schemas for runtime validation
-  - Fixed value constraints and must-support elements
-- **Mode Selection**: Choose between `interface` (default), `class`, or `class_with_builder` output
-- **Naming Conventions**: Support for PascalCase, camelCase, and snake_case field naming
-- **Structural Guards**: Optional type guard functions for runtime validation
-- **Deterministic Output**: Using IndexMap for consistent, sortable output
-
-#### CLI Options
-
-- `--dry-run` — Preview work without writing files
-- `--offline` — Require all packages to be pre-cached
-- `--output <dir>` — Redirect output directory (default: `./generated`)
-- `--mode <mode>` — Choose generation mode: `interface`, `class`, or `class_with_builder`
-- `--naming <convention>` — Choose naming: `pascal` (default), `camel`, or `snake`
-
-#### Configuration
-
-Update `inkgen.toml` to customize TypeScript generation:
-
-```toml
-[languages.typescript]
-mode = "interface"                  # interface, class, or class_with_builder
-naming_convention = "pascal"        # pascal, camel, or snake
-output_structure = "flat"           # flat or by_package
-output_dir = "./generated"         # optional custom output dir
-
-# All features (profiles, ValueSets, guards, Zod, etc.) are enabled by default.
-# Uncomment the options below to opt out of specific features.
-# structural_guards = false
-# generate_profiles = false
-# generate_valuesets = false
-# profile_classes = false
-# zod_schemas = false
-
-# Optional: enable stronger primitive typing
-branded_primitives = true
-
-# Profile method configuration (defaults shown)
-[languages.typescript.profile_methods]
-extension_accessors = true
-extension_style = "both"            # "typed", "raw", or "both"
-serialization = true
-validation = true
-```
-
-### Shell Completions
-
-```bash
-inkgen config completions bash --output completions/inkgen.bash
-```
-
-## Available `just` Commands
-
-- `just bootstrap` — Ensure required Rust components (`rustfmt`, `clippy`) are installed.
-- `just fetch PACKAGE=<name>` — Run the CLI fetch command (respects `--dry-run`/`--offline` via variables).
-- `just generate lang=<backend> config=inkgen.toml` — Delegate to the CLI generator.
-- `just test` — Run `cargo test --all`.
-- `just snap` — Execute snapshot tests when `cargo-insta` is installed.
-- `just bench` — Run Criterion benchmarks with `cargo bench`.
-- `just review` — Run fmt, clippy (warnings as errors), and tests.
-- `just clean` — Remove build artefacts with `cargo clean`.
-
-Use `just --list` to see recipe parameters and defaults.
-
-## CLI Commands
-
-`inkgen-cli` provides the following commands:
-
-### Package Management
-- `inkgen config init` — create (or overwrite via `--force`) a starter `inkgen.toml`.
-- `inkgen fetch [--package ...] [--offline] [--dry-run]` — download and cache FHIR packages declared in the manifest.
-- `inkgen config validate` — verify manifest structure before running other commands.
-
-### Code Generation
-- `inkgen generate typescript [--output <dir>] [--dry-run]` — invoke the TypeScript generator after ensuring packages are available.
-
-### Utilities
-- `inkgen diff --old <dir> --new <dir> [--extension <ext>] [--context <lines>]` — compare two generated output directories with unified diff format.
-- `inkgen config completions <shell> --output <path>` — emit shell completion scripts.
+---
 
 ## Documentation
 
-- Full documentation: [InkGen Documentation](docs/book/src/)
-- Getting Started: [Quick Start Guide](docs/book/src/getting-started.md)
-- Architecture: [Architecture Overview](docs/book/src/architecture/README.md)
-- Contributing: [Contributing Guide](CONTRIBUTING.md)
+- [Getting Started](docs/book/src/getting-started.md)
+- [Architecture](docs/book/src/architecture/README.md)
+- [Language Backends](docs/book/src/backends/README.md)
+- [Template Overlays](docs/book/src/advanced/overlays.md)
+- [Roadmap](docs/book/src/roadmap.md)
+- [Improvement plan & audit](docs/analysis/inkgen-improvement-plan.md)
+
+Published site: <https://octofhir.github.io/inkgen/>
+
+---
 
 ## Contributing
 
-We welcome contributions from the community! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on:
-
-- Setting up your development environment
-- Submitting pull requests
-- Creating new language backends
-- Contributing to documentation
-
-Before participating, please review our [Code of Conduct](CODE_OF_CONDUCT.md).
-
-**Basic Workflow**:
-- Use `just bootstrap`, `just test`, and `just review` to validate changes locally
-- Keep documentation aligned with your changes
-- The CI workflow mirrors `just review`, so a passing run locally should translate to green builds
-- For detailed guidelines on adding new language backends and development best practices, see [CONTRIBUTING.md](CONTRIBUTING.md)
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[Code of Conduct](CODE_OF_CONDUCT.md). Use `just review` before opening a PR;
+CI mirrors it.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE).
 
-## Support & Security
+## Support & security
 
-- **Issues**: Report bugs and request features via [GitHub Issues](https://github.com/octofhir/inkgen/issues)
-- **Discussions**: Join conversations in [GitHub Discussions](https://github.com/octofhir/inkgen/discussions)
-- **Documentation**: Full docs available at [InkGen Documentation](docs/book/src/) (mdBook format)
-- **Security**: Please report vulnerabilities responsibly via [SECURITY.md](SECURITY.md)
-
-## Roadmap
-
-See [Roadmap](docs/book/src/roadmap.md) for planned features and future development.
+- Issues: <https://github.com/octofhir/inkgen/issues>
+- Discussions: <https://github.com/octofhir/inkgen/discussions>
+- Security: [SECURITY.md](SECURITY.md)
