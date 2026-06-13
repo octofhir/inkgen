@@ -256,11 +256,20 @@ impl ProfileInfo {
             return None;
         }
 
+        // Root the profile at its resource type, not its immediate base. FHIR
+        // element paths are always `Observation.*`, and a profile derived from
+        // another profile (`bp` → `vitalsigns`) still uses them — matching
+        // against `base_id` ("vitalsigns") finds no direct children, so every
+        // such profile was silently dropped as "no constraints". `type_name`
+        // carries the resource type (`Observation`), which is both the correct
+        // path-matching prefix and a valid `extends` target. (Chaining the
+        // `extends` clause through the intermediate profile type is future work,
+        // gated on registering profiles in the type registry.)
         let base_type = definition
             .lineage
-            .base_id
+            .type_name
             .clone()
-            .or_else(|| definition.lineage.type_name.clone())?;
+            .or_else(|| definition.lineage.base_id.clone())?;
 
         // Name the profile by its own identity (canonical-URL segment / id), not
         // the StructureDefinition `name`: FHIR does not guarantee `name` is unique
@@ -1601,6 +1610,57 @@ mod tests {
         assert_eq!(profile.fixed_elements[0].fixed_value, "\"female\"");
         assert_eq!(profile.constrained_elements.len(), 1);
         assert!(profile.constrained_elements[0].makes_required);
+    }
+
+    #[test]
+    fn test_profile_derived_from_another_profile_roots_at_resource_type() {
+        // `bp` derives from the `vitalsigns` profile, so `base_id` is
+        // "vitalsigns" — but its element paths are still `Observation.*`. The
+        // profile must root at the resource type (`type_name` = "Observation"),
+        // not the immediate base, or every constraint is missed and the profile
+        // is silently dropped as empty.
+        let definition = ResourceDefinition {
+            id: "bp".to_string(),
+            url: "http://hl7.org/fhir/StructureDefinition/bp".to_string(),
+            name: Some("observation-bp".to_string()),
+            title: Some("Blood Pressure".to_string()),
+            description: None,
+            version: None,
+            status: None,
+            kind: ResourceKind::Resource,
+            fhir_type: Some("Observation".to_string()),
+            date: None,
+            lineage: ProfileLineage {
+                base_definition: Some(
+                    "http://hl7.org/fhir/StructureDefinition/vitalsigns".to_string(),
+                ),
+                base_id: Some("vitalsigns".to_string()),
+                derivation: Some(Derivation::Constraint),
+                type_name: Some("Observation".to_string()),
+            },
+            elements: vec![
+                create_test_element("Observation", 0, 1, false, None),
+                create_test_element("Observation.code", 1, 1, true, None),
+                create_test_element("Observation.component", 2, usize::MAX, true, None),
+            ],
+            flat_elements: vec![],
+            extensions: vec![],
+            invariants: vec![],
+        };
+
+        let profile =
+            ProfileInfo::from_resource_definition(&definition, &indexmap::IndexMap::new()).unwrap();
+        // Named by URL segment; rooted at the resource type, not "vitalsigns".
+        assert_eq!(profile.type_name, "Bp");
+        assert_eq!(profile.base_type, "Observation");
+        // Constraints on `Observation.*` paths are found (not silently dropped).
+        assert!(profile.has_constraints());
+        assert!(
+            profile
+                .constrained_elements
+                .iter()
+                .any(|c| c.field_name == "component" && c.makes_required)
+        );
     }
 
     #[test]
