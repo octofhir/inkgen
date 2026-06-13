@@ -95,7 +95,7 @@ export function is{{ structure.type_name }}(input: unknown): input is {{ structu
   }
 
 {%- if structure.resource_type_guard %}
-  const obj = input as any;
+  const obj = input as Record<string, unknown>;
   if (obj.resourceType !== undefined && obj.resourceType !== "{{ structure.type_name }}") {
     return false;
   }
