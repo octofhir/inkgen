@@ -127,7 +127,19 @@ export type {{ structure.type_name }}Validated = z.infer<typeof {{ structure.typ
  * @returns The parsed {{ structure.type_name }} if valid, or false if invalid
  */
 export function parse{{ structure.type_name }}(input: unknown): {{ structure.type_name }}Validated | false {
+{%- if structure.choice_groups is defined and structure.choice_groups | length > 0 %}
+  // FHIR choice (`value[x]`) elements carry at most one typed member.
+  const result = {{ structure.type_name }}Schema.superRefine((val, ctx) => {
+    const v = val as Record<string, unknown>;
+{%- for group in structure.choice_groups %}
+    if ([{% for m in group.members %}v.{{ m }}{% if not loop.last %}, {% endif %}{% endfor %}].filter((x) => x !== undefined).length > 1) {
+      ctx.addIssue({ code: "custom", message: "At most one of {{ group.members | join(sep=", ") }} may be present", path: [] });
+    }
+{%- endfor %}
+  }).safeParse(input);
+{%- else %}
   const result = {{ structure.type_name }}Schema.safeParse(input);
+{%- endif %}
   return result.success ? result.data : false;
 }
 {%- endif %}

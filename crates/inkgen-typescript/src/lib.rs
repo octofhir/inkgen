@@ -826,6 +826,23 @@ struct ZodSchemaField {
     zod_type: String,
 }
 
+/// Accumulator for choice (`value[x]`) variant members sharing one origin id.
+struct ChoiceGroupAccum {
+    members: Vec<String>,
+    min: u32,
+}
+
+/// A `value[x]` choice group surfaced to the Zod template so `parse{Type}` can
+/// enforce that at most one variant member is present.
+#[derive(Debug, Clone, Serialize)]
+struct RenderChoiceGroup {
+    /// Emitted field names of the variants (e.g. `deceasedBoolean`, `deceasedDateTime`).
+    members: Vec<String>,
+    /// Whether the choice is required (min ≥ 1). Reserved for a future
+    /// exactly-one refinement; the current template enforces at-most-one only.
+    required: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct RenderStructure {
     type_name: String,
@@ -860,6 +877,9 @@ struct RenderStructure {
     generate_zod_schema: bool,
     /// Zod schema fields
     zod_fields: Vec<ZodSchemaField>,
+    /// `value[x]` choice groups for the at-most-one parse refinement
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    choice_groups: Vec<RenderChoiceGroup>,
     /// Whether the Zod schema has self-referential fields (needs explicit type annotation)
     is_recursive_schema: bool,
     /// Whether branded primitives are enabled (affects recursive schema type annotations)
@@ -2682,7 +2702,8 @@ fn build_render_structure(
 
     // Generate Zod schema fields if enabled, collecting schema imports
     let generate_zod_schema = config.zod_schemas;
-    let (zod_fields, schema_imports, valueset_value_imports) = if generate_zod_schema {
+    let (zod_fields, schema_imports, valueset_value_imports, choice_groups) = if generate_zod_schema
+    {
         let mut fields = Vec::new();
 
         // Add resourceType to Zod schema for Resource and Logical types
@@ -2764,6 +2785,13 @@ fn build_render_structure(
         for type_ref in &nested_schema_type_refs {
             add_schema_type_ref(&mut schema_type_refs, type_ref);
         }
+
+        // Group emitted choice (`value[x]`) variant members by their shared
+        // origin element id. `expand_choice_elements` clones the `value[x]`
+        // element per type and only rewrites path/types, so every variant keeps
+        // the original id ending in `[x]` (e.g. `Patient.deceased[x]`). Members
+        // accumulate in field-emission order, which is deterministic.
+        let mut choice_members: IndexMap<String, ChoiceGroupAccum> = IndexMap::new();
 
         for element in top_level_elements(definition)
             .iter()
@@ -2855,6 +2883,18 @@ fn build_render_structure(
                         schema_info.schema
                     };
 
+                    // Record choice-variant membership for the at-most-one
+                    // refinement (only emitted fields are referenced).
+                    if element.id.ends_with("[x]") {
+                        let accum = choice_members.entry(element.id.clone()).or_insert_with(|| {
+                            ChoiceGroupAccum {
+                                members: Vec::new(),
+                                min: element.cardinality.min,
+                            }
+                        });
+                        accum.members.push(field_name.clone());
+                    }
+
                     fields.push(ZodSchemaField {
                         name: field_name,
                         zod_type: final_schema,
@@ -2862,6 +2902,16 @@ fn build_render_structure(
                 }
             }
         }
+
+        // A choice group only needs a runtime guard when it has ≥2 variants.
+        let choice_groups: Vec<RenderChoiceGroup> = choice_members
+            .into_values()
+            .filter(|accum| accum.members.len() >= 2)
+            .map(|accum| RenderChoiceGroup {
+                members: accum.members,
+                required: accum.min >= 1,
+            })
+            .collect();
 
         // ============================================================
         // CRITICAL FIX: Ensure all schema type refs are also in imports_map
@@ -2992,9 +3042,19 @@ fn build_render_structure(
         // Sort imports for consistent output
         schema_imports.sort_by(|a, b| a.path.cmp(&b.path));
 
-        (fields, schema_imports, valueset_value_imports)
+        (
+            fields,
+            schema_imports,
+            valueset_value_imports,
+            choice_groups,
+        )
     } else {
-        (Vec::new(), Vec::new(), std::collections::HashMap::new())
+        (
+            Vec::new(),
+            Vec::new(),
+            std::collections::HashMap::new(),
+            Vec::new(),
+        )
     };
 
     // IMPORTANT: Regroup imports after Zod schema processing
@@ -3155,6 +3215,7 @@ fn build_render_structure(
         output_folder,
         generate_zod_schema,
         zod_fields,
+        choice_groups,
         is_recursive_schema,
         branded_primitives: config.branded_primitives,
         slices,

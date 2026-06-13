@@ -48,7 +48,7 @@ implemented are listed as **Planned** in the matrix below.
 | TypeScript interfaces | ✅ Implemented | incl. nested / BackboneElement types |
 | TypeScript classes / builders | ✅ Implemented | `interface`, `class`, `class_with_builder` |
 | ValueSet generation | ✅ Implemented | closed unions (required/extensible), open unions (preferred/example) |
-| `value[x]` choice types | ✅ Implemented | wire-faithful typed members (`valueQuantity`, `valueDateTime`, …); language-neutral lowering in `inkgen-core` |
+| `value[x]` choice types | ✅ Implemented | wire-faithful typed members (`valueQuantity`, `valueDateTime`, …); language-neutral lowering in `inkgen-core`; `parse*` enforces at most one variant present |
 | Profile classes | ✅ Implemented | extension accessors, serialization, validation |
 | Zod schemas | ✅ Implemented | Zod 4 idioms (`z.iso.date()`, `z.intersection()` for profiles) |
 | Branded primitives | ✅ Implemented | opt-in compile-time safety |

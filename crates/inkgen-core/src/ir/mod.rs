@@ -407,3 +407,95 @@ pub struct InvariantDefinition {
     pub fhirpath: Option<FHIRPathExpression>,
     pub additional: IndexMap<String, serde_json::Value>,
 }
+
+#[cfg(test)]
+mod choice_tests {
+    use super::*;
+
+    fn choice_element(path: &str, type_codes: &[&str]) -> ElementDefinition {
+        ElementDefinition {
+            id: path.to_string(),
+            path: path.to_string(),
+            slice_name: None,
+            short: None,
+            definition: None,
+            comment: None,
+            requirements: None,
+            cardinality: ElementCardinality {
+                min: 0,
+                max: ElementMax::Finite(1),
+            },
+            types: type_codes
+                .iter()
+                .map(|code| ElementType {
+                    code: (*code).to_string(),
+                    profiles: Vec::new(),
+                    target_profiles: Vec::new(),
+                    aggregation: Vec::new(),
+                    versioning: None,
+                })
+                .collect(),
+            content_reference: None,
+            binding: None,
+            invariants: Vec::new(),
+            fixed: None,
+            pattern: None,
+            default_value: None,
+            example_values: Vec::new(),
+            must_support: false,
+            is_summary: false,
+            slicing: None,
+            extension: Vec::new(),
+            additional_fields: IndexMap::new(),
+            children: Vec::new(),
+            parent_path: None,
+            depth: 0,
+            is_backbone: false,
+        }
+    }
+
+    #[test]
+    fn choice_variant_name_uppercases_type_code() {
+        assert_eq!(choice_variant_name("value", "dateTime"), "valueDateTime");
+        assert_eq!(choice_variant_name("value", "Quantity"), "valueQuantity");
+        assert_eq!(
+            choice_variant_name("value", "CodeableConcept"),
+            "valueCodeableConcept"
+        );
+    }
+
+    #[test]
+    fn expand_emits_one_variant_per_type() {
+        let expanded = expand_choice_elements(vec![choice_element(
+            "Patient.deceased[x]",
+            &["boolean", "dateTime"],
+        )]);
+        let paths: Vec<&str> = expanded.iter().map(|e| e.path.as_str()).collect();
+        assert_eq!(
+            paths,
+            vec!["Patient.deceasedBoolean", "Patient.deceasedDateTime"]
+        );
+    }
+
+    /// The TS at-most-one Zod refinement groups variants by their shared origin
+    /// id, so expansion must keep the original `[x]` id on every variant.
+    #[test]
+    fn expanded_variants_share_the_choice_id() {
+        let expanded = expand_choice_elements(vec![choice_element(
+            "Patient.deceased[x]",
+            &["boolean", "dateTime"],
+        )]);
+        assert_eq!(expanded.len(), 2);
+        for variant in &expanded {
+            assert_eq!(variant.id, "Patient.deceased[x]");
+            assert!(!variant.path.contains("[x]"));
+        }
+    }
+
+    #[test]
+    fn non_choice_elements_pass_through() {
+        let expanded = expand_choice_elements(vec![choice_element("Patient.active", &["boolean"])]);
+        assert_eq!(expanded.len(), 1);
+        assert_eq!(expanded[0].path, "Patient.active");
+    }
+}
