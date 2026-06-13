@@ -193,6 +193,21 @@ impl ElementDefinition {
             .unwrap_or(self.path.as_str())
             .ends_with("[x]")
     }
+
+    /// True when every declared type is a FHIR primitive datatype, so the
+    /// element admits a sibling primitive-extension element (`_x`, of type
+    /// `Element`) in the FHIR wire format. Primitive classification comes from
+    /// the package's own `StructureDefinition` kinds (via [`CanonicalTypeMap`]) —
+    /// not a hardcoded list — so it tracks whatever FHIR version is loaded.
+    /// FHIR-neutral: every backend makes the same call; only the rendering of
+    /// `_x` is language-specific.
+    pub fn is_primitive(&self, type_map: &crate::canonical_map::CanonicalTypeMap) -> bool {
+        !self.types.is_empty()
+            && self
+                .types
+                .iter()
+                .all(|t| type_map.is_primitive_code(&t.code))
+    }
 }
 
 /// Build the wire member name for one FHIR choice (`value[x]`) variant, per the
@@ -504,6 +519,34 @@ mod choice_tests {
             depth: 0,
             is_backbone: false,
         }
+    }
+
+    #[test]
+    fn is_primitive_uses_package_type_kinds() {
+        use crate::canonical_map::{CanonicalTypeMap, TypeEntry};
+        use crate::package::{PackageId, StructureKind};
+
+        let mut map = CanonicalTypeMap::new();
+        for (name, code, kind) in [
+            ("Date", "date", StructureKind::PrimitiveType),
+            ("Boolean", "boolean", StructureKind::PrimitiveType),
+            ("HumanName", "HumanName", StructureKind::ComplexType),
+        ] {
+            map.insert(TypeEntry {
+                canonical_url: format!("http://hl7.org/fhir/StructureDefinition/{code}"),
+                type_name: name.to_string(),
+                file_stem: name.to_lowercase(),
+                kind,
+                package: PackageId::new("hl7.fhir.r4.core", "4.0.1"),
+                base_type: None,
+                type_code: Some(code.to_string()),
+            });
+        }
+
+        assert!(choice_element("Patient.birthDate", &["date"]).is_primitive(&map));
+        assert!(!choice_element("Patient.name", &["HumanName"]).is_primitive(&map));
+        // An element with no declared type is not a primitive.
+        assert!(!choice_element("Patient.x", &[]).is_primitive(&map));
     }
 
     #[test]

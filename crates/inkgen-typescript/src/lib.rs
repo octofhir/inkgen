@@ -787,6 +787,11 @@ struct RenderField {
     valueset_type: Option<String>,
     #[serde(skip_serializing)]
     type_dependencies: Vec<String>,
+    /// True when the field's underlying FHIR type is a primitive (even when a
+    /// required binding rewrites the surface type to a ValueSet enum). Drives
+    /// emission of the FHIR primitive-extension companion (`_field`).
+    #[serde(skip)]
+    is_primitive: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -2499,6 +2504,11 @@ fn build_render_structure(
             }
         }
 
+        // Emit FHIR primitive-extension companions (`_field`) for primitive
+        // fields. The companion carries both its type and Zod schema, so it
+        // renders in the nested interface and the nested Zod schema.
+        inject_primitive_companions(&mut nested_fields, type_name);
+
         // Detect if this nested type uses z.lazy() (needs type annotation for TypeScript)
         let is_recursive = nested_fields
             .iter()
@@ -2540,6 +2550,7 @@ fn build_render_structure(
             zod_type: None,
             valueset_type: None,
             type_dependencies: Vec::new(),
+            is_primitive: false,
         });
     }
 
@@ -2557,6 +2568,18 @@ fn build_render_structure(
         );
         fields.push(field);
     }
+
+    // Primitive field name → is_array, captured before companion injection so
+    // the Zod field list (built separately below) can mirror the same `_field`
+    // companions in the same order.
+    let primitive_fields: IndexMap<String, bool> = fields
+        .iter()
+        .filter(|f| f.is_primitive)
+        .map(|f| (f.name.clone(), f.type_expr.starts_with("Array<")))
+        .collect();
+
+    // Emit FHIR primitive-extension companions (`_field`) on the interface/class.
+    inject_primitive_companions(&mut fields, type_name);
 
     ensure_field_dependencies(
         &fields,
@@ -3039,6 +3062,17 @@ fn build_render_structure(
                 .collect::<Vec<_>>()
         );
 
+        // Primitive-extension companions (`_field`) reference `ElementSchema`;
+        // ensure it is imported when any primitive field (top-level or nested)
+        // emitted a companion.
+        let needs_element_schema = !primitive_fields.is_empty()
+            || nested_types
+                .iter()
+                .any(|n| n.fields.iter().any(|f| f.name.starts_with('_')));
+        if needs_element_schema {
+            add_schema_type_ref(&mut schema_type_refs, "Element");
+        }
+
         // Convert schema_type_refs HashMap to Vec<RenderImport>
         let mut schema_imports: Vec<RenderImport> = schema_type_refs
             .into_iter()
@@ -3062,6 +3096,9 @@ fn build_render_structure(
 
         // Sort imports for consistent output
         schema_imports.sort_by(|a, b| a.path.cmp(&b.path));
+
+        // Mirror the interface's `_field` companions in the Zod schema.
+        inject_primitive_companions_zod(&mut fields, &primitive_fields, type_name);
 
         (
             fields,
@@ -3363,6 +3400,19 @@ fn map_field_with_nested_context(
         ElementMax::Finite(v) => v > 1,
     };
 
+    // Whether the element admits a FHIR primitive-extension companion (`_field`)
+    // is a FHIR-neutral decision owned by inkgen-core, classified from the
+    // package's own primitive `StructureDefinition`s (no hardcoded list). True
+    // for primitive-typed elements even when a required binding rewrites the
+    // surface type to a ValueSet enum below (the wire type is still a
+    // primitive). A backbone element with a generated nested type is never
+    // primitive.
+    let is_primitive = !element_to_nested_type.contains_key(&element.path)
+        && config
+            .package_ir
+            .as_ref()
+            .is_some_and(|ir| element.is_primitive(&ir.type_map));
+
     // Check if this element is a BackboneElement with a generated nested type
     let mut type_exprs = Vec::new();
     if let Some(nested_type_name) = element_to_nested_type.get(&element.path) {
@@ -3492,7 +3542,92 @@ fn map_field_with_nested_context(
         zod_type: None, // Will be populated separately when generating Zod schemas
         valueset_type,
         type_dependencies,
+        is_primitive,
     }
+}
+
+/// Build the FHIR primitive-extension companion (`_field`) for a primitive
+/// field. In FHIR JSON every primitive `x` may carry a sibling `_x` of type
+/// `Element` (`{ id?, extension? }`); arrays use a parallel `(Element | null)[]`.
+/// Returns `None` for non-primitive fields. `current_type` is the type being
+/// generated — when it is `Element` itself the schema is self-referential and
+/// must defer with `z.lazy`.
+fn primitive_extension_companion(field: &RenderField, current_type: &str) -> Option<RenderField> {
+    if !field.is_primitive {
+        return None;
+    }
+    let is_array = field.type_expr.starts_with("Array<");
+    let type_expr = if is_array {
+        "Array<Element | null>".to_string()
+    } else {
+        "Element".to_string()
+    };
+    let element_schema = if current_type == "Element" {
+        "z.lazy(() => ElementSchema)".to_string()
+    } else {
+        "ElementSchema".to_string()
+    };
+    let zod_type = if is_array {
+        format!("z.array({element_schema}.nullable()).optional()")
+    } else {
+        format!("{element_schema}.optional()")
+    };
+    Some(RenderField {
+        name: format!("_{}", field.name),
+        type_expr,
+        optional: true,
+        doc: Some(format!("Primitive extensions for `{}`", field.name)),
+        must_support: false,
+        zod_type: Some(zod_type),
+        valueset_type: None,
+        type_dependencies: vec!["Element".to_string()],
+        is_primitive: false,
+    })
+}
+
+/// Insert a primitive-extension companion immediately after each primitive
+/// field, in place.
+fn inject_primitive_companions(fields: &mut Vec<RenderField>, current_type: &str) {
+    let mut out = Vec::with_capacity(fields.len());
+    for field in std::mem::take(fields) {
+        let companion = primitive_extension_companion(&field, current_type);
+        out.push(field);
+        if let Some(companion) = companion {
+            out.push(companion);
+        }
+    }
+    *fields = out;
+}
+
+/// Insert the matching Zod companion field after each primitive field in a Zod
+/// field list, mirroring [`inject_primitive_companions`]. `primitives` maps a
+/// primitive field name → `is_array`.
+fn inject_primitive_companions_zod(
+    zod_fields: &mut Vec<ZodSchemaField>,
+    primitives: &IndexMap<String, bool>,
+    current_type: &str,
+) {
+    let element_schema = if current_type == "Element" {
+        "z.lazy(() => ElementSchema)".to_string()
+    } else {
+        "ElementSchema".to_string()
+    };
+    let mut out = Vec::with_capacity(zod_fields.len());
+    for field in std::mem::take(zod_fields) {
+        let companion = primitives.get(&field.name).map(|is_array| ZodSchemaField {
+            name: format!("_{}", field.name),
+            zod_type: if *is_array {
+                format!("z.array({element_schema}.nullable()).optional()")
+            } else {
+                format!("{element_schema}.optional()")
+            },
+        });
+        out.push(field);
+        if let Some(companion) = companion {
+            out.push(companion);
+        }
+    }
+    *zod_fields = out;
 }
 
 fn ensure_type_import(

@@ -116,7 +116,7 @@ impl CanonicalTypeMap {
     ///
     /// For base types (not profiles), this also registers the type name and file stem mappings.
     /// Profiles don't overwrite base type mappings.
-    fn insert(&mut self, entry: TypeEntry) {
+    pub(crate) fn insert(&mut self, entry: TypeEntry) {
         let canonical_url = entry.canonical_url.clone();
         let type_name = entry.type_name.clone();
         let file_stem = entry.file_stem.clone();
@@ -233,6 +233,15 @@ impl CanonicalTypeMap {
     /// Get a type entry by file stem (e.g., "extension").
     pub fn get_by_stem(&self, stem: &str) -> Option<&TypeEntry> {
         self.by_stem.get(stem).and_then(|url| self.by_url.get(url))
+    }
+
+    /// True if a raw FHIR type code (e.g. `date`, `string`) is a primitive type,
+    /// per the package's own `StructureDefinition` kinds. Type entries are keyed
+    /// by PascalCase type name, so the code is normalized the same way.
+    pub fn is_primitive_code(&self, type_code: &str) -> bool {
+        self.get_by_name(&pascal_case(type_code))
+            .map(|entry| entry.kind == StructureKind::PrimitiveType)
+            .unwrap_or(false)
     }
 
     /// Get the file stem for a type name.
@@ -417,5 +426,35 @@ mod tests {
             "http://hl7.org/fhir/StructureDefinition/Extension"
         );
         assert_eq!(entry.kind, StructureKind::ComplexType);
+    }
+
+    #[test]
+    fn is_primitive_code_reads_package_kinds() {
+        let mut map = CanonicalTypeMap::new();
+        map.insert(TypeEntry {
+            canonical_url: "http://hl7.org/fhir/StructureDefinition/date".to_string(),
+            type_name: "Date".to_string(),
+            file_stem: "date".to_string(),
+            kind: StructureKind::PrimitiveType,
+            package: PackageId::new("hl7.fhir.r4.core", "4.0.1"),
+            base_type: None,
+            type_code: Some("date".to_string()),
+        });
+        map.insert(TypeEntry {
+            canonical_url: "http://hl7.org/fhir/StructureDefinition/HumanName".to_string(),
+            type_name: "HumanName".to_string(),
+            file_stem: "human-name".to_string(),
+            kind: StructureKind::ComplexType,
+            package: PackageId::new("hl7.fhir.r4.core", "4.0.1"),
+            base_type: None,
+            type_code: Some("HumanName".to_string()),
+        });
+
+        // Raw lowercase codes resolve through the PascalCase index.
+        assert!(map.is_primitive_code("date"));
+        assert!(!map.is_primitive_code("HumanName"));
+        // Unknown codes (e.g. the fhirpath System.* types, absent from the
+        // package as StructureDefinitions) are not primitives.
+        assert!(!map.is_primitive_code("http://hl7.org/fhirpath/System.String"));
     }
 }
