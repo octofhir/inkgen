@@ -12,9 +12,9 @@ use inkgen_core::ir::{
     Derivation, ElementDefinition, ElementMax, ElementType, ResourceDefinition, ResourceKind,
 };
 use inkgen_core::{
-    CanonicalTypeMap, DependencyAnalyzer, FhirTypeRegistry, LanguageBackend, LanguageGenerator,
-    PackageCache, PackageDescriptor, PackageId, StructureDefinitionProvider, StructureFilter,
-    StructureKind, StructureProviderConfig, StructureSummary, TypescriptLanguageConfig,
+    DependencyAnalyzer, FhirTypeRegistry, LanguageBackend, LanguageGenerator, PackageCache,
+    PackageDescriptor, PackageId, StructureDefinitionProvider, StructureKind,
+    StructureProviderConfig, StructureSummary, TypescriptLanguageConfig,
 };
 use once_cell::sync::Lazy;
 use serde::Serialize;
@@ -932,22 +932,16 @@ impl TypescriptGenerator {
     }
 
     /// Resolve a structure by canonical URL from the package IR (single source of
-    /// truth), falling back to the provider only when the IR is absent or does
-    /// not contain it.
-    async fn resolve_structure<S>(
-        &self,
-        service: &S,
-        canonical: &str,
-    ) -> inkgen_core::CoreResult<ResourceDefinition>
-    where
-        S: StructureDefinitionProvider + Sync + Send,
-    {
-        if let Some(ir) = &self.config.package_ir
-            && let Some(def) = ir.get(canonical)
-        {
-            return Ok(def.clone());
-        }
-        service.load_structure(canonical).await
+    /// truth). Errors if no IR is set — the backend no longer touches a provider.
+    fn resolve_structure(&self, canonical: &str) -> Result<ResourceDefinition> {
+        let ir = self
+            .config
+            .package_ir
+            .as_ref()
+            .context("TypeScript backend requires a PackageIr")?;
+        ir.get(canonical)
+            .cloned()
+            .with_context(|| format!("structure not in PackageIr: {canonical}"))
     }
 
     /// Generate ValueSet code files (Phase 0).
@@ -958,7 +952,7 @@ impl TypescriptGenerator {
     /// Returns a tuple of (count, url_to_type_map) where:
     /// - count: number of ValueSets generated
     /// - url_to_type_map: maps ValueSet canonical URLs to TypeScript type names
-    async fn generate_valuesets(
+    fn generate_valuesets(
         &self,
         package_dir: &Path,
         descriptor: &PackageDescriptor,
@@ -967,8 +961,8 @@ impl TypescriptGenerator {
         use crate::valuesets::helpers::{HelperConfig, ValueSetHelpers};
         use crate::valuesets::metadata;
 
-        let Some(cache) = &self.config.package_cache else {
-            // No cache available, skip ValueSet generation
+        // Terminology comes from the package IR (single source of truth).
+        let Some(ir) = &self.config.package_ir else {
             return Ok((0, HashMap::new()));
         };
 
@@ -997,9 +991,6 @@ impl TypescriptGenerator {
         let mut generated_count = 0;
         let mut url_to_type_map: HashMap<String, String> = HashMap::new();
 
-        // Get canonical manager to query ValueSet resources
-        let manager = cache.manager().await?;
-
         info!(
             "Found {} ValueSets in package {}",
             descriptor.inventory.value_sets.len(),
@@ -1012,15 +1003,7 @@ impl TypescriptGenerator {
             if let Some(canonical_url) = &valueset_artifact.canonical_url {
                 // Terminology content comes from the package IR (single source of
                 // truth) when present; otherwise resolve via the manager.
-                let vs_content = if let Some(ir) = &self.config.package_ir {
-                    ir.value_sets.get(canonical_url).cloned()
-                } else {
-                    manager
-                        .resolve(canonical_url)
-                        .await
-                        .ok()
-                        .map(|r| r.resource.content)
-                };
+                let vs_content = ir.value_sets.get(canonical_url).cloned();
                 match vs_content {
                     Some(content)
                         if content.get("resourceType").and_then(|v| v.as_str())
@@ -1087,16 +1070,7 @@ impl TypescriptGenerator {
                                                 type_name, system
                                             );
                                         } else {
-                                            let cs_content =
-                                                if let Some(ir) = &self.config.package_ir {
-                                                    ir.value_sets.get(system).cloned()
-                                                } else {
-                                                    manager
-                                                        .resolve(system)
-                                                        .await
-                                                        .ok()
-                                                        .map(|r| r.resource.content)
-                                                };
+                                            let cs_content = ir.value_sets.get(system).cloned();
                                             match cs_content {
                                                 Some(cs)
                                                     if cs
@@ -1274,16 +1248,12 @@ impl TypescriptGenerator {
     ///
     /// Uses the FhirTypeRegistry to dynamically discover complex types from loaded packages,
     /// eliminating the need for a hardcoded list of core types.
-    async fn ensure_core_types<S>(
+    fn ensure_core_types(
         &self,
-        service: &S,
         descriptor: &PackageDescriptor,
         fhir_registry: &FhirTypeRegistry,
         entries: &mut Vec<(StructureSummary, ResourceDefinition)>,
-    ) -> Result<()>
-    where
-        S: StructureDefinitionProvider + Sync + Send,
-    {
+    ) -> Result<()> {
         let mut existing_types: HashSet<String> = entries
             .iter()
             .map(|(summary, definition)| Self::structure_type_name(summary, definition))
@@ -1364,7 +1334,7 @@ impl TypescriptGenerator {
                 type_name, canonical
             );
 
-            match self.resolve_structure(service, &canonical).await {
+            match self.resolve_structure(&canonical) {
                 Ok(definition) => {
                     let kind = match definition.kind {
                         ResourceKind::PrimitiveType => StructureKind::PrimitiveType,
@@ -1472,30 +1442,21 @@ where
 {
     async fn generate(
         &self,
-        service: &S,
+        _service: &S,
         descriptor: &PackageDescriptor,
-        provider_config: &StructureProviderConfig,
+        _provider_config: &StructureProviderConfig,
     ) -> Result<()> {
-        let filter = StructureFilter::from_config(provider_config);
-        // Structure list comes from the package IR (single source of truth) when
-        // present; otherwise fall back to listing via the provider.
-        let summaries = match &self.config.package_ir {
-            Some(ir) => ir.structures.clone(),
-            None => service.list_structures(&filter).await?,
-        };
-
-        // Build CanonicalTypeMap from the canonical manager - single source of truth for all types
-        let canonical_type_map = if let Some(ir) = &self.config.package_ir {
-            ir.type_map.clone()
-        } else if let Some(cache) = &self.config.package_cache {
-            let manager = cache.manager().await?;
-            CanonicalTypeMap::from_manager(&manager).await?
-        } else {
-            warn!("No package cache available - type resolution may be incomplete");
-            CanonicalTypeMap::new()
-        };
+        // The package IR is the single source of truth — the backend reads every
+        // input from it and never touches the provider or canonical manager.
+        let ir = self
+            .config
+            .package_ir
+            .clone()
+            .context("TypeScript backend requires a PackageIr")?;
+        let summaries = ir.structures.clone();
+        let canonical_type_map = ir.type_map.clone();
         info!(
-            "Built CanonicalTypeMap with {} types from canonical manager",
+            "Using CanonicalTypeMap with {} types from PackageIr",
             canonical_type_map.len()
         );
 
@@ -1661,7 +1622,7 @@ where
 
         // Phase 0: Generate ValueSets/Codes before structures
         let (valueset_count, valueset_url_to_type) = if self.config.generate_valuesets {
-            self.generate_valuesets(&package_dir, descriptor).await?
+            self.generate_valuesets(&package_dir, descriptor)?
         } else {
             (0, HashMap::new())
         };
@@ -1674,26 +1635,11 @@ where
 
         // Load SearchParameter resources for interop generation
         let search_parameters = if self.config.interop_search_helpers {
-            if let Some(ir) = &self.config.package_ir {
-                info!(
-                    "Loaded {} search parameters for interop (from IR)",
-                    ir.search_parameters.len()
-                );
-                ir.search_parameters.clone()
-            } else if let Some(cache) = &self.config.package_cache {
-                match cache.load_search_parameters(&descriptor.id).await {
-                    Ok(params) => {
-                        info!("Loaded {} search parameters for interop", params.len());
-                        params
-                    }
-                    Err(err) => {
-                        warn!("Failed to load search parameters: {}", err);
-                        Vec::new()
-                    }
-                }
-            } else {
-                Vec::new()
-            }
+            info!(
+                "Using {} search parameters for interop (from IR)",
+                ir.search_parameters.len()
+            );
+            ir.search_parameters.clone()
         } else {
             Vec::new()
         };
@@ -1758,14 +1704,12 @@ where
             }
 
             let structure = self
-                .resolve_structure(service, &summary.canonical_url)
-                .await
+                .resolve_structure(&summary.canonical_url)
                 .with_context(|| format!("failed to load {}", summary.canonical_url))?;
             entries.push((summary, structure));
         }
 
-        self.ensure_core_types(service, descriptor, &fhir_registry, &mut entries)
-            .await
+        self.ensure_core_types(descriptor, &fhir_registry, &mut entries)
             .with_context(|| {
                 format!(
                     "failed to hydrate core type definitions for {}",
@@ -3854,7 +3798,18 @@ mod tests {
             lazy_schemas: false,
             config: ProjectFilesConfig::default(),
         };
-        let generator = TypescriptGenerator::new(config.clone());
+        let ir = inkgen_core::build_package_ir(
+            &provider,
+            cache.as_ref(),
+            &descriptor,
+            &provider_config,
+            Some(descriptor.id.version.clone()),
+            Vec::new(),
+        )
+        .await
+        .expect("build PackageIr");
+        let mut generator = TypescriptGenerator::new(config.clone());
+        generator.set_package_ir(Some(std::sync::Arc::new(ir)));
         generator
             .generate(&provider, &descriptor, &provider_config)
             .await
