@@ -839,8 +839,10 @@ struct RenderStructure {
     /// Schema imports for Zod schemas (separate from type imports)
     schema_imports: Vec<RenderImport>,
     nested_types: Vec<RenderNestedType>,
-    /// Generic type parameters for the interface (e.g., "T extends string = string" for Reference<T>)
+    /// Generic type parameters for declaration positions (e.g., "T extends string = string" for Reference<T>)
     type_parameters: Option<String>,
+    /// Bare generic type arguments for usage positions (e.g., "T" for Reference<T>)
+    type_arguments: Option<String>,
     /// Package name (e.g., "hl7.fhir.r4.core")
     package_name: String,
     /// Package folder name (e.g., "r4-core")
@@ -2680,10 +2682,13 @@ fn build_render_structure(
     let has_primitives = !primitive_imports.is_empty();
 
     // Special case: Make Reference generic to support type-safe references
-    let type_parameters = if type_name == "Reference" {
-        Some("T extends string = string".to_string())
+    let (type_parameters, type_arguments) = if type_name == "Reference" {
+        (
+            Some("T extends string = string".to_string()),
+            Some("T".to_string()),
+        )
     } else {
-        None
+        (None, None)
     };
 
     let output_folder = if is_profile {
@@ -3160,6 +3165,7 @@ fn build_render_structure(
         schema_imports,
         nested_types,
         type_parameters,
+        type_arguments,
         package_name: package_name.to_string(),
         package_folder: package_folder.to_string(),
         is_profile,
