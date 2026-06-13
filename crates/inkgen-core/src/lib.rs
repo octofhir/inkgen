@@ -17,6 +17,7 @@ pub mod generator;
 pub mod ir;
 mod lineage;
 mod package;
+pub mod package_ir;
 mod profile;
 pub mod search;
 mod services;
@@ -39,6 +40,10 @@ pub use lineage::{ProfileAncestor, ProfileChain, merge_element_snapshots, resolv
 pub use package::{
     ArtifactDescriptor, ArtifactKind, PackageDescriptor, PackageId, PackageInventory,
     PackageRequest, PackageSource, StructureKind, StructureSummary,
+};
+pub use package_ir::{
+    Backend, BackendError, CONTRACT_VERSION, Diagnostic, DiagnosticSeverity, GenerationOutput,
+    PackageIr, build_package_ir,
 };
 pub use search::SearchParameterInfo;
 pub use services::{
