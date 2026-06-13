@@ -1244,14 +1244,14 @@ pub fn build_slice_accessors(
                 continue;
             };
 
-            let predicate = pairs
+            let terms: Vec<DiscTerm> = pairs
                 .iter()
-                .map(|(path, value)| {
-                    let segs = discriminator_segments(definition, &pattern.path, path);
-                    slice_predicate("item", &segs, value, 0)
+                .map(|(path, value)| DiscTerm {
+                    segments: discriminator_segments(definition, &pattern.path, path),
+                    value: value.clone(),
                 })
-                .collect::<Vec<_>>()
-                .join(" && ");
+                .collect();
+            let predicate = build_match_expr("item", &terms);
             let doc = pairs
                 .iter()
                 .map(|(path, value)| format!("{path} = \"{value}\""))
@@ -1321,11 +1321,10 @@ pub fn render_slice_accessors(accessors: &[SliceAccessor], profile_type: &str) -
     let mut out = String::new();
     for acc in accessors {
         // Reusable type guard: matches one array element against the slice's
-        // discriminator. `!!` collapses the `boolean | undefined` an optional
-        // chain can produce.
+        // discriminator(s).
         out.push_str(&format!("\n/** Slice guard — {} */\n", acc.doc));
         out.push_str(&format!(
-            "export function {}(item: {}): boolean {{\n  return !!({});\n}}\n",
+            "export function {}(item: {}): boolean {{\n  return {};\n}}\n",
             acc.guard_name, acc.item_type, acc.predicate
         ));
 
@@ -1375,20 +1374,83 @@ fn discriminator_segments(
     segs
 }
 
-/// Build a `.find` predicate body for `var` matching the discriminator path
-/// `segments` against `value`. Array segments become `?.some((vN) => …)`;
-/// single segments chain with `?.`. The leaf compares for equality.
-fn slice_predicate(var: &str, segments: &[(String, bool)], value: &str, depth: usize) -> String {
+/// A discriminator path as `(segment name, is_array)` pairs.
+type PathSegments = Vec<(String, bool)>;
+/// A leaf match: `(final segment name, fixed value)`.
+type LeafMatch = (String, String);
+
+/// One resolved discriminator: its path segments (with array flags) and the
+/// fixed value the matching element must carry.
+pub struct DiscTerm {
+    pub segments: PathSegments,
+    pub value: String,
+}
+
+/// Build a boolean match expression for `item` against all of a slice's
+/// discriminators. Discriminators that share the same container (all segments
+/// but the final leaf) are matched on the **same** element — `code` and
+/// `system` must coincide on one `coding`, not on two different ones:
+///
+/// ```text
+/// item?.code?.coding?.some((v0) => v0?.code === "8480-6" && v0?.system === "http://loinc.org")
+/// ```
+fn build_match_expr(item: &str, terms: &[DiscTerm]) -> String {
+    // Group terms by their container path (segments minus the final leaf),
+    // preserving first-seen order. Same container → one shared match.
+    let mut groups: Vec<(PathSegments, Vec<LeafMatch>)> = Vec::new();
+    for term in terms {
+        let Some((leaf, container)) = term.segments.split_last() else {
+            continue;
+        };
+        let container = container.to_vec();
+        let leaf_name = leaf.0.clone();
+        if let Some(group) = groups.iter_mut().find(|(c, _)| *c == container) {
+            group.1.push((leaf_name, term.value.clone()));
+        } else {
+            groups.push((container, vec![(leaf_name, term.value.clone())]));
+        }
+    }
+
+    let exprs: Vec<String> = groups
+        .iter()
+        .map(|(container, leaves)| walk_to_leaf(item, container, leaves, 0))
+        .collect();
+    exprs.join(" && ")
+}
+
+/// Walk `container` from `var`, threading `?.some((vN) => …)` through array
+/// segments and `?.` through single ones, then compare each `(leaf, value)` on
+/// the innermost element (AND-ed). A `.some` reached via optional chaining can
+/// yield `undefined`, so it is coalesced to a clean `boolean` with `?? false`.
+fn walk_to_leaf(
+    var: &str,
+    container: &[(String, bool)],
+    leaves: &[LeafMatch],
+    depth: usize,
+) -> String {
     let mut expr = var.to_string();
-    for (i, (name, is_array)) in segments.iter().enumerate() {
+    for (i, (name, is_array)) in container.iter().enumerate() {
         if *is_array {
             let lambda = format!("v{depth}");
-            let inner = slice_predicate(&lambda, &segments[i + 1..], value, depth + 1);
-            return format!("{expr}?.{name}?.some(({lambda}) => {inner})");
+            let inner = walk_to_leaf(&lambda, &container[i + 1..], leaves, depth + 1);
+            return format!("({expr}?.{name}?.some(({lambda}) => {inner}) ?? false)");
         }
         expr = format!("{expr}?.{name}");
     }
-    format!("{expr} === \"{}\"", escape_string(value))
+    leaf_conditions(&expr, leaves)
+}
+
+/// `expr?.leaf === "value"` for each leaf, AND-ed (parenthesized when several).
+fn leaf_conditions(expr: &str, leaves: &[LeafMatch]) -> String {
+    let conds: Vec<String> = leaves
+        .iter()
+        .map(|(leaf, value)| format!("{expr}?.{leaf} === \"{}\"", escape_string(value)))
+        .collect();
+    if conds.len() == 1 {
+        conds.into_iter().next().unwrap()
+    } else {
+        conds.join(" && ")
+    }
 }
 
 /// Checks if an element path is a direct child of the base type.
@@ -1703,35 +1765,53 @@ mod tests {
     use serde_json::json;
     use tera::Tera;
 
+    fn term(segments: &[(&str, bool)], value: &str) -> DiscTerm {
+        DiscTerm {
+            segments: segments.iter().map(|(n, a)| (n.to_string(), *a)).collect(),
+            value: value.to_string(),
+        }
+    }
+
     #[test]
-    fn slice_predicate_threads_some_through_array_segments() {
+    fn match_expr_threads_some_through_an_array_segment() {
         // bp's component discriminator: code.coding.code, coding is an array.
-        let segs = vec![
-            ("code".to_string(), false),
-            ("coding".to_string(), true),
-            ("code".to_string(), false),
+        let terms = vec![term(
+            &[("code", false), ("coding", true), ("code", false)],
+            "8480-6",
+        )];
+        assert_eq!(
+            build_match_expr("item", &terms),
+            "(item?.code?.coding?.some((v0) => v0?.code === \"8480-6\") ?? false)"
+        );
+    }
+
+    #[test]
+    fn match_expr_groups_co_located_discriminators_on_one_element() {
+        // code + system share `code.coding` — they must match the SAME coding,
+        // so they go in one `.some`, not two.
+        let terms = vec![
+            term(
+                &[("code", false), ("coding", true), ("code", false)],
+                "8480-6",
+            ),
+            term(
+                &[("code", false), ("coding", true), ("system", false)],
+                "http://loinc.org",
+            ),
         ];
         assert_eq!(
-            slice_predicate("item", &segs, "8480-6", 0),
-            "item?.code?.coding?.some((v0) => v0?.code === \"8480-6\")"
+            build_match_expr("item", &terms),
+            "(item?.code?.coding?.some((v0) => v0?.code === \"8480-6\" && \
+             v0?.system === \"http://loinc.org\") ?? false)"
         );
     }
 
     #[test]
-    fn slice_predicate_single_level_is_a_plain_equality() {
-        let segs = vec![("url".to_string(), false)];
+    fn match_expr_single_level_is_a_plain_equality() {
+        let terms = vec![term(&[("url", false)], "http://example.org/x")];
         assert_eq!(
-            slice_predicate("item", &segs, "http://example.org/x", 0),
+            build_match_expr("item", &terms),
             "item?.url === \"http://example.org/x\""
-        );
-    }
-
-    #[test]
-    fn slice_predicate_nested_arrays_use_distinct_lambdas() {
-        let segs = vec![("a".to_string(), true), ("b".to_string(), true)];
-        assert_eq!(
-            slice_predicate("item", &segs, "x", 0),
-            "item?.a?.some((v0) => v0?.b?.some((v1) => v1 === \"x\"))"
         );
     }
 
