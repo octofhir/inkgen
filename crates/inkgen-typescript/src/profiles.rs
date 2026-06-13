@@ -155,6 +155,11 @@ pub struct ConstrainedElement {
     pub max: String,
     /// Whether this makes an optional field required
     pub makes_required: bool,
+    /// For FHIR choice (`value[x]`) elements: the expanded variant member names
+    /// (e.g. `effectiveDateTime`, `effectivePeriod`). Empty for non-choice
+    /// elements. A choice element has no single member to make required, so the
+    /// emitter narrows only when the profile constrains it to exactly one type.
+    pub choice_members: Vec<String>,
 }
 
 /// Render context for profile template generation.
@@ -396,7 +401,13 @@ impl ProfileInfo {
             ));
 
             // Add fixed value fields (override with specific literals)
+            // Skip 'url' for Extension profiles: a string-literal type can't narrow
+            // the branded `Extension['url']` (FhirString). Same skip as the
+            // interface branch below.
             for fixed in &self.fixed_elements {
+                if fixed.field_name == "url" && self.base_type == "Extension" {
+                    continue;
+                }
                 output.push_str(&format!("  /** Fixed value: {} */\n", fixed.fixed_value));
                 output.push_str(&format!(
                     "  declare {}: {};\n\n",
@@ -407,16 +418,28 @@ impl ProfileInfo {
             // Add constrained fields (override cardinality with declare)
             for constrained in &self.constrained_elements {
                 if constrained.makes_required {
-                    output.push_str(&format!(
-                        "  /** Required by profile (min: {}) */\n",
-                        constrained.min
-                    ));
-                    // Use declare to override parent field as required
-                    output.push_str(&format!("  declare {}: ", constrained.field_name));
-                    // Get the type from base, removing optional marker
-                    output.push_str("NonNullable<");
-                    output.push_str(&format!("{}['{}']", self.base_type, constrained.field_name));
-                    output.push_str(">;\n\n");
+                    if let Some(member) = required_choice_member(constrained) {
+                        output.push_str(&format!(
+                            "  /** Required by profile (min: {}) */\n",
+                            constrained.min
+                        ));
+                        output.push_str(&format!(
+                            "  declare {}: NonNullable<{}['{}']>;\n\n",
+                            member, self.base_type, member
+                        ));
+                    } else if let Some(doc) = unnarrowed_choice_doc(constrained) {
+                        output.push_str(&doc);
+                    } else {
+                        output.push_str(&format!(
+                            "  /** Required by profile (min: {}) */\n",
+                            constrained.min
+                        ));
+                        // Use declare to override parent field as required
+                        output.push_str(&format!(
+                            "  declare {}: NonNullable<{}['{}']>;\n\n",
+                            constrained.field_name, self.base_type, constrained.field_name
+                        ));
+                    }
                 }
             }
 
@@ -457,16 +480,28 @@ impl ProfileInfo {
             // Add constrained fields (override cardinality)
             for constrained in &self.constrained_elements {
                 if constrained.makes_required {
-                    output.push_str(&format!(
-                        "  /** Required by profile (min: {}) */\n",
-                        constrained.min
-                    ));
-                    // Remove optional marker by redefining as required
-                    output.push_str(&format!("  {}: ", constrained.field_name));
-                    // Get the type from base, removing optional marker
-                    output.push_str("NonNullable<");
-                    output.push_str(&format!("{}['{}']", self.base_type, constrained.field_name));
-                    output.push_str(">;\n");
+                    if let Some(member) = required_choice_member(constrained) {
+                        output.push_str(&format!(
+                            "  /** Required by profile (min: {}) */\n",
+                            constrained.min
+                        ));
+                        output.push_str(&format!(
+                            "  {}: NonNullable<{}['{}']>;\n",
+                            member, self.base_type, member
+                        ));
+                    } else if let Some(doc) = unnarrowed_choice_doc(constrained) {
+                        output.push_str(&doc);
+                    } else {
+                        output.push_str(&format!(
+                            "  /** Required by profile (min: {}) */\n",
+                            constrained.min
+                        ));
+                        // Remove optional marker by redefining as required
+                        output.push_str(&format!(
+                            "  {}: NonNullable<{}['{}']>;\n",
+                            constrained.field_name, self.base_type, constrained.field_name
+                        ));
+                    }
                 }
             }
 
@@ -507,6 +542,19 @@ impl ProfileInfo {
                 // Add constrained fields to the schema
                 for constrained in &self.constrained_elements {
                     if constrained.makes_required {
+                        // Choice (`value[x]`) elements have no single member on the
+                        // wire — requiring the collapsed name (`value`) would reject
+                        // valid instances that carry `valueQuantity`, etc. Narrowing
+                        // to "exactly one variant present" is a runtime-refinement
+                        // follow-up; skip the phantom requirement here.
+                        if !constrained.choice_members.is_empty() {
+                            output.push_str(&format!(
+                                "    // choice {} (one of {}) — enforced at runtime\n",
+                                constrained.field_name,
+                                constrained.choice_members.join(", ")
+                            ));
+                            continue;
+                        }
                         // Override to make required
                         output.push_str(&format!(
                             "    {}: z.array(z.unknown()).min({}),\n",
@@ -591,21 +639,19 @@ impl ProfileInfo {
                 extension.url
             ));
 
-            // Try to determine the value field from the type
-            let value_field = match value_type {
-                "string" => "valueString",
-                "number" => "valueInteger",
-                "boolean" => "valueBoolean",
-                "CodeableConcept" => "valueCodeableConcept",
-                "Coding" => "valueCoding",
-                "Reference" => "valueReference",
-                _ => "value",
-            };
-
-            output.push_str(&format!(
-                "    return ext?.{} as {} | undefined;\n",
-                value_field, value_type
-            ));
+            // Use the wire-correct value member (`valueDateTime`, `valueReference`,
+            // …) derived from the FHIR type code. When the value is untyped (a
+            // multi-type choice), fall back to a raw read.
+            match extension_value_member(extension) {
+                Some(member) => output.push_str(&format!(
+                    "    return ext?.{} as {} | undefined;\n",
+                    member, value_type
+                )),
+                None => output.push_str(&format!(
+                    "    return (ext as any)?.value as {} | undefined;\n",
+                    value_type
+                )),
+            }
             output.push_str("  }\n\n");
         }
 
@@ -667,21 +713,18 @@ impl ProfileInfo {
             output.push_str("      this.extension.push(value);\n");
             output.push_str("    }\n");
         } else {
-            let value_type = extension.value_type.as_deref().unwrap_or("unknown");
-            let value_field = match value_type {
-                "string" => "valueString",
-                "number" => "valueInteger",
-                "boolean" => "valueBoolean",
-                "CodeableConcept" => "valueCodeableConcept",
-                "Coding" => "valueCoding",
-                "Reference" => "valueReference",
-                _ => "value",
-            };
+            // Build a minimal Extension with the wire-correct value member. The
+            // `as unknown as Extension` cast is deliberate: with branded primitives
+            // a plain string literal `url` and an unbranded `value` argument don't
+            // structurally satisfy the branded `Extension` shape, but the runtime
+            // object is correct FHIR.
+            let value_member = extension_value_member(extension);
+            let member = value_member.as_deref().unwrap_or("value");
 
             output.push_str("    const ext = {\n");
             output.push_str(&format!("      url: '{}',\n", extension.url));
-            output.push_str(&format!("      {}: value\n", value_field));
-            output.push_str("    };\n");
+            output.push_str(&format!("      {}: value,\n", member));
+            output.push_str("    } as unknown as Extension;\n");
             output.push_str("    if (idx !== undefined && idx >= 0) {\n");
             output.push_str("      this.extension[idx] = ext;\n");
             output.push_str("    } else {\n");
@@ -723,9 +766,23 @@ impl ProfileInfo {
             value_imports_needed.push(schema_name);
         }
 
-        // Import Extension type if we have extensions
-        if !self.extensions.is_empty() {
+        // Import the Extension type if we have extensions — unless it is already
+        // the base type (imported above), which would double-import the identifier.
+        if !self.extensions.is_empty() && self.base_type != "Extension" {
             type_imports_needed.push("Extension".to_string());
+        }
+
+        // Import the value types of simple extensions (e.g. `Reference`,
+        // `CodeableConcept`) used by the accessor methods. Primitive value types
+        // (`string`, `number`, `boolean`) need no import.
+        for ext in &self.extensions {
+            if !ext.is_complex
+                && let Some(value_type) = ext.value_type.as_deref()
+                && !is_primitive_typescript_type(value_type)
+                && value_type != "unknown"
+            {
+                type_imports_needed.push(value_type.to_string());
+            }
         }
 
         // Check if we need FhirString for extension URL casts
@@ -1159,12 +1216,27 @@ fn extract_constraints(
                     inkgen_core::ir::ElementMax::Finite(n) => n.to_string(),
                 };
 
+                // For choice (`value[x]`) elements, the base member name no longer
+                // exists on the generated type — it expands to `valueQuantity`,
+                // `valueString`, … So record the variant member names instead.
+                let choice_members = if raw_field_name.ends_with("[x]") {
+                    let base = crate::naming::camel_case(raw_field_name.trim_end_matches("[x]"));
+                    element
+                        .types
+                        .iter()
+                        .map(|ty| inkgen_core::ir::choice_variant_name(&base, &ty.code))
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+
                 constrained.push(ConstrainedElement {
                     path: element.path.clone(),
                     field_name,
                     min: element.cardinality.min,
                     max,
                     makes_required: element.cardinality.min > 0,
+                    choice_members,
                 });
             }
         }
@@ -1318,7 +1390,46 @@ fn build_extension_accessor(ext: &crate::extensions::RenderExtension) -> Extensi
     }
 }
 
+/// The wire-correct value member name for a simple extension's `value[x]`
+/// (e.g. `valueDateTime`, `valueReference`), derived from the raw FHIR type code.
+/// Returns `None` when the value is untyped or a multi-type choice.
+fn extension_value_member(extension: &crate::extensions::RenderExtension) -> Option<String> {
+    extension
+        .value_type_code
+        .as_deref()
+        .map(|code| inkgen_core::ir::choice_variant_name("value", code))
+}
+
+/// If a required choice (`value[x]`) element is narrowed by the profile to exactly
+/// one type, return its single variant member name (e.g. `effectivePeriod`) so it
+/// can be made required at the type level. Non-choice or multi-variant choices
+/// return `None`.
+fn required_choice_member(constrained: &ConstrainedElement) -> Option<&str> {
+    match constrained.choice_members.as_slice() {
+        [single] => Some(single.as_str()),
+        _ => None,
+    }
+}
+
+/// For a required choice (`value[x]`) element the profile leaves open to multiple
+/// types, emit a documentation comment instead of a field: a flat interface can't
+/// express "exactly one of N optional members is required", so the variant members
+/// stay inherited (optional). Returns `None` for non-choice elements.
+fn unnarrowed_choice_doc(constrained: &ConstrainedElement) -> Option<String> {
+    if constrained.choice_members.len() > 1 {
+        Some(format!(
+            "  /** Required by profile (min: {}): one of {} (choice type — \
+             enforce at runtime) */\n",
+            constrained.min,
+            constrained.choice_members.join(", ")
+        ))
+    } else {
+        None
+    }
+}
+
 /// Map a FHIR type to its value[x] field name.
+#[allow(dead_code)]
 fn fhir_type_to_value_field(fhir_type: &str) -> String {
     let type_name = fhir_type
         .trim_end_matches("[]")
@@ -1509,6 +1620,7 @@ mod tests {
                 min: 1,
                 max: "*".to_string(),
                 makes_required: true,
+                choice_members: Vec::new(),
             }],
             extensions: vec![],
         };
@@ -1531,6 +1643,7 @@ mod tests {
             contexts: vec![],
             is_complex: false,
             value_type: Some("CodeableConcept".to_string()),
+            value_type_code: Some("CodeableConcept".to_string()),
             nested_types: vec![],
             cardinality_min: 0,
             cardinality_max: Some(1),
@@ -1552,6 +1665,7 @@ mod tests {
                 min: 1,
                 max: "*".to_string(),
                 makes_required: true,
+                choice_members: Vec::new(),
             }],
             extensions: vec![race_extension],
         };
@@ -1649,6 +1763,7 @@ mod tests {
                 min: 1,
                 max: "*".to_string(),
                 makes_required: true,
+                choice_members: Vec::new(),
             }],
             extensions: vec![],
         };
@@ -1704,6 +1819,7 @@ mod tests {
             contexts: vec![],
             is_complex: false,
             value_type: Some("CodeableConcept".to_string()),
+            value_type_code: Some("CodeableConcept".to_string()),
             nested_types: vec![],
             cardinality_min: 0,
             cardinality_max: Some(1),
@@ -1753,6 +1869,7 @@ mod tests {
             contexts: vec![],
             is_complex: false,
             value_type: Some("CodeableConcept".to_string()),
+            value_type_code: Some("CodeableConcept".to_string()),
             nested_types: vec![],
             cardinality_min: 0,
             cardinality_max: Some(1),
@@ -1801,6 +1918,7 @@ mod tests {
             contexts: vec![],
             is_complex: false,
             value_type: Some("CodeableConcept".to_string()),
+            value_type_code: Some("CodeableConcept".to_string()),
             nested_types: vec![],
             cardinality_min: 0,
             cardinality_max: Some(1),
@@ -1913,6 +2031,7 @@ mod tests {
             contexts: vec![],
             is_complex: false,
             value_type: Some("CodeableConcept".to_string()),
+            value_type_code: Some("CodeableConcept".to_string()),
             nested_types: vec![],
             cardinality_min: 0,
             cardinality_max: Some(1),
@@ -1964,6 +2083,7 @@ mod tests {
             contexts: vec![],
             is_complex: false,
             value_type: Some("CodeableConcept".to_string()),
+            value_type_code: Some("CodeableConcept".to_string()),
             nested_types: vec![],
             cardinality_min: 0,
             cardinality_max: Some(1),
@@ -1985,6 +2105,7 @@ mod tests {
                 min: 1,
                 max: "*".to_string(),
                 makes_required: true,
+                choice_members: Vec::new(),
             }],
             extensions: vec![race_extension],
         };

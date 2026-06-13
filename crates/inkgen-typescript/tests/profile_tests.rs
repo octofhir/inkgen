@@ -42,6 +42,7 @@ fn create_test_profile() -> ProfileInfo {
             min: 1,
             max: "*".to_string(),
             makes_required: true,
+            choice_members: Vec::new(),
         }],
         extensions: vec![],
     }
@@ -55,6 +56,7 @@ fn create_race_extension() -> RenderExtension {
         contexts: vec![],
         is_complex: false,
         value_type: Some("Coding".to_string()),
+        value_type_code: None,
         nested_types: vec![],
         cardinality_min: 0,
         cardinality_max: Some(1),
@@ -70,6 +72,7 @@ fn create_complex_extension() -> RenderExtension {
         contexts: vec![],
         is_complex: true,
         value_type: None,
+        value_type_code: None,
         nested_types: vec![],
         cardinality_min: 0,
         cardinality_max: Some(1),
@@ -654,6 +657,7 @@ fn test_multiple_extensions() {
         contexts: vec![],
         is_complex: false,
         value_type: Some("Coding".to_string()),
+        value_type_code: None,
         nested_types: vec![],
         cardinality_min: 0,
         cardinality_max: Some(1),
@@ -943,6 +947,7 @@ fn test_profile_snapshot_multiple_constraints() {
             min: 1,
             max: "*".to_string(),
             makes_required: true,
+            choice_members: Vec::new(),
         },
         ConstrainedElement {
             path: "Patient.name".to_string(),
@@ -950,6 +955,7 @@ fn test_profile_snapshot_multiple_constraints() {
             min: 1,
             max: "*".to_string(),
             makes_required: true,
+            choice_members: Vec::new(),
         },
     ];
     profile.fixed_elements = vec![

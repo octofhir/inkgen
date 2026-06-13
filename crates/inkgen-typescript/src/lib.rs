@@ -2431,8 +2431,11 @@ fn build_render_structure(
     let mut nested_types = Vec::new();
     let mut nested_schema_type_refs: Vec<String> = Vec::new();
     for nested_info in nested_type_infos {
+        // Choice (`value[x]`) elements inside backbone elements expand to typed
+        // variant members too (e.g. `Observation.component.value[x]`).
+        let nested_children = inkgen_core::ir::expand_choice_elements(nested_info.children.clone());
         let mut nested_fields = Vec::new();
-        for child in &nested_info.children {
+        for child in &nested_children {
             let field = map_field_with_nested_context(
                 child,
                 config,
@@ -2450,7 +2453,7 @@ fn build_render_structure(
         if config.zod_schemas {
             for field in &mut nested_fields {
                 // Find the element for this field
-                if let Some(element) = nested_info.children.iter().find(|e| {
+                if let Some(element) = nested_children.iter().find(|e| {
                     let field_name = e
                         .path
                         .split('.')
@@ -2524,7 +2527,7 @@ fn build_render_structure(
     // Build fields from FHIR element definitions
     for element in top_level_elements(definition) {
         let field = map_field_with_nested_context(
-            element,
+            &element,
             config,
             type_name,
             package_folder,
@@ -3180,7 +3183,18 @@ fn build_render_structure(
     }
 }
 
-fn top_level_elements(definition: &ResourceDefinition) -> Vec<&ElementDefinition> {
+/// Owned, choice-expanded top-level elements. Choice (`value[x]`) lowering is
+/// language-neutral and lives in `inkgen_core::ir` so every backend reuses it.
+fn top_level_elements(definition: &ResourceDefinition) -> Vec<ElementDefinition> {
+    inkgen_core::ir::expand_choice_elements(
+        top_level_element_refs(definition)
+            .into_iter()
+            .cloned()
+            .collect(),
+    )
+}
+
+fn top_level_element_refs(definition: &ResourceDefinition) -> Vec<&ElementDefinition> {
     // Find the root element. Try different identifiers in order of preference:
     // 1. definition.id (e.g., "Patient" or "telegram-verification")
     // 2. definition.name (e.g., "TelegramVerification" for logical resources)

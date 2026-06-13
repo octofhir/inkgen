@@ -42,6 +42,7 @@ implemented are listed as **Planned** in the matrix below.
 | TypeScript interfaces | ✅ Implemented | incl. nested / BackboneElement types |
 | TypeScript classes / builders | ✅ Implemented | `interface`, `class`, `class_with_builder` |
 | ValueSet generation | ✅ Implemented | closed unions (required/extensible), open unions (preferred/example) |
+| `value[x]` choice types | ✅ Implemented | wire-faithful typed members (`valueQuantity`, `valueDateTime`, …); language-neutral lowering in `inkgen-core` |
 | Profile classes | ✅ Implemented | extension accessors, serialization, validation |
 | Zod schemas | ✅ Implemented | Zod 4 idioms (`z.iso.date()`, `z.intersection()` for profiles) |
 | Branded primitives | ✅ Implemented | opt-in compile-time safety |
@@ -213,8 +214,9 @@ contract (handing backends a fully-lowered IR) is described in the
   its IR as JSON (logs go to stderr, so stdout pipes cleanly into `jq`).
 - **Explain** — `inkgen explain <canonical> [--element <path>]` shows, per
   element, the cardinality and *why* it maps the way it does — e.g. a `code`
-  field with a required binding becomes a closed union, a `value[x]` becomes a
-  union of its variants. Answers "why is this field a `string` and not an enum?"
+  field with a required binding becomes a closed union, a `value[x]` becomes
+  typed variant members (`valueQuantity`, `valueString`, …). Answers "why is this
+  field a `string` and not an enum?"
 - **Report** — `inkgen generate typescript --report` writes
   `.inkgen/debug/report.md` (inputs, timing, file count/size) and
   `generated-file-map.json` (every generated file with its byte size).

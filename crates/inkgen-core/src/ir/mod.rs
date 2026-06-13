@@ -147,6 +147,76 @@ impl ElementDefinition {
             child.sort();
         }
     }
+
+    /// True if this element is a FHIR choice placeholder (`value[x]`, `effective[x]`).
+    pub fn is_choice(&self) -> bool {
+        self.path
+            .rsplit('.')
+            .next()
+            .unwrap_or(self.path.as_str())
+            .ends_with("[x]")
+    }
+}
+
+/// Build the wire member name for one FHIR choice (`value[x]`) variant, per the
+/// FHIR rule: the base element name + the type code with its first letter
+/// upper-cased (`value` + `dateTime` -> `valueDateTime`, `value` + `Quantity` ->
+/// `valueQuantity`, `value` + `CodeableConcept` -> `valueCodeableConcept`).
+///
+/// `base` is the choice element name with the `[x]` suffix already removed.
+/// Language-neutral: this is the FHIR JSON element-naming rule, shared by every
+/// backend.
+pub fn choice_variant_name(base: &str, type_code: &str) -> String {
+    let mut chars = type_code.chars();
+    let upper_first = match chars.next() {
+        Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
+        None => String::new(),
+    };
+    format!("{base}{upper_first}")
+}
+
+/// Expand FHIR choice (`value[x]`) elements into one single-typed element per
+/// allowed type, named per [`choice_variant_name`]. This is the wire-faithful
+/// lowering: FHIR JSON serializes `value[x]` as `valueQuantity`/`valueString`/…
+/// (there is no `value` key on the wire), so each variant becomes its own typed
+/// element. Language-neutral — every backend consumes the expanded elements.
+///
+/// Elements that already carry expanded children (a snapshot that pre-expanded
+/// the choice) and non-choice elements pass through unchanged. Variant order is
+/// deterministic (sorted by the emitted member name).
+pub fn expand_choice_elements(elements: Vec<ElementDefinition>) -> Vec<ElementDefinition> {
+    let mut out = Vec::with_capacity(elements.len());
+    for element in elements {
+        let last_segment = element
+            .path
+            .rsplit('.')
+            .next()
+            .unwrap_or(element.path.as_str());
+
+        let is_choice = last_segment.ends_with("[x]");
+        if is_choice && element.children.is_empty() && !element.types.is_empty() {
+            let base = last_segment.trim_end_matches("[x]");
+            // Path prefix up to and including the trailing '.'.
+            let prefix = &element.path[..element.path.len() - last_segment.len()];
+
+            let mut variants: Vec<ElementDefinition> = element
+                .types
+                .iter()
+                .map(|ty| {
+                    let member = choice_variant_name(base, &ty.code);
+                    let mut variant = element.clone();
+                    variant.path = format!("{prefix}{member}");
+                    variant.types = vec![ty.clone()];
+                    variant
+                })
+                .collect();
+            variants.sort_by(|a, b| a.path.cmp(&b.path));
+            out.extend(variants);
+        } else {
+            out.push(element);
+        }
+    }
+    out
 }
 
 /// Element cardinality constraints.

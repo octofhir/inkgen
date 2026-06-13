@@ -25,6 +25,13 @@ pub struct RenderExtension {
     pub is_complex: bool,
     /// The value type of the extension (for simple extensions)
     pub value_type: Option<String>,
+    /// Raw FHIR type code of a single-typed simple extension's `value[x]`
+    /// (e.g. `dateTime`, `Reference`). Used to build the wire-correct value
+    /// member name (`valueDateTime`, `valueReference`). `None` when the value is
+    /// untyped, complex, or a multi-type choice. Distinct from `value_type`,
+    /// which is the (lossy) TypeScript type — `dateTime` and `string` both map to
+    /// the TS `string`, so the code is needed to pick the right member.
+    pub value_type_code: Option<String>,
     /// Nested types (for complex extensions)
     pub nested_types: Vec<NestedTypeInfo>,
     /// Extension cardinality (min/max)
@@ -114,15 +121,21 @@ fn create_render_extension_from_resource(resource: &ResourceDefinition) -> Optio
         .any(|elem| elem.path == "Extension.extension" && elem.slice_name.is_some());
 
     // For simple extensions, find the value type
-    let value_type = if !is_complex {
+    let value_elem = if !is_complex {
         flat_elements
             .iter()
             .find(|elem| elem.path == "Extension.value[x]")
-            .and_then(|elem| elem.types.first())
-            .map(|t| element_type_to_typescript_from_type(&t.code))
     } else {
         None
     };
+    let value_type = value_elem
+        .and_then(|elem| elem.types.first())
+        .map(|t| element_type_to_typescript_from_type(&t.code));
+    // Only a single-typed value has an unambiguous wire member name.
+    let value_type_code = value_elem
+        .filter(|elem| elem.types.len() == 1)
+        .and_then(|elem| elem.types.first())
+        .map(|t| t.code.clone());
 
     // Collect nested types for complex extensions
     let nested_types = if is_complex {
@@ -144,6 +157,7 @@ fn create_render_extension_from_resource(resource: &ResourceDefinition) -> Optio
         contexts,
         is_complex,
         value_type,
+        value_type_code,
         nested_types,
         cardinality_min: 0,
         cardinality_max: Some(1),
@@ -232,10 +246,11 @@ fn extract_extension_slices_from_elements(
                         url: ext_url.to_string(),
                         type_name,
                         description: element.definition.clone().or_else(|| element.short.clone()),
-                        is_complex: false, // Will be determined later if needed
-                        value_type: None,  // Will be populated if simple extension
+                        is_complex: false,     // Will be determined later if needed
+                        value_type: None,      // Will be populated if simple extension
+                        value_type_code: None, // Will be populated if simple extension
                         nested_types: Vec::new(), // Will be populated if complex
-                        contexts: Vec::new(), // Could extract from element path
+                        contexts: Vec::new(),  // Could extract from element path
                         cardinality_min: element.cardinality.min,
                         cardinality_max: match element.cardinality.max {
                             inkgen_core::ir::ElementMax::Finite(n) => Some(n),
@@ -268,6 +283,16 @@ fn create_render_extension(ext_def: &ExtensionDefinition) -> Option<RenderExtens
     // Determine if complex and extract value type
     let (is_complex, value_type) = analyze_extension_structure(ext_def);
 
+    // Raw FHIR code for a single-typed simple extension's value (wire member name).
+    let value_type_code = if is_complex {
+        None
+    } else {
+        find_value_element(ext_def)
+            .filter(|elem| elem.types.len() == 1)
+            .and_then(|elem| elem.types.first())
+            .map(|t| t.code.clone())
+    };
+
     // Collect nested types for complex extensions
     let nested_types = if is_complex {
         collect_extension_nested_types(ext_def)
@@ -294,6 +319,7 @@ fn create_render_extension(ext_def: &ExtensionDefinition) -> Option<RenderExtens
         contexts,
         is_complex,
         value_type,
+        value_type_code,
         nested_types,
         cardinality_min,
         cardinality_max,
