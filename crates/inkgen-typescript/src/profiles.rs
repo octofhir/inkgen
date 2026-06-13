@@ -137,8 +137,12 @@ pub struct SliceAccessor {
     pub fn_name: String,
     /// Type-guard function name (e.g. `isBpSystolicBP`).
     pub guard_name: String,
-    /// The sliced array field on the profile (e.g. `component`).
-    pub field_name: String,
+    /// Expression for the sliced array, rooted at `resource`
+    /// (e.g. `resource.component`, `resource.code?.coding`).
+    pub array_access: String,
+    /// TypeScript type of one array element
+    /// (e.g. `NonNullable<Bp['component']>[number]`).
+    pub item_type: String,
     /// Doc line describing the discriminator (e.g. `code.coding.code = "8480-6"`).
     pub doc: String,
     /// The predicate body, given an `item` parameter (may be `boolean | undefined`).
@@ -1214,21 +1218,19 @@ pub fn build_slice_accessors(
         let Some(disc) = &pattern.discriminator else {
             continue;
         };
-        // Only slices on a direct array child of the resource (`Resource.field`)
-        // map to a top-level `resource.field` accessor. Deeper sliced elements
-        // (`Observation.code.coding`) are nested under another field and would
-        // produce an invalid `resource.coding` access.
-        if pattern.path.matches('.').count() != 1 {
+        // `$this` has no path to walk for a value match.
+        if disc.path == "$this" {
             continue;
         }
-        // The accessor `.find`s an array; skip non-array (single) sliced elements
-        // and `$this` discriminators (no path to walk).
-        if disc.path == "$this" || !is_array_path(definition, &pattern.path) {
+        // The accessor reaches the sliced array via `resource.a?.b?…`. That only
+        // works when every ancestor segment is single-valued; if an ancestor is
+        // itself an array (e.g. `Observation.component.code.coding`, where
+        // `component` is an array) there is no single array to `.find` on.
+        let Some((array_access, item_type)) =
+            array_path_to(definition, profile_type, &pattern.path)
+        else {
             continue;
-        }
-
-        let field_name =
-            crate::naming::camel_case(pattern.path.rsplit('.').next().unwrap_or(&pattern.path));
+        };
         let segments = discriminator_segments(definition, &pattern.path, &disc.path);
 
         for slice in &pattern.slices {
@@ -1240,46 +1242,83 @@ pub fn build_slice_accessors(
             out.push(SliceAccessor {
                 fn_name: format!("get{profile_type}{slice_pascal}"),
                 guard_name: format!("is{profile_type}{slice_pascal}"),
-                field_name: field_name.clone(),
+                array_access: array_access.clone(),
+                item_type: item_type.clone(),
                 doc: format!("{} = \"{}\"", disc.path, value),
                 predicate,
             });
         }
     }
 
+    // `detect_slices` can surface the same nested sliced path more than once;
+    // keep one accessor per function name (first wins, order preserved).
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|acc| seen.insert(acc.fn_name.clone()));
     out
 }
 
-/// Render the slice accessors as standalone `export function`s. `profile_type`
-/// is the profile's TypeScript type; the accessor returns the element type of
-/// the sliced array (`NonNullable<T['field']>[number] | undefined`), which needs
-/// no nested-type-name resolution.
+/// Resolve a sliced element path (e.g. `Observation.code.coding`) to the
+/// `resource`-rooted array accessor (`resource.code?.coding`) and the element
+/// type (`NonNullable<NonNullable<T['code']>['coding']>[number]`). Returns
+/// `None` unless the final segment is an array and every ancestor is single —
+/// the condition for a single top-level array to exist.
+fn array_path_to(
+    definition: &inkgen_core::ir::ResourceDefinition,
+    profile_type: &str,
+    path: &str,
+) -> Option<(String, String)> {
+    let segs: Vec<&str> = path.split('.').skip(1).collect();
+    if segs.is_empty() {
+        return None;
+    }
+    let resource_type = path.split('.').next().unwrap_or(path);
+    let mut cumulative = resource_type.to_string();
+    for (i, seg) in segs.iter().enumerate() {
+        cumulative = format!("{cumulative}.{seg}");
+        let is_array = is_array_path(definition, &cumulative);
+        let is_last = i == segs.len() - 1;
+        if is_last {
+            if !is_array {
+                return None; // sliced element is not an array — nothing to `.find`
+            }
+        } else if is_array {
+            return None; // an ancestor is an array — no single top-level array
+        }
+    }
+
+    let array_access = format!("resource.{}", segs.join("?."));
+    let mut item_type = profile_type.to_string();
+    for seg in &segs {
+        item_type = format!("NonNullable<{item_type}['{seg}']>");
+    }
+    Some((array_access, format!("{item_type}[number]")))
+}
+
+/// Render the slice accessors as standalone `export function`s. The accessor
+/// returns the element type of the sliced array
+/// (`NonNullable<…>[number] | undefined`), which needs no nested-type-name
+/// resolution.
 pub fn render_slice_accessors(accessors: &[SliceAccessor], profile_type: &str) -> String {
     let mut out = String::new();
     for acc in accessors {
-        let item_type = format!(
-            "NonNullable<{}['{}']>[number]",
-            profile_type, acc.field_name
-        );
-
         // Reusable type guard: matches one array element against the slice's
         // discriminator. `!!` collapses the `boolean | undefined` an optional
         // chain can produce.
         out.push_str(&format!("\n/** Slice guard — {} */\n", acc.doc));
         out.push_str(&format!(
             "export function {}(item: {}): boolean {{\n  return !!({});\n}}\n",
-            acc.guard_name, item_type, acc.predicate
+            acc.guard_name, acc.item_type, acc.predicate
         ));
 
         // Accessor: the first array element matching the guard.
         out.push_str(&format!("/** Slice accessor — {} */\n", acc.doc));
         out.push_str(&format!(
             "export function {}(resource: {}): {} | undefined {{\n",
-            acc.fn_name, profile_type, item_type
+            acc.fn_name, profile_type, acc.item_type
         ));
         out.push_str(&format!(
-            "  return resource.{}?.find({});\n",
-            acc.field_name, acc.guard_name
+            "  return {}?.find({});\n",
+            acc.array_access, acc.guard_name
         ));
         out.push_str("}\n");
     }
@@ -1674,6 +1713,80 @@ mod tests {
         assert_eq!(
             slice_predicate("item", &segs, "x", 0),
             "item?.a?.some((v0) => v0?.b?.some((v1) => v1 === \"x\"))"
+        );
+    }
+
+    fn observation_with_flat(flat: Vec<ElementDefinition>) -> ResourceDefinition {
+        ResourceDefinition {
+            id: "bp".to_string(),
+            url: "http://hl7.org/fhir/StructureDefinition/bp".to_string(),
+            name: None,
+            title: None,
+            description: None,
+            version: None,
+            status: None,
+            kind: ResourceKind::Resource,
+            fhir_type: Some("Observation".to_string()),
+            date: None,
+            lineage: ProfileLineage::default(),
+            elements: Vec::new(),
+            flat_elements: flat,
+            extensions: Vec::new(),
+            invariants: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn array_path_to_direct_array_child() {
+        let def = observation_with_flat(vec![create_test_element(
+            "Observation.component",
+            2,
+            usize::MAX,
+            true,
+            None,
+        )]);
+        assert_eq!(
+            array_path_to(&def, "Bp", "Observation.component"),
+            Some((
+                "resource.component".to_string(),
+                "NonNullable<Bp['component']>[number]".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn array_path_to_nested_single_then_array() {
+        // `code` is single, `code.coding` is an array → reachable.
+        let def = observation_with_flat(vec![
+            create_test_element("Observation.code", 1, 1, true, None),
+            create_test_element("Observation.code.coding", 1, usize::MAX, true, None),
+        ]);
+        assert_eq!(
+            array_path_to(&def, "Bp", "Observation.code.coding"),
+            Some((
+                "resource.code?.coding".to_string(),
+                "NonNullable<NonNullable<Bp['code']>['coding']>[number]".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn array_path_to_rejects_array_ancestor() {
+        // `component` is an array, so `component.code.coding` has no single
+        // top-level array to `.find` on.
+        let def = observation_with_flat(vec![
+            create_test_element("Observation.component", 2, usize::MAX, true, None),
+            create_test_element(
+                "Observation.component.code.coding",
+                1,
+                usize::MAX,
+                true,
+                None,
+            ),
+        ]);
+        assert_eq!(
+            array_path_to(&def, "Bp", "Observation.component.code.coding"),
+            None
         );
     }
 
