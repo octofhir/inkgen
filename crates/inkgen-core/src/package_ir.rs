@@ -10,10 +10,15 @@
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
+use crate::canonical_map::CanonicalTypeMap;
 use crate::ir::ResourceDefinition;
+use crate::search::SearchParameterInfo;
 use crate::services::{StructureDefinitionProvider, StructureFilter};
-use crate::{CoreResult, PackageDescriptor, StructureProviderConfig};
+use crate::{
+    CoreResult, PackageCache, PackageDescriptor, StructureProviderConfig, StructureSummary,
+};
 
 /// Version of the backend contract (`PackageIr` shape + [`Backend`] trait).
 ///
@@ -43,6 +48,21 @@ pub struct PackageIr {
     /// Type/resource name → canonical URL, for cross-type lookups without
     /// re-resolution.
     pub canonical_index: IndexMap<String, String>,
+    /// Authoritative type metadata across all loaded packages (name → URL,
+    /// kind, file stem, package), used for import/path resolution. Built once.
+    #[serde(default)]
+    pub type_map: CanonicalTypeMap,
+    /// Lightweight summaries for every structure in the filter (kind, package,
+    /// name) — what a backend needs for grouping/filtering without re-listing.
+    #[serde(default)]
+    pub structures: Vec<StructureSummary>,
+    /// Resolved terminology resources (ValueSet + CodeSystem JSON) keyed by
+    /// canonical URL. Backends build coded enums from this — no tx/manager calls.
+    #[serde(default)]
+    pub value_sets: IndexMap<String, Value>,
+    /// Search parameters defined by the package.
+    #[serde(default)]
+    pub search_parameters: Vec<SearchParameterInfo>,
     /// Constructs skipped or unsupported during lowering (feeds `explain`).
     #[serde(default)]
     pub diagnostics: Vec<Diagnostic>,
@@ -157,6 +177,7 @@ impl From<&str> for BackendError {
 /// diagnostics for any structure that failed to resolve.
 pub async fn build_package_ir<S>(
     service: &S,
+    cache: &PackageCache,
     descriptor: &PackageDescriptor,
     config: &StructureProviderConfig,
     fhir_version: Option<String>,
@@ -166,13 +187,13 @@ where
     S: StructureDefinitionProvider + Sync + Send,
 {
     let filter = StructureFilter::from_config(config);
-    let summaries = service.list_structures(&filter).await?;
+    let structures = service.list_structures(&filter).await?;
 
     let mut types: IndexMap<String, ResourceDefinition> = IndexMap::new();
     let mut canonical_index: IndexMap<String, String> = IndexMap::new();
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
-    for summary in summaries {
+    for summary in &structures {
         match service.load_structure(&summary.canonical_url).await {
             Ok(def) => {
                 if let Some(name) = &def.name {
@@ -195,9 +216,37 @@ where
         }
     }
 
+    // Authoritative cross-package type metadata (name/url/stem/kind/package).
+    let manager = cache.manager().await?;
+    let type_map = CanonicalTypeMap::from_manager(&manager)
+        .await
+        .unwrap_or_default();
+
+    // Resolve terminology (ValueSet + CodeSystem) content once — backends build
+    // coded enums from this instead of touching a manager / tx server.
+    let mut value_sets: IndexMap<String, Value> = IndexMap::new();
+    for artifact in descriptor
+        .inventory
+        .value_sets
+        .iter()
+        .chain(descriptor.inventory.code_systems.iter())
+    {
+        if let Some(url) = &artifact.canonical_url
+            && let Ok(resolved) = manager.resolve(url).await
+        {
+            value_sets.insert(url.clone(), resolved.resource.content.clone());
+        }
+    }
+
+    let search_parameters = cache
+        .load_search_parameters(&descriptor.id)
+        .await
+        .unwrap_or_default();
+
     // Deterministic ordering — the D1 guarantee extends to every backend.
     types.sort_keys();
     canonical_index.sort_keys();
+    value_sets.sort_keys();
 
     Ok(PackageIr {
         contract_version: CONTRACT_VERSION,
@@ -206,6 +255,10 @@ where
         dependencies,
         types,
         canonical_index,
+        type_map,
+        structures,
+        value_sets,
+        search_parameters,
         diagnostics,
     })
 }
@@ -236,6 +289,10 @@ mod tests {
             dependencies: vec![],
             types: IndexMap::new(),
             canonical_index: IndexMap::new(),
+            type_map: CanonicalTypeMap::default(),
+            structures: vec![],
+            value_sets: IndexMap::new(),
+            search_parameters: vec![],
             diagnostics: vec![],
         };
 

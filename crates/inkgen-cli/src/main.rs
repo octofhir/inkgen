@@ -652,6 +652,7 @@ async fn generate_rust(args: GenerateRustArgs) -> Result<()> {
         // Build the IR once, in core. The backend never touches the provider.
         let ir = build_package_ir(
             &service,
+            cache.as_ref(),
             descriptor,
             &provider_config,
             Some(descriptor.id.version.clone()),

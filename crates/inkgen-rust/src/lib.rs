@@ -63,6 +63,10 @@ mod tests {
             dependencies: vec![],
             types: IndexMap::new(),
             canonical_index: IndexMap::new(),
+            type_map: Default::default(),
+            structures: vec![],
+            value_sets: IndexMap::new(),
+            search_parameters: vec![],
             diagnostics: vec![],
         }
     }

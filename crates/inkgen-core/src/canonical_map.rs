@@ -19,7 +19,7 @@ use crate::error::{CoreError, CoreResult};
 use crate::package::{PackageId, StructureKind};
 
 /// Information about a single FHIR type.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TypeEntry {
     /// The canonical URL (e.g., "http://hl7.org/fhir/StructureDefinition/Extension")
     pub canonical_url: String,
@@ -41,7 +41,7 @@ pub struct TypeEntry {
 ///
 /// Built from the CanonicalManager, this map provides fast lookups (<1ms)
 /// for any type by canonical URL, type name, or file stem.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct CanonicalTypeMap {
     /// Primary lookup: canonical_url → TypeEntry
     by_url: HashMap<String, TypeEntry>,
