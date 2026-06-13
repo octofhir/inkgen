@@ -27,3 +27,6 @@ gen-b/
 
 # InkGen debug artifacts (generation reports, IR dumps)
 .inkgen/
+
+# Internal strategy/analysis docs — never committed (current-task working notes)
+docs/analysis/
