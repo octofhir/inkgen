@@ -46,6 +46,10 @@ pub struct ValueSetHelpers {
     pub has_extraction: bool,
     /// Whether metadata constants are available for display fallbacks
     pub has_metadata: bool,
+    /// Whether branded primitives are enabled — when false the factory helpers
+    /// must not cast to `FhirUri`/`FhirCode`/`FhirString` (the `Coding` fields
+    /// are plain `string`, and the branded types are not imported).
+    pub branded_primitives: bool,
 }
 
 impl ValueSetHelpers {
@@ -60,6 +64,7 @@ impl ValueSetHelpers {
         system_url: String,
         config: &HelperConfig,
         has_metadata: bool,
+        branded_primitives: bool,
     ) -> Self {
         Self {
             type_name,
@@ -69,6 +74,16 @@ impl ValueSetHelpers {
             has_validation: config.validation_helpers,
             has_extraction: config.extraction_helpers,
             has_metadata,
+            branded_primitives,
+        }
+    }
+
+    /// `" as {Type}"` when branded primitives are on, else `""`.
+    fn cast(&self, fhir_type: &str) -> String {
+        if self.branded_primitives {
+            format!(" as {fhir_type}")
+        } else {
+            String::new()
         }
     }
 
@@ -89,6 +104,9 @@ impl ValueSetHelpers {
     /// }
     /// ```
     pub fn coding_factory_code(&self) -> String {
+        let uri_cast = self.cast("FhirUri");
+        let code_cast = self.cast("FhirCode | undefined");
+        let string_cast = self.cast("FhirString | undefined");
         if self.has_metadata {
             return format!(
                 r#"/**
@@ -103,9 +121,9 @@ export function create{}Coding(
 ): Coding {{
   const meta = {}Metadata.codes[code as keyof typeof {}Metadata.codes] as {{ display?: string }} | undefined;
   return {{
-    system: "{}" as FhirUri,
-    code: code as FhirCode | undefined,
-    display: (display ?? meta?.display) as FhirString | undefined,
+    system: "{}"{uri_cast},
+    code: code{code_cast},
+    display: (display ?? meta?.display){string_cast},
   }};
 }}"#,
                 self.type_name,
@@ -129,9 +147,9 @@ export function create{}Coding(
   display?: string
 ): Coding {{
   return {{
-    system: "{}" as FhirUri,
-    code: code as FhirCode | undefined,
-    display: display as FhirString | undefined,
+    system: "{}"{uri_cast},
+    code: code{code_cast},
+    display: display{string_cast},
   }};
 }}"#,
             self.type_name, self.type_name, self.type_name, self.system_url
@@ -166,10 +184,14 @@ export function create{}CodeableConcept(
 ): CodeableConcept {{
   return {{
     coding: [create{}Coding(code)],
-    text: text as FhirString | undefined,
+    text: text{},
   }};
 }}"#,
-            self.type_name, self.type_name, self.type_name, self.type_name
+            self.type_name,
+            self.type_name,
+            self.type_name,
+            self.type_name,
+            self.cast("FhirString | undefined")
         )
     }
 
@@ -285,6 +307,7 @@ mod tests {
             "http://hl7.org/fhir/administrative-gender".to_string(),
             &config,
             true,
+            true,
         );
 
         assert_eq!(helpers.type_name, "AdministrativeGender");
@@ -304,6 +327,7 @@ mod tests {
             "http://hl7.org/fhir/administrative-gender".to_string(),
             &config,
             true,
+            true,
         );
 
         let code = helpers.coding_factory_code();
@@ -313,6 +337,31 @@ mod tests {
         assert!(code.contains("Coding"));
         assert!(code.contains("http://hl7.org/fhir/administrative-gender"));
         assert!(code.contains("Metadata"));
+        // Branded primitives on → casts present.
+        assert!(code.contains("as FhirUri"));
+        assert!(code.contains("as FhirCode | undefined"));
+    }
+
+    #[test]
+    fn coding_factory_omits_casts_without_branded_primitives() {
+        let config = HelperConfig::default();
+        let helpers = ValueSetHelpers::new(
+            "AdministrativeGender".to_string(),
+            "http://hl7.org/fhir/administrative-gender".to_string(),
+            &config,
+            true,
+            false, // branded_primitives off
+        );
+
+        let code = helpers.coding_factory_code();
+        // No branded casts (and therefore no need to import the branded types).
+        assert!(!code.contains("as FhirUri"));
+        assert!(!code.contains("as FhirCode"));
+        assert!(!code.contains("as FhirString"));
+        assert!(code.contains("system: \"http://hl7.org/fhir/administrative-gender\","));
+
+        let cc = helpers.codeable_concept_factory_code();
+        assert!(!cc.contains("as FhirString"));
     }
 
     #[test]
@@ -323,6 +372,7 @@ mod tests {
             "http://hl7.org/fhir/administrative-gender".to_string(),
             &config,
             false,
+            true,
         );
 
         let code = helpers.coding_factory_code();
@@ -339,6 +389,7 @@ mod tests {
             "AdministrativeGender".to_string(),
             "http://hl7.org/fhir/administrative-gender".to_string(),
             &config,
+            true,
             true,
         );
 
@@ -357,6 +408,7 @@ mod tests {
             "http://hl7.org/fhir/administrative-gender".to_string(),
             &config,
             true,
+            true,
         );
 
         let code = helpers.validation_helper_code();
@@ -374,6 +426,7 @@ mod tests {
             "http://hl7.org/fhir/administrative-gender".to_string(),
             &config,
             true,
+            true,
         );
 
         let code = helpers.extraction_helper_code();
@@ -390,6 +443,7 @@ mod tests {
             "TestValueSet".to_string(),
             "http://example.org/test".to_string(),
             &config,
+            true,
             true,
         );
 
@@ -415,6 +469,7 @@ mod tests {
             "TestValueSet".to_string(),
             "http://example.org/test".to_string(),
             &config,
+            true,
             true,
         );
 

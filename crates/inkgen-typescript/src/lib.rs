@@ -1155,6 +1155,7 @@ impl TypescriptGenerator {
                                             system_url.clone(),
                                             &helper_config,
                                             metadata_available,
+                                            self.config.branded_primitives,
                                         );
                                         if helpers.has_coding_factory || helpers.has_validation {
                                             helper_imports.push(format!(
