@@ -129,6 +129,20 @@ pub struct ProfileInfo {
     pub extensions: Vec<crate::extensions::RenderExtension>,
 }
 
+/// A typed accessor for one named slice — finds the matching element in a
+/// sliced array by its resolved value/pattern discriminator.
+#[derive(Debug, Clone)]
+pub struct SliceAccessor {
+    /// Function name (e.g. `getBpSystolicBP`).
+    pub fn_name: String,
+    /// The sliced array field on the profile (e.g. `component`).
+    pub field_name: String,
+    /// Doc line describing the discriminator (e.g. `code.coding.code = "8480-6"`).
+    pub doc: String,
+    /// The `.find` predicate body, given an `item` lambda parameter.
+    pub predicate: String,
+}
+
 /// Represents an element with a fixed value in a profile.
 #[derive(Debug, Clone)]
 pub struct FixedElement {
@@ -1173,6 +1187,137 @@ impl ProfileInfo {
     }
 }
 
+/// Build typed slice accessors for a profile: one `get*` per named slice of a
+/// value/pattern-discriminated **array** element whose discriminator value the
+/// IR resolved. Each accessor `.find`s the array element matching the
+/// discriminator path/value (e.g. `getBpSystolicBP` → the `component` whose
+/// `code.coding.code === "8480-6"`).
+pub fn build_slice_accessors(
+    definition: &inkgen_core::ir::ResourceDefinition,
+    profile_type: &str,
+) -> Vec<SliceAccessor> {
+    let mut out = Vec::new();
+
+    for pattern in inkgen_core::ir::detect_slices(definition) {
+        // Only value/pattern discriminators carry a resolvable match value.
+        if !matches!(
+            pattern.discriminator_kind,
+            Some(
+                inkgen_core::ir::DiscriminatorType::Value
+                    | inkgen_core::ir::DiscriminatorType::Pattern
+            )
+        ) {
+            continue;
+        }
+        let Some(disc) = &pattern.discriminator else {
+            continue;
+        };
+        // Only slices on a direct array child of the resource (`Resource.field`)
+        // map to a top-level `resource.field` accessor. Deeper sliced elements
+        // (`Observation.code.coding`) are nested under another field and would
+        // produce an invalid `resource.coding` access.
+        if pattern.path.matches('.').count() != 1 {
+            continue;
+        }
+        // The accessor `.find`s an array; skip non-array (single) sliced elements
+        // and `$this` discriminators (no path to walk).
+        if disc.path == "$this" || !is_array_path(definition, &pattern.path) {
+            continue;
+        }
+
+        let field_name =
+            crate::naming::camel_case(pattern.path.rsplit('.').next().unwrap_or(&pattern.path));
+        let segments = discriminator_segments(definition, &pattern.path, &disc.path);
+
+        for slice in &pattern.slices {
+            let Some(value) = &slice.discriminator_value else {
+                continue;
+            };
+            let predicate = slice_predicate("item", &segments, value, 0);
+            out.push(SliceAccessor {
+                fn_name: format!(
+                    "get{}{}",
+                    profile_type,
+                    crate::naming::pascal_case(&slice.name)
+                ),
+                field_name: field_name.clone(),
+                doc: format!("{} = \"{}\"", disc.path, value),
+                predicate,
+            });
+        }
+    }
+
+    out
+}
+
+/// Render the slice accessors as standalone `export function`s. `profile_type`
+/// is the profile's TypeScript type; the accessor returns the element type of
+/// the sliced array (`NonNullable<T['field']>[number] | undefined`), which needs
+/// no nested-type-name resolution.
+pub fn render_slice_accessors(accessors: &[SliceAccessor], profile_type: &str) -> String {
+    let mut out = String::new();
+    for acc in accessors {
+        out.push_str(&format!("\n/** Slice accessor — {} */\n", acc.doc));
+        out.push_str(&format!(
+            "export function {}(resource: {}): NonNullable<{}['{}']>[number] | undefined {{\n",
+            acc.fn_name, profile_type, profile_type, acc.field_name
+        ));
+        out.push_str(&format!(
+            "  return resource.{}?.find((item) => {});\n",
+            acc.field_name, acc.predicate
+        ));
+        out.push_str("}\n");
+    }
+    out
+}
+
+/// Is the element at `path` an array (max > 1)? Reads the flat snapshot.
+fn is_array_path(definition: &inkgen_core::ir::ResourceDefinition, path: &str) -> bool {
+    definition
+        .flat_elements
+        .iter()
+        .find(|e| e.path == path && e.slice_name.is_none())
+        .map(|e| match e.cardinality.max {
+            inkgen_core::ir::ElementMax::Unbounded => true,
+            inkgen_core::ir::ElementMax::Finite(n) => n > 1,
+        })
+        .unwrap_or(false)
+}
+
+/// Resolve each segment of a discriminator path (relative to `parent_path`) to
+/// `(name, is_array)`, reading per-segment cardinality from the flat snapshot so
+/// the predicate can thread `.some(...)` through array segments.
+fn discriminator_segments(
+    definition: &inkgen_core::ir::ResourceDefinition,
+    parent_path: &str,
+    disc_path: &str,
+) -> Vec<(String, bool)> {
+    let mut cumulative = parent_path.to_string();
+    let mut segs = Vec::new();
+    for name in disc_path.split('.') {
+        cumulative = format!("{cumulative}.{name}");
+        let is_array = is_array_path(definition, &cumulative);
+        segs.push((name.to_string(), is_array));
+    }
+    segs
+}
+
+/// Build a `.find` predicate body for `var` matching the discriminator path
+/// `segments` against `value`. Array segments become `?.some((vN) => …)`;
+/// single segments chain with `?.`. The leaf compares for equality.
+fn slice_predicate(var: &str, segments: &[(String, bool)], value: &str, depth: usize) -> String {
+    let mut expr = var.to_string();
+    for (i, (name, is_array)) in segments.iter().enumerate() {
+        if *is_array {
+            let lambda = format!("v{depth}");
+            let inner = slice_predicate(&lambda, &segments[i + 1..], value, depth + 1);
+            return format!("{expr}?.{name}?.some(({lambda}) => {inner})");
+        }
+        expr = format!("{expr}?.{name}");
+    }
+    format!("{expr} === \"{}\"", escape_string(value))
+}
+
 /// Checks if an element path is a direct child of the base type.
 /// E.g., "Patient.name" is a direct child of "Patient", but "Patient.name.given" is not.
 fn is_direct_child(path: &str, base_type: &str) -> bool {
@@ -1484,6 +1629,38 @@ mod tests {
     use inkgen_core::ir::{ElementCardinality, ElementMax, ProfileLineage, ResourceKind};
     use serde_json::json;
     use tera::Tera;
+
+    #[test]
+    fn slice_predicate_threads_some_through_array_segments() {
+        // bp's component discriminator: code.coding.code, coding is an array.
+        let segs = vec![
+            ("code".to_string(), false),
+            ("coding".to_string(), true),
+            ("code".to_string(), false),
+        ];
+        assert_eq!(
+            slice_predicate("item", &segs, "8480-6", 0),
+            "item?.code?.coding?.some((v0) => v0?.code === \"8480-6\")"
+        );
+    }
+
+    #[test]
+    fn slice_predicate_single_level_is_a_plain_equality() {
+        let segs = vec![("url".to_string(), false)];
+        assert_eq!(
+            slice_predicate("item", &segs, "http://example.org/x", 0),
+            "item?.url === \"http://example.org/x\""
+        );
+    }
+
+    #[test]
+    fn slice_predicate_nested_arrays_use_distinct_lambdas() {
+        let segs = vec![("a".to_string(), true), ("b".to_string(), true)];
+        assert_eq!(
+            slice_predicate("item", &segs, "x", 0),
+            "item?.a?.some((v0) => v0?.b?.some((v1) => v1 === \"x\"))"
+        );
+    }
 
     /// Helper function to create a Tera instance with the profile template
     fn create_test_tera() -> Tera {

@@ -58,7 +58,7 @@ implemented are listed as **Planned** in the matrix below.
 | Snapshot tests + benchmarks | ✅ Implemented | `insta`, Criterion (`just bench`) |
 | Profile generation (snapshot-based) | ⚠️ Partial | relies on packaged snapshots; differential-only merge is roadmap |
 | Generated TypeScript typechecks in CI | ✅ Implemented | `tsc --noEmit` gate over generated r4-core (incl. profiles) |
-| Slicing / discriminators | ⚠️ Partial | modeled in IR; backend coverage evolving |
+| Slicing / discriminators | ⚠️ Partial | modeled in IR; TS emits typed accessors for value/pattern-discriminated array slices (e.g. blood-pressure `component`); nested/`exists`/`type` coverage evolving |
 | `PackageIr` single source of truth | ✅ Implemented | resolved once in core; backends make zero provider/resolver calls |
 | `Backend` contract (`&PackageIr → GenerationOutput`) | ✅ Implemented | sync, no I/O; core writes files |
 | Reference Rust backend | ✅ Implemented | `inkgen generate rust` emits compiling structs from the IR alone |

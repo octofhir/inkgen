@@ -2007,12 +2007,23 @@ impl TypescriptGenerator {
                             self.config.mode,
                             GenerationMode::Class | GenerationMode::ClassWithBuilder
                         );
-                    let ts_code = profile_info.generate_typescript(
+                    let mut ts_code = profile_info.generate_typescript(
                         profile_as_class,
                         with_methods,
                         self.config.zod_schemas,
                         generation_context.as_ref(),
                     );
+                    // Typed slice accessors for value/pattern-discriminated array
+                    // slices (e.g. `getBpSystolicBP`). Appended as standalone
+                    // functions so they work in both interface and class mode.
+                    let slice_accessors =
+                        profiles::build_slice_accessors(&definition, &profile_info.type_name);
+                    if !slice_accessors.is_empty() {
+                        ts_code.push_str(&profiles::render_slice_accessors(
+                            &slice_accessors,
+                            &profile_info.type_name,
+                        ));
+                    }
                     let profile_file_stem = format!("profile-{definition_stem}");
                     let profile_file_name = format!("{}.ts", profile_file_stem);
                     let profile_type_name = profile_info.type_name.clone();
@@ -2027,6 +2038,11 @@ impl TypescriptGenerator {
                     }
 
                     profile_value_exports.push(format!("is{}", profile_info.type_name));
+
+                    // Re-export the slice accessor functions from the barrel.
+                    for acc in &slice_accessors {
+                        profile_value_exports.push(acc.fn_name.clone());
+                    }
 
                     if self.config.zod_schemas {
                         profile_value_exports.push(format!("{}Schema", profile_info.type_name));
