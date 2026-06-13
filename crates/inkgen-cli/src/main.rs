@@ -35,6 +35,8 @@ enum Commands {
     Fetch(FetchArgs),
     /// Generate SDK artifacts.
     Generate(GenerateArgs),
+    /// Inspect intermediate representation and resolved structures.
+    Inspect(InspectArgs),
     /// List available code generation backends.
     Backends,
     /// Manage configuration files.
@@ -95,6 +97,30 @@ struct GenerateTypescriptArgs {
     /// Output directory (defaults to `generated/`).
     #[arg(long)]
     output: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+struct InspectArgs {
+    #[command(subcommand)]
+    command: InspectSubcommand,
+}
+
+#[derive(Subcommand, Debug)]
+enum InspectSubcommand {
+    /// Resolve a canonical URL and print its IR as JSON.
+    Ir(InspectIrArgs),
+}
+
+#[derive(Args, Debug)]
+struct InspectIrArgs {
+    #[command(flatten)]
+    shared: SharedCacheArgs,
+    /// Canonical URL of the StructureDefinition to inspect.
+    #[arg(value_name = "CANONICAL")]
+    canonical: String,
+    /// Emit compact (single-line) JSON instead of pretty-printed.
+    #[arg(long)]
+    compact: bool,
 }
 
 #[derive(Args, Debug)]
@@ -182,6 +208,9 @@ async fn main() -> Result<()> {
         Commands::Generate(args) => match args.command {
             GenerateSubcommand::Typescript(ts_args) => generate_typescript(ts_args).await,
         },
+        Commands::Inspect(args) => match args.command {
+            InspectSubcommand::Ir(ir_args) => inspect_ir(ir_args).await,
+        },
         Commands::Backends => list_backends_command(),
         Commands::Config(args) => match args.command {
             ConfigSubcommand::Init(init_args) => config_init(init_args),
@@ -215,6 +244,9 @@ fn init_tracing(verbosity: u8) -> Result<()> {
         .with(filter)
         .with(
             tracing_subscriber::fmt::layer()
+                // Logs go to stderr so command output (e.g. `inspect ir` JSON)
+                // stays clean on stdout for piping.
+                .with_writer(std::io::stderr)
                 .with_target(false)
                 // Filter out verbose canonical manager logs
                 .with_filter(tracing_subscriber::filter::filter_fn(|metadata| {
@@ -483,6 +515,46 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
         "TypeScript generation complete in {}",
         generator.config().output_dir.display()
     );
+    Ok(())
+}
+
+async fn inspect_ir(args: InspectIrArgs) -> Result<()> {
+    let context = ProjectContext::load(args.shared.config.clone())?;
+    context.validate()?;
+    let cache_config = context.build_cache_config(
+        args.shared.packages_dir.clone(),
+        args.shared.cache_dir.clone(),
+        args.shared.registry_url.clone(),
+    )?;
+
+    let packages = select_requests(&context.package_requests(), &args.shared.packages);
+
+    let cache = Arc::new(build_cache(cache_config).await?);
+    let resolver = inkgen_core::PackageResolver::new(cache.clone());
+    let mode = if args.shared.offline {
+        InstallMode::OfflineOnly
+    } else {
+        InstallMode::OnlinePreferred
+    };
+    resolver.ensure_packages(&packages, mode).await?;
+
+    let mut service = BaseStructureService::from_project_config(cache.clone(), context.manifest());
+    // Allow inspecting profiles (constraint derivations), not just base structures.
+    service.config_mut().include_profiles = true;
+
+    let definition = service
+        .load_structure(&args.canonical)
+        .await
+        .with_context(|| format!("failed to resolve {}", args.canonical))?;
+
+    let json = if args.compact {
+        serde_json::to_string(&definition)
+    } else {
+        serde_json::to_string_pretty(&definition)
+    }
+    .context("failed to serialize IR to JSON")?;
+
+    println!("{json}");
     Ok(())
 }
 

@@ -1354,6 +1354,7 @@ dependencies = [
  "inkgen-core",
  "inkgen-typescript",
  "predicates",
+ "serde_json",
  "similar",
  "tempfile",
  "tokio",

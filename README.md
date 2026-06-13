@@ -53,7 +53,7 @@ implemented are listed as **Planned** in the matrix below.
 | Slicing / discriminators | ⚠️ Partial | modeled in IR; backend coverage evolving |
 | Example Rust backend | 🧪 Experimental | `inkgen-rust` is a skeleton; `generate()` is a stub |
 | `PackageIr` handed to backends | 🗺️ Planned | backends currently consume a provider |
-| `explain` / `inspect` / report commands | 🗺️ Planned | see roadmap |
+| `inspect ir` command | ✅ Implemented | dumps resolved IR as JSON; `explain` / report planned |
 | Python / C# / other backends | 🗺️ Planned | — |
 | WASM plugins | 🗺️ Planned | RFC stage |
 
@@ -147,6 +147,7 @@ inkgen generate typescript [--output <dir>] [--offline] [--dry-run] [--config <p
 | `inkgen config completions <shell>` | emit shell completion scripts |
 | `inkgen fetch` | download & cache configured FHIR packages |
 | `inkgen generate typescript` | generate the TypeScript SDK |
+| `inkgen inspect ir <canonical>` | resolve a canonical URL and print its IR as JSON |
 | `inkgen backends` | list available code-generation backends |
 | `inkgen diff --old <dir> --new <dir>` | unified diff of two output directories |
 | `inkgen doctor` | check the environment & dependencies |
@@ -201,8 +202,10 @@ contract (handing backends a fully-lowered IR) is described in the
   the provider sorts its structure list, so output is reproducible.
 - **Snapshots** — `insta` golden tests guard generated output against drift.
 - **Diff** — `inkgen diff` shows a unified diff between two output directories.
-- **Planned** — `inkgen inspect ir <canonical>`, generation reports, and JSON
-  debug artifacts (the IR is already serializable). Tracked in the roadmap.
+- **Inspect** — `inkgen inspect ir <canonical>` resolves a structure and prints
+  its IR as JSON (logs go to stderr, so stdout pipes cleanly into `jq`).
+- **Planned** — generation reports and on-disk JSON debug artifacts (file map,
+  diagnostics). Tracked in the roadmap.
 
 ---
 
