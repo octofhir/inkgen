@@ -1353,6 +1353,7 @@ dependencies = [
  "dirs",
  "indexmap",
  "inkgen-core",
+ "inkgen-gleam",
  "inkgen-rust",
  "inkgen-typescript",
  "predicates",
@@ -1383,6 +1384,22 @@ dependencies = [
  "toml",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "inkgen-gleam"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "indexmap",
+ "inkgen-core",
+ "insta",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

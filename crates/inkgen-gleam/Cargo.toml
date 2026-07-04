@@ -1,0 +1,21 @@
+[package]
+name = "inkgen-gleam"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "FHIR code generator backend for Gleam — emits Gleam types from a resolved PackageIr"
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+inkgen-core = { path = "../inkgen-core" }
+
+[dev-dependencies]
+indexmap = { workspace = true }
+insta = { workspace = true }
+tokio = { workspace = true, features = ["macros"] }
+tempfile = { workspace = true }

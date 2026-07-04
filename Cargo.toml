@@ -4,6 +4,7 @@ members = [
     "crates/inkgen-core",
     "crates/inkgen-typescript",
     "crates/inkgen-rust",
+    "crates/inkgen-gleam",
     "crates/inkgen-testing",
 ]
 resolver = "3"
