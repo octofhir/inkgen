@@ -21,7 +21,7 @@ unused_extern_crates = "warn"
 [workspace.package]
 version = "0.1.3"
 authors = ["OctoFHIR Team <funyloony@gmail.com>"]
-license = "MIT"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/octofhir/inkgen"
 homepage = "https://github.com/octofhir/inkgen"
 documentation = "https://docs.rs/inkgen-cli"

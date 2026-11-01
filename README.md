@@ -1,8 +1,11 @@
-# InkGen
+<p align="center"><img src=".github/banner.png" alt="octo/inkgen — Typed FHIR SDKs, generated from packages" width="100%"></p>
 
-![logo](./inkgen-logo.png)
+<p align="center"><b>A Rust FHIR code generator for deterministic, inspectable TypeScript SDKs, built from FHIR packages, profiles and implementation guides.</b></p>
 
-**A Rust-based HL7 FHIR code generator for deterministic, inspectable TypeScript SDKs — generated from FHIR packages, StructureDefinitions, profiles, and implementation guides.**
+<p align="center">
+  <a href="https://github.com/octofhir/inkgen/actions/workflows/ci.yml"><img src="https://github.com/octofhir/inkgen/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg" alt="License: MIT OR Apache-2.0"></a>
+</p>
 
 InkGen turns canonical FHIR packages into type-safe, idiomatic code. Core
 resolves a FHIR package once into a language-neutral `PackageIr`; each backend is
@@ -159,6 +162,7 @@ inkgen generate typescript [--output <dir>] [--offline] [--dry-run] [--config <p
 | `inkgen fetch` | download & cache configured FHIR packages |
 | `inkgen generate typescript` | generate the TypeScript SDK |
 | `inkgen generate rust` | generate Rust structs via the reference backend |
+| `inkgen generate gleam` | generate Gleam record types from the `PackageIr` |
 | `inkgen inspect ir <canonical>` | resolve a canonical URL and print its IR as JSON |
 | `inkgen explain <canonical>` | explain how each element maps to generated code, and why |
 | `inkgen backends` | list available code-generation backends |
@@ -251,6 +255,7 @@ inkgen/
 │   ├── inkgen-core/        # IR, config, cache, services, traits
 │   ├── inkgen-typescript/  # TypeScript backend (overlays, Zod, interop)
 │   ├── inkgen-rust/        # Reference Rust backend (Backend contract)
+│   ├── inkgen-gleam/       # Gleam backend (record types)
 │   └── inkgen-testing/     # Shared test helpers
 ├── docs/book/              # mdBook documentation
 └── .github/workflows/      # CI, docs deploy, release
@@ -278,7 +283,14 @@ CI mirrors it.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+
+at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this project by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
 ## Support & security
 
