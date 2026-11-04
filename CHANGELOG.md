@@ -1,3 +1,7 @@
+## [0.1.5] - 2026-11-04
+
+- Update the private CLI diff engine to Similar 3; keep library dependency profiles and generated output unchanged.
+
 ## [0.1.4] - 2026-11-04
 
 ### Changed

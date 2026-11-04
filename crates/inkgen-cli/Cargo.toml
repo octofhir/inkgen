@@ -24,7 +24,7 @@ inkgen-rust = { path = "../inkgen-rust" }
 inkgen-gleam = { path = "../inkgen-gleam" }
 serde_json = { workspace = true }
 clap_complete = "4"
-similar = "2.3"
+similar = "3.2"
 dirs = "7.0"
 tempfile = { workspace = true }
 

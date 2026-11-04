@@ -19,7 +19,7 @@ trivial_numeric_casts = "warn"
 unused_extern_crates = "warn"
 
 [workspace.package]
-version = "0.1.4"
+version = "0.1.5"
 authors = ["OctoFHIR Team <funyloony@gmail.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/octofhir/inkgen"
@@ -49,5 +49,5 @@ octofhir-canonical-manager = { version = "0.2.10", default-features = false, fea
 async-trait = "0.1"
 url = "2.5"
 criterion = { version = "0.8", features = ["async_tokio"] }
-similar = "2.3"
+similar = "3.2"
 
