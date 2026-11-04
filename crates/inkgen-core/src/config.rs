@@ -1,8 +1,12 @@
+#[cfg(feature = "config-toml")]
 use std::fs;
-use std::path::{Path, PathBuf};
+#[cfg(feature = "config-toml")]
+use std::path::Path;
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "config-toml")]
 use crate::error::{CoreError, CoreResult};
 use crate::package::PackageRequest;
 use crate::services::StructureProviderConfig;
@@ -235,7 +239,7 @@ pub struct TypescriptLanguageConfig {
     #[serde(default)]
     pub generate_interop: bool,
 
-    /// Generate typed Reference<T> helpers (default: false)
+    /// Generate typed `Reference<T>` helpers (default: false)
     #[serde(default)]
     pub interop_typed_references: bool,
 
@@ -408,11 +412,13 @@ pub fn sanitize_package_name(name: &str) -> String {
 }
 
 impl InkgenConfig {
+    #[cfg(feature = "config-toml")]
     pub fn load_from_path(path: impl AsRef<Path>) -> CoreResult<Self> {
         let contents = fs::read_to_string(path)?;
         Self::load_from_str(&contents)
     }
 
+    #[cfg(feature = "config-toml")]
     pub fn load_from_str(contents: &str) -> CoreResult<Self> {
         toml::from_str(contents).map_err(|err| CoreError::Validation {
             detail: format!("invalid inkgen config: {err}"),

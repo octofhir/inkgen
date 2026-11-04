@@ -6,16 +6,13 @@ publish = false
 description = "Example FHIR code generator backend for Rust - demonstrates extensible backend architecture"
 
 [dependencies]
-anyhow = { workspace = true }
-async-trait = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
 
-inkgen-core = { path = "../inkgen-core" }
+inkgen-core = { path = "../inkgen-core", default-features = false }
 
 [dev-dependencies]
 indexmap = { workspace = true }
 insta = { workspace = true }
-tokio = { workspace = true, features = ["macros"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tempfile = { workspace = true }

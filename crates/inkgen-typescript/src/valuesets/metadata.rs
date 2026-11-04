@@ -44,8 +44,8 @@ pub struct EnhancedValueSetInfo {
 /// Extract system URL from a ValueSet resource
 ///
 /// Attempts to find the CodeSystem URL from:
-/// 1. compose.include[0].system (most common)
-/// 2. expansion.contains[0].system (fallback)
+/// 1. `compose.include[0].system` (most common)
+/// 2. `expansion.contains[0].system` (fallback)
 pub fn extract_system_url(valueset_json: &Value) -> Option<String> {
     // Try compose.include first
     if let Some(compose) = valueset_json.get("compose")
@@ -188,7 +188,7 @@ pub fn enhance_codes(
 /// Attempt to find CodeSystem URL from ValueSet URL
 ///
 /// Uses common FHIR URL patterns:
-/// - http://hl7.org/fhir/ValueSet/foo → http://hl7.org/fhir/foo
+/// - <http://hl7.org/fhir/ValueSet/foo> → <http://hl7.org/fhir/foo>
 /// - Works for most standard FHIR ValueSets
 pub fn infer_codesystem_url_from_valueset(valueset_url: &str) -> Option<String> {
     // FHIR-neutral lowering lives in inkgen-core so every backend shares it.

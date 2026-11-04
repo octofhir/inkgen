@@ -197,7 +197,7 @@ impl ElementDefinition {
     /// True when every declared type is a FHIR primitive datatype, so the
     /// element admits a sibling primitive-extension element (`_x`, of type
     /// `Element`) in the FHIR wire format. Primitive classification comes from
-    /// the package's own `StructureDefinition` kinds (via [`CanonicalTypeMap`]) —
+    /// the package's own `StructureDefinition` kinds (via [`CanonicalTypeMap`](crate::CanonicalTypeMap)) —
     /// not a hardcoded list — so it tracks whatever FHIR version is loaded.
     /// FHIR-neutral: every backend makes the same call; only the rendering of
     /// `_x` is language-specific.

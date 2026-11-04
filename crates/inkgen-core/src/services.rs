@@ -1,20 +1,30 @@
 use std::collections::HashSet;
+#[cfg(feature = "resolver")]
 use std::sync::Arc;
 
 use async_trait::async_trait;
 
+#[cfg(feature = "resolver")]
 use crate::cache::{InstallMode, PackageCache};
-use crate::error::{CoreError, CoreResult};
+#[cfg(feature = "resolver")]
+use crate::error::CoreError;
+use crate::error::CoreResult;
 use crate::ir::ResourceDefinition;
-use crate::package::{PackageDescriptor, PackageRequest, StructureKind, StructureSummary};
+#[cfg(feature = "resolver")]
+use crate::package::{PackageDescriptor, PackageRequest};
+use crate::package::{StructureKind, StructureSummary};
+#[cfg(feature = "resolver")]
 use crate::profile::ProfilePipeline;
+#[cfg(feature = "resolver")]
 use serde_json::Value;
 
 /// Service responsible for ensuring packages are installed and discoverable.
+#[cfg(feature = "resolver")]
 pub struct PackageResolver {
     cache: Arc<PackageCache>,
 }
 
+#[cfg(feature = "resolver")]
 impl PackageResolver {
     pub fn new(cache: Arc<PackageCache>) -> Self {
         Self { cache }
@@ -95,11 +105,13 @@ pub trait StructureDefinitionProvider: Send + Sync {
 }
 
 /// Provider focused on base StructureDefinitions shipped in canonical packages.
+#[cfg(feature = "resolver")]
 pub struct BaseStructureService {
     cache: Arc<PackageCache>,
     config: StructureProviderConfig,
 }
 
+#[cfg(feature = "resolver")]
 impl BaseStructureService {
     pub fn new(cache: Arc<PackageCache>, config: StructureProviderConfig) -> Self {
         Self { cache, config }
@@ -121,6 +133,7 @@ impl BaseStructureService {
     }
 }
 
+#[cfg(feature = "resolver")]
 #[async_trait]
 impl StructureDefinitionProvider for BaseStructureService {
     async fn list_structures(

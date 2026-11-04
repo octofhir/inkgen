@@ -297,3 +297,22 @@ Unless you explicitly state otherwise, any contribution intentionally submitted 
 - Issues: <https://github.com/octofhir/inkgen/issues>
 - Discussions: <https://github.com/octofhir/inkgen/discussions>
 - Security: [SECURITY.md](SECURITY.md)
+
+### Embedding a backend without package acquisition
+
+All backends accept the serializable `PackageIr` contract. A host can resolve an IR
+once and pass it to generators without carrying the package downloader in each
+backend. Existing core and TypeScript defaults retain the resolver/cache API.
+
+```toml
+[dependencies]
+inkgen-core = { git = "https://github.com/octofhir/inkgen", tag = "v0.1.4", default-features = false }
+inkgen-rust = { git = "https://github.com/octofhir/inkgen", tag = "v0.1.4" }
+inkgen-gleam = { git = "https://github.com/octofhir/inkgen", tag = "v0.1.4" }
+inkgen-typescript = { git = "https://github.com/octofhir/inkgen", tag = "v0.1.4", default-features = false }
+```
+
+For TypeScript, construct `TypescriptGeneratorConfig::from_package_ir(ir, section,
+output_dir)` and pass it to `TypescriptGenerator::new`. The CLI continues to load
+packages and keeps its full generation workflow. This repository distributes its
+internal crates through Git; these changes do not introduce crates.io publishing.

@@ -23,7 +23,7 @@ use serde::Serialize;
 /// Master configuration for interop utility generation
 #[derive(Debug, Clone, Serialize)]
 pub struct InteropConfig {
-    /// Enable typed Reference<T> helpers
+    /// Enable typed `Reference<T>` helpers
     pub typed_references: bool,
     /// Enable date/time parsing and formatting
     pub date_helpers: bool,

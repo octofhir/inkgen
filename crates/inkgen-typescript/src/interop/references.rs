@@ -1,4 +1,4 @@
-//! Typed Reference<T> helper generation for FHIR resources.
+//! Typed `Reference<T>` helper generation for FHIR resources.
 //!
 //! This module generates TypeScript utilities for working with FHIR References
 //! in a type-safe manner, including resource type checking and reference creation.
@@ -51,7 +51,7 @@ impl ReferenceHelpers {
         }
     }
 
-    /// Generate TypeScript code for typed Reference<T> type definition
+    /// Generate TypeScript code for typed `Reference<T>` type definition
     ///
     /// Creates:
     /// ```typescript
@@ -106,7 +106,7 @@ export function is{}Reference(
     ///   resourceType: T,
     ///   id: string,
     ///   display?: string
-    /// ): TypedReference<T> {
+    /// ): Typed`Reference<T>` {
     ///   return {
     ///     reference: `${resourceType}/${id}`,
     ///     type: resourceType,

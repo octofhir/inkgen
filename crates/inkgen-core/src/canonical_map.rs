@@ -10,18 +10,22 @@
 //! that is built upfront and never gets out of sync.
 
 use std::collections::HashMap;
+#[cfg(feature = "resolver")]
 use std::sync::Arc;
 
+#[cfg(feature = "resolver")]
 use octofhir_canonical_manager::CanonicalManager;
+#[cfg(feature = "resolver")]
 use serde_json::Value;
 
+#[cfg(feature = "resolver")]
 use crate::error::{CoreError, CoreResult};
 use crate::package::{PackageId, StructureKind};
 
 /// Information about a single FHIR type.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TypeEntry {
-    /// The canonical URL (e.g., "http://hl7.org/fhir/StructureDefinition/Extension")
+    /// The canonical URL (e.g., <http://hl7.org/fhir/StructureDefinition/Extension>)
     pub canonical_url: String,
     /// The type name in PascalCase (e.g., "Extension")
     pub type_name: String,
@@ -61,6 +65,7 @@ impl CanonicalTypeMap {
     ///
     /// This queries ALL packages and extracts type information, providing a complete
     /// picture of all available types before any filtering is applied.
+    #[cfg(feature = "resolver")]
     pub async fn from_manager(manager: &Arc<CanonicalManager>) -> CoreResult<Self> {
         let mut map = Self::new();
 
@@ -116,6 +121,7 @@ impl CanonicalTypeMap {
     ///
     /// For base types (not profiles), this also registers the type name and file stem mappings.
     /// Profiles don't overwrite base type mappings.
+    #[cfg(any(feature = "resolver", test))]
     pub(crate) fn insert(&mut self, entry: TypeEntry) {
         let canonical_url = entry.canonical_url.clone();
         let type_name = entry.type_name.clone();
@@ -136,6 +142,7 @@ impl CanonicalTypeMap {
     }
 
     /// Extract a TypeEntry from a FHIR resource.
+    #[cfg(feature = "resolver")]
     fn extract_type_entry(
         package: &PackageId,
         resource: &octofhir_canonical_manager::package::FhirResource,
@@ -310,6 +317,7 @@ impl CanonicalTypeMap {
 }
 
 /// Parse a package spec (name@version) into a PackageId.
+#[cfg(feature = "resolver")]
 fn parse_package_spec(spec: &str) -> CoreResult<PackageId> {
     use std::str::FromStr;
     PackageId::from_str(spec).map_err(|detail| CoreError::InvalidPackage { detail })
@@ -330,6 +338,7 @@ fn pascal_case(value: &str) -> String {
 }
 
 /// Convert an identifier to a file stem (kebab-case).
+#[cfg(any(feature = "resolver", test))]
 fn to_file_stem(identifier: &str) -> String {
     split_tokens(identifier)
         .into_iter()

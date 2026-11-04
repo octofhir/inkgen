@@ -9,17 +9,26 @@ anyhow = { workspace = true }
 indexmap = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-tera = { workspace = true }
+tera = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-tokio = { workspace = true }
-octofhir-canonical-manager = { workspace = true }
+tokio = { workspace = true, features = ["sync"], optional = true }
+octofhir-canonical-manager = { workspace = true, optional = true }
 async-trait = { workspace = true }
-futures = { workspace = true }
-url = { workspace = true }
-toml = { workspace = true }
+url = { workspace = true, optional = true }
+toml = { workspace = true, optional = true }
 
 [dev-dependencies]
 inkgen-testing = { path = "../inkgen-testing" }
-tokio = { workspace = true, features = ["macros"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 insta = { workspace = true, features = ["json"] }
+
+[features]
+default = ["resolver", "templates", "config-toml"]
+# Package acquisition, canonical-manager/SQLite and async cache services.
+resolver = ["dep:octofhir-canonical-manager", "dep:tokio", "dep:url"]
+# Existing Tera extension functions. Pure IR/backends do not need a renderer.
+templates = ["dep:tera"]
+
+# Parse project files; DTOs remain available to IR consumers without this parser.
+config-toml = ["dep:toml"]

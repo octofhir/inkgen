@@ -15,10 +15,11 @@ use serde_json::Value;
 use crate::canonical_map::CanonicalTypeMap;
 use crate::ir::{BindingDefinition, BindingLowering, OpenReason, ResourceDefinition};
 use crate::search::SearchParameterInfo;
+#[cfg(feature = "resolver")]
 use crate::services::{StructureDefinitionProvider, StructureFilter};
-use crate::{
-    CoreResult, PackageCache, PackageDescriptor, StructureProviderConfig, StructureSummary,
-};
+#[cfg(feature = "resolver")]
+use crate::{CoreResult, PackageCache, StructureProviderConfig};
+use crate::{PackageDescriptor, StructureSummary};
 
 /// Version of the backend contract (`PackageIr` shape + [`Backend`] trait).
 ///
@@ -28,7 +29,7 @@ pub const CONTRACT_VERSION: u32 = 1;
 
 /// The fully-resolved, language-neutral package a backend consumes.
 ///
-/// Built once by core (see [`build_package_ir`]); backends never call the
+/// Built once by core (see `build_package_ir`); backends never call the
 /// provider or canonical resolver. Deterministic: all maps are key-sorted, so
 /// identical inputs produce an identical IR and thus identical output.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -224,6 +225,7 @@ impl From<&str> for BackendError {
 /// This is where the redundant re-resolution the CLI/backends do today collapses
 /// to a single pass. The resulting IR is deterministic (key-sorted) and carries
 /// diagnostics for any structure that failed to resolve.
+#[cfg(feature = "resolver")]
 pub async fn build_package_ir<S>(
     service: &S,
     cache: &PackageCache,

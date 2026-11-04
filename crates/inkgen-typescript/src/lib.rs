@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
+#[cfg(feature = "resolver")]
+use inkgen_core::PackageCache;
 use inkgen_core::config::{
     FilterMode, PackageEntry, ProfileMethodConfig, ProjectFilesConfig, sanitize_package_name,
 };
@@ -15,11 +17,11 @@ use inkgen_core::ir::{
     ResourceDefinition, ResourceKind,
 };
 use inkgen_core::{
-    DependencyAnalyzer, FhirTypeRegistry, GenerationOutput, PackageCache, PackageDescriptor,
-    PackageId, StructureKind, StructureSummary, TypescriptLanguageConfig,
+    DependencyAnalyzer, FhirTypeRegistry, GenerationOutput, PackageDescriptor, PackageId,
+    StructureKind, StructureSummary, TypescriptLanguageConfig,
 };
-use once_cell::sync::Lazy;
 use serde::Serialize;
+use std::sync::LazyLock;
 use tera::{Context as TeraContext, Tera};
 use tracing::{debug, info, warn};
 
@@ -27,7 +29,7 @@ pub use config::{GenerationMode, NamingConvention, OutputStructure, TypescriptGe
 
 /// Well-known external code systems that are not included in FHIR packages.
 /// These are external terminology standards that we don't attempt to resolve.
-static EXTERNAL_CODE_SYSTEMS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+static EXTERNAL_CODE_SYSTEMS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     [
         "http://unitsofmeasure.org",                   // UCUM units
         "http://loinc.org",                            // LOINC codes
@@ -201,6 +203,7 @@ mod config {
         /// Global type registry for cross-package imports (optional)
         pub type_registry: Option<super::imports::TypeRegistry>,
         /// Package cache for loading ValueSets and other resources (optional)
+        #[cfg(feature = "resolver")]
         pub package_cache: Option<std::sync::Arc<PackageCache>>,
         /// Resolved package IR — the single source of truth. When set, the
         /// backend reads structures, type metadata, value sets and search
@@ -265,6 +268,27 @@ mod config {
     }
 
     impl TypescriptGeneratorConfig {
+        /// Configure generation from an already resolved IR, without a package cache.
+        pub fn from_package_ir(
+            ir: std::sync::Arc<inkgen_core::PackageIr>,
+            section: Option<&TypescriptLanguageConfig>,
+            output_dir: PathBuf,
+        ) -> Self {
+            let mut config = Self::from_manifest(
+                section,
+                output_dir,
+                None,
+                HashMap::new(),
+                HashMap::new(),
+                None,
+                None,
+                #[cfg(feature = "resolver")]
+                None,
+            );
+            config.package_ir = Some(ir);
+            config
+        }
+
         #[allow(clippy::too_many_arguments)]
         pub fn from_manifest(
             section: Option<&TypescriptLanguageConfig>,
@@ -274,7 +298,7 @@ mod config {
             package_filters: HashMap<PackageId, PackageEntry>,
             dependency_analyzer: Option<DependencyAnalyzer>,
             type_registry: Option<super::imports::TypeRegistry>,
-            package_cache: Option<std::sync::Arc<PackageCache>>,
+            #[cfg(feature = "resolver")] package_cache: Option<std::sync::Arc<PackageCache>>,
         ) -> Self {
             let section = section.cloned();
             let mode = section
@@ -408,6 +432,7 @@ mod config {
                 package_filters,
                 dependency_analyzer,
                 type_registry,
+                #[cfg(feature = "resolver")]
                 package_cache,
                 package_ir: None,
                 profile_classes,
@@ -535,7 +560,7 @@ mod templates {
 
     /// Global Tera instance used for rendering templates.
     /// This is initialized with built-in templates and can optionally be customized with overlays.
-    static TERA: Lazy<Mutex<Tera>> = Lazy::new(|| Mutex::new(create_default_tera()));
+    static TERA: LazyLock<Mutex<Tera>> = LazyLock::new(|| Mutex::new(create_default_tera()));
 
     /// Create a Tera instance with all built-in templates, filters, and functions
     fn create_default_tera() -> Tera {
@@ -4003,6 +4028,7 @@ mod tests {
             package_filters: HashMap::new(),
             dependency_analyzer: None,
             type_registry: None,
+            #[cfg(feature = "resolver")]
             package_cache: None,
             package_ir: None,
             profile_classes: false,

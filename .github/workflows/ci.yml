@@ -150,3 +150,31 @@ jobs:
 
       - name: Build CLI release binary
         run: cargo build --release -p inkgen-cli
+
+  backend-consumer:
+    name: Backends without network or storage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tests/backend-consumer
+      - name: Generate through all three pure backends
+        run: cargo run --manifest-path tests/backend-consumer/Cargo.toml > minimal-output.txt
+      - name: Guard backend dependency boundary
+        run: |
+          python3 - <<'PY'
+          import re, subprocess
+          graph = subprocess.check_output([
+              "cargo", "tree", "--manifest-path", "tests/backend-consumer/Cargo.toml",
+              "--edges", "normal,build", "--prefix", "none", "--format", "{p}",
+          ], text=True)
+          forbidden = re.findall(r"^(?:octofhir-canonical-manager|tokio|rusqlite|libsqlite3-sys|reqwest|hyper|rustls|native-tls|openssl-sys) v.*", graph, re.M)
+          if forbidden:
+              raise SystemExit("Unexpected backend I/O dependencies: " + ", ".join(forbidden))
+          PY
+      - name: Compare generation with resolver enabled
+        run: |
+          cargo run --manifest-path tests/backend-consumer/Cargo.toml --features resolver > full-output.txt
+          cmp minimal-output.txt full-output.txt

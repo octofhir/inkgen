@@ -1,0 +1,331 @@
+{
+  "contract_version": 1,
+  "id": "audit.fhir@1.0.0",
+  "fhir_version": "4.0.1",
+  "dependencies": [],
+  "types": {
+    "http://example.org/fhir/StructureDefinition/Patient": {
+      "id": "Patient",
+      "url": "http://example.org/fhir/StructureDefinition/Patient",
+      "name": "Patient",
+      "title": "Пациент — 日本語",
+      "description": "Пациент — 日本語",
+      "version": "1.0.0",
+      "status": "active",
+      "kind": "resource",
+      "fhir_type": "Patient",
+      "date": null,
+      "lineage": {
+        "base_definition": null,
+        "base_id": null,
+        "derivation": null,
+        "type_name": null
+      },
+      "elements": [
+        {
+          "id": "Patient.active",
+          "path": "Patient.active",
+          "slice_name": null,
+          "short": "Пациент — 日本語 Patient.active",
+          "definition": null,
+          "comment": null,
+          "requirements": null,
+          "cardinality": {
+            "min": 0,
+            "max": {
+              "finite": 1
+            }
+          },
+          "types": [
+            {
+              "code": "boolean",
+              "profiles": [],
+              "target_profiles": [],
+              "aggregation": [],
+              "versioning": null
+            }
+          ],
+          "content_reference": null,
+          "binding": null,
+          "invariants": [],
+          "fixed": null,
+          "pattern": null,
+          "default_value": null,
+          "example_values": [],
+          "must_support": false,
+          "is_summary": false,
+          "slicing": null,
+          "extension": [],
+          "additional_fields": {}
+        },
+        {
+          "id": "Patient.alias",
+          "path": "Patient.alias",
+          "slice_name": null,
+          "short": "Пациент — 日本語 Patient.alias",
+          "definition": null,
+          "comment": null,
+          "requirements": null,
+          "cardinality": {
+            "min": 0,
+            "max": "unbounded"
+          },
+          "types": [
+            {
+              "code": "string",
+              "profiles": [],
+              "target_profiles": [],
+              "aggregation": [],
+              "versioning": null
+            }
+          ],
+          "content_reference": null,
+          "binding": null,
+          "invariants": [],
+          "fixed": null,
+          "pattern": null,
+          "default_value": null,
+          "example_values": [],
+          "must_support": false,
+          "is_summary": false,
+          "slicing": null,
+          "extension": [],
+          "additional_fields": {}
+        },
+        {
+          "id": "Patient.value[x]",
+          "path": "Patient.value[x]",
+          "slice_name": null,
+          "short": "Пациент — 日本語 Patient.value[x]",
+          "definition": null,
+          "comment": null,
+          "requirements": null,
+          "cardinality": {
+            "min": 0,
+            "max": {
+              "finite": 1
+            }
+          },
+          "types": [
+            {
+              "code": "boolean",
+              "profiles": [],
+              "target_profiles": [],
+              "aggregation": [],
+              "versioning": null
+            },
+            {
+              "code": "string",
+              "profiles": [],
+              "target_profiles": [],
+              "aggregation": [],
+              "versioning": null
+            }
+          ],
+          "content_reference": null,
+          "binding": null,
+          "invariants": [],
+          "fixed": null,
+          "pattern": null,
+          "default_value": null,
+          "example_values": [],
+          "must_support": false,
+          "is_summary": false,
+          "slicing": null,
+          "extension": [],
+          "additional_fields": {}
+        }
+      ],
+      "flat_elements": [
+        {
+          "id": "Patient.active",
+          "path": "Patient.active",
+          "slice_name": null,
+          "short": "Пациент — 日本語 Patient.active",
+          "definition": null,
+          "comment": null,
+          "requirements": null,
+          "cardinality": {
+            "min": 0,
+            "max": {
+              "finite": 1
+            }
+          },
+          "types": [
+            {
+              "code": "boolean",
+              "profiles": [],
+              "target_profiles": [],
+              "aggregation": [],
+              "versioning": null
+            }
+          ],
+          "content_reference": null,
+          "binding": null,
+          "invariants": [],
+          "fixed": null,
+          "pattern": null,
+          "default_value": null,
+          "example_values": [],
+          "must_support": false,
+          "is_summary": false,
+          "slicing": null,
+          "extension": [],
+          "additional_fields": {}
+        },
+        {
+          "id": "Patient.alias",
+          "path": "Patient.alias",
+          "slice_name": null,
+          "short": "Пациент — 日本語 Patient.alias",
+          "definition": null,
+          "comment": null,
+          "requirements": null,
+          "cardinality": {
+            "min": 0,
+            "max": "unbounded"
+          },
+          "types": [
+            {
+              "code": "string",
+              "profiles": [],
+              "target_profiles": [],
+              "aggregation": [],
+              "versioning": null
+            }
+          ],
+          "content_reference": null,
+          "binding": null,
+          "invariants": [],
+          "fixed": null,
+          "pattern": null,
+          "default_value": null,
+          "example_values": [],
+          "must_support": false,
+          "is_summary": false,
+          "slicing": null,
+          "extension": [],
+          "additional_fields": {}
+        },
+        {
+          "id": "Patient.value[x]",
+          "path": "Patient.value[x]",
+          "slice_name": null,
+          "short": "Пациент — 日本語 Patient.value[x]",
+          "definition": null,
+          "comment": null,
+          "requirements": null,
+          "cardinality": {
+            "min": 0,
+            "max": {
+              "finite": 1
+            }
+          },
+          "types": [
+            {
+              "code": "boolean",
+              "profiles": [],
+              "target_profiles": [],
+              "aggregation": [],
+              "versioning": null
+            },
+            {
+              "code": "string",
+              "profiles": [],
+              "target_profiles": [],
+              "aggregation": [],
+              "versioning": null
+            }
+          ],
+          "content_reference": null,
+          "binding": null,
+          "invariants": [],
+          "fixed": null,
+          "pattern": null,
+          "default_value": null,
+          "example_values": [],
+          "must_support": false,
+          "is_summary": false,
+          "slicing": null,
+          "extension": [],
+          "additional_fields": {}
+        }
+      ],
+      "extensions": [],
+      "invariants": []
+    }
+  },
+  "canonical_index": {
+    "Patient": "http://example.org/fhir/StructureDefinition/Patient"
+  },
+  "type_map": {
+    "by_url": {
+      "http://example.org/fhir/StructureDefinition/Patient": {
+        "canonical_url": "http://example.org/fhir/StructureDefinition/Patient",
+        "type_name": "Patient",
+        "file_stem": "patient",
+        "kind": "base_resource",
+        "package": {
+          "name": "audit.fhir",
+          "version": "1.0.0"
+        },
+        "base_type": null,
+        "type_code": "Patient"
+      }
+    },
+    "by_name": {
+      "Patient": "http://example.org/fhir/StructureDefinition/Patient"
+    },
+    "by_stem": {
+      "patient": "http://example.org/fhir/StructureDefinition/Patient"
+    }
+  },
+  "structures": [
+    {
+      "canonical_url": "http://example.org/fhir/StructureDefinition/Patient",
+      "name": "Patient",
+      "type_code": "Patient",
+      "title": "Пациент — 日本語",
+      "version": "1.0.0",
+      "status": "active",
+      "package": {
+        "name": "audit.fhir",
+        "version": "1.0.0"
+      },
+      "kind": "base_resource"
+    }
+  ],
+  "value_sets": {},
+  "search_parameters": [],
+  "package_descriptor": {
+    "id": {
+      "name": "audit.fhir",
+      "version": "1.0.0"
+    },
+    "source": "Registry",
+    "priority": 0,
+    "resource_count": 1,
+    "inventory": {
+      "structures": [
+        {
+          "canonical_url": "http://example.org/fhir/StructureDefinition/Patient",
+          "name": "Patient",
+          "type_code": "Patient",
+          "title": "Пациент — 日本語",
+          "version": "1.0.0",
+          "status": "active",
+          "package": {
+            "name": "audit.fhir",
+            "version": "1.0.0"
+          },
+          "kind": "base_resource"
+        }
+      ],
+      "value_sets": [],
+      "code_systems": [],
+      "capability_statements": [],
+      "others": {}
+    }
+  },
+  "diagnostics": []
+}

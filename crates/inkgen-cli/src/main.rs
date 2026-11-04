@@ -1222,7 +1222,11 @@ fn list_backends_command() -> Result<()> {
             "ts",
         ),
         ("rust", "Rust structs with serde (reference backend)", "rs"),
-        ("gleam", "Gleam record types on the PackageIr contract", "gleam"),
+        (
+            "gleam",
+            "Gleam record types on the PackageIr contract",
+            "gleam",
+        ),
     ];
     for (id, description, ext) in backends {
         println!("  {id} - {description}");

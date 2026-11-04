@@ -74,12 +74,7 @@ fn type_name(def: &ResourceDefinition) -> Option<String> {
     Some(escape_type(&pascal_case(&raw)))
 }
 
-fn emit_type(
-    out: &mut String,
-    def: &ResourceDefinition,
-    name: &str,
-    generated: &HashSet<String>,
-) {
+fn emit_type(out: &mut String, def: &ResourceDefinition, name: &str, generated: &HashSet<String>) {
     if let Some(doc) = def.description.as_deref().or(def.title.as_deref()) {
         for line in doc.lines().take(3) {
             let clean: String = line.chars().filter(|c| !c.is_control()).collect();

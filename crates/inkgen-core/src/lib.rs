@@ -6,6 +6,7 @@
 //! - Profile resolution services that transform canonical StructureDefinitions
 //!   into deterministic IR snapshots
 
+#[cfg(feature = "resolver")]
 mod cache;
 pub mod canonical_map;
 pub mod config;
@@ -16,13 +17,16 @@ pub mod ir;
 mod lineage;
 mod package;
 pub mod package_ir;
+#[cfg(any(feature = "resolver", test))]
 mod profile;
 pub mod search;
 mod services;
+#[cfg(feature = "templates")]
 pub mod template_helpers;
 mod terminology;
 mod type_registry;
 
+#[cfg(feature = "resolver")]
 pub use cache::{InstallMode, PackageCache, PackageCacheConfig};
 pub use canonical_map::{CanonicalTypeMap, TypeEntry};
 pub use config::{
@@ -37,15 +41,17 @@ pub use package::{
     ArtifactDescriptor, ArtifactKind, PackageDescriptor, PackageId, PackageInventory,
     PackageRequest, PackageSource, StructureKind, StructureSummary,
 };
+#[cfg(feature = "resolver")]
+pub use package_ir::build_package_ir;
 pub use package_ir::{
     Backend, BackendError, CONTRACT_VERSION, Diagnostic, DiagnosticSeverity, GenerationOutput,
-    PackageIr, build_package_ir,
+    PackageIr,
 };
 pub use search::SearchParameterInfo;
-pub use services::{
-    BaseStructureService, PackageResolver, StructureDefinitionProvider, StructureFilter,
-    StructureProviderConfig,
-};
+#[cfg(feature = "resolver")]
+pub use services::{BaseStructureService, PackageResolver};
+pub use services::{StructureDefinitionProvider, StructureFilter, StructureProviderConfig};
+#[cfg(feature = "templates")]
 pub use template_helpers::{ImportPathFunction, PackageFolderFunction, calculate_relative_import};
 pub use terminology::{
     ResolvedValueSet, ValueSetCache, extract_codes_from_valueset, should_generate_valueset,

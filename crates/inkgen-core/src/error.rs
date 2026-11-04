@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+#[cfg(feature = "resolver")]
 use octofhir_canonical_manager::FcmError;
 use thiserror::Error;
 
@@ -11,6 +12,7 @@ pub type CoreResult<T> = Result<T, CoreError>;
 /// Unified error type for the core engine.
 #[derive(Debug, Error)]
 pub enum CoreError {
+    #[cfg(feature = "resolver")]
     #[error("canonical manager failure: {0}")]
     Canonical(#[from] FcmError),
 
@@ -20,6 +22,7 @@ pub enum CoreError {
     #[error("serde error: {0}")]
     Serde(#[from] serde_json::Error),
 
+    #[cfg(feature = "resolver")]
     #[error("URL parsing error: {0}")]
     Url(#[from] url::ParseError),
 

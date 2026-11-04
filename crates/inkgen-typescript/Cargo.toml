@@ -12,12 +12,16 @@ tracing = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 async-trait = { workspace = true }
-once_cell = "1"
 
-inkgen-core = { path = "../inkgen-core" }
+inkgen-core = { path = "../inkgen-core", default-features = false, features = ["templates"] }
 
 [dev-dependencies]
 inkgen-testing = { path = "../inkgen-testing" }
 insta = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["macros"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[features]
+# Preserve the legacy cache configuration field and constructor argument.
+default = ["resolver"]
+resolver = ["inkgen-core/resolver"]

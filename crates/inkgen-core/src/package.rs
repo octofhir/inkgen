@@ -2,6 +2,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use indexmap::IndexMap;
+#[cfg(feature = "resolver")]
 use octofhir_canonical_manager::config::PackageSpec;
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +21,7 @@ impl PackageId {
         }
     }
 
+    #[cfg(feature = "resolver")]
     pub fn as_spec(&self, priority: u32) -> PackageSpec {
         PackageSpec {
             name: self.name.clone(),

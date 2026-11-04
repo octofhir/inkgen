@@ -49,8 +49,7 @@ mod tests {
 
     #[test]
     fn config_from_manifest_default() {
-        let output =
-            GleamGeneratorConfig::from_manifest(None, PathBuf::from("./generated"), None);
+        let output = GleamGeneratorConfig::from_manifest(None, PathBuf::from("./generated"), None);
         assert_eq!(output.output_dir, PathBuf::from("./generated/gleam"));
     }
 }

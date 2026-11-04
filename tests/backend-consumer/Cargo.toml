@@ -1,0 +1,14 @@
+[package]
+name = "inkgen-backend-consumer"
+version = "0.0.0"
+edition = "2024"
+publish = false
+[workspace]
+[features]
+resolver = ["inkgen-core/resolver", "inkgen-typescript/resolver"]
+[dependencies]
+inkgen-core = { path = "../../crates/inkgen-core", default-features = false }
+inkgen-rust = { path = "../../crates/inkgen-rust" }
+inkgen-gleam = { path = "../../crates/inkgen-gleam" }
+inkgen-typescript = { path = "../../crates/inkgen-typescript", default-features = false }
+serde_json = "1"
