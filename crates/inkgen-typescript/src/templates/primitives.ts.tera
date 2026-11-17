@@ -52,7 +52,39 @@ export type FhirInteger64 = string; // int64 is serialized as string in JSON
 export type FhirBoolean = boolean;
 {% endif %}
 
-{% if zod_schemas %}import { z } from 'zod';
+{% if validation_schemas %}{% if validation_library == "valibot" %}import * as v from 'valibot';
+
+// Valibot schemas for runtime validation
+export const FhirStringSchema = v.string();
+export const FhirBooleanSchema = v.boolean();
+export const FhirIntegerSchema = v.pipe(v.number(), v.integer());
+export const FhirDecimalSchema = v.number();
+export const FhirPositiveIntSchema = v.pipe(v.number(), v.integer(), v.minValue(1));
+export const FhirUnsignedIntSchema = v.pipe(v.number(), v.integer(), v.minValue(0));
+
+// Regex-validated string primitives
+export const FhirIdSchema = v.pipe(v.string(), v.regex(/^[A-Za-z0-9\-\.]{1,64}$/));
+export const FhirCodeSchema = v.pipe(v.string(), v.regex(/^[^\s]+(\s[^\s]+)*$/));
+
+// Date/time primitives (Valibot ISO actions)
+export const FhirDateSchema = v.pipe(v.string(), v.isoDate());
+export const FhirTimeSchema = v.pipe(v.string(), v.isoTime());
+export const FhirDateTimeSchema = v.pipe(v.string(), v.isoDateTime());
+export const FhirInstantSchema = v.pipe(v.string(), v.isoTimestamp());
+
+// URI-based primitives
+export const FhirUriSchema = v.pipe(v.string(), v.url());
+export const FhirUrlSchema = v.pipe(v.string(), v.url());
+export const FhirCanonicalSchema = v.pipe(v.string(), v.url());
+export const FhirOidSchema = v.pipe(v.string(), v.regex(/^urn:oid:[0-2](\.(0|[1-9]\d*))+$/));
+export const FhirUuidSchema = v.pipe(v.string(), v.uuid());
+
+// Text primitives
+export const FhirMarkdownSchema = v.string();
+export const FhirBase64BinarySchema = v.pipe(v.string(), v.base64());
+export const FhirXhtmlSchema = v.string();
+export const FhirInteger64Schema = v.string();
+{% else %}import { z } from 'zod';
 
 // Zod schemas for runtime validation
 export const FhirStringSchema = z.string();
@@ -84,99 +116,99 @@ export const FhirMarkdownSchema = z.string();
 export const FhirBase64BinarySchema = z.string().base64();
 export const FhirXhtmlSchema = z.string();
 export const FhirInteger64Schema = z.string();
-{% endif %}
+{% endif %}{% endif %}
 
 {% if branded_primitives %}// Constructor functions for creating branded primitive values
 export function fhirString(value: string): FhirString {
-  {% if zod_schemas %}return FhirStringSchema.parse(value) as FhirString;{% else %}return value as FhirString;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirStringSchema, value) as FhirString;{% else %}return FhirStringSchema.parse(value) as FhirString;{% endif %}{% else %}return value as FhirString;{% endif %}
 }
 
 export function fhirCode(value: string): FhirCode {
-  {% if zod_schemas %}return FhirCodeSchema.parse(value) as FhirCode;{% else %}return value as FhirCode;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirCodeSchema, value) as FhirCode;{% else %}return FhirCodeSchema.parse(value) as FhirCode;{% endif %}{% else %}return value as FhirCode;{% endif %}
 }
 
 export function fhirId(value: string): FhirId {
-  {% if zod_schemas %}return FhirIdSchema.parse(value) as FhirId;{% else %}return value as FhirId;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirIdSchema, value) as FhirId;{% else %}return FhirIdSchema.parse(value) as FhirId;{% endif %}{% else %}return value as FhirId;{% endif %}
 }
 
 export function fhirMarkdown(value: string): FhirMarkdown {
-  {% if zod_schemas %}return FhirMarkdownSchema.parse(value) as FhirMarkdown;{% else %}return value as FhirMarkdown;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirMarkdownSchema, value) as FhirMarkdown;{% else %}return FhirMarkdownSchema.parse(value) as FhirMarkdown;{% endif %}{% else %}return value as FhirMarkdown;{% endif %}
 }
 
 export function fhirOid(value: string): FhirOid {
-  {% if zod_schemas %}return FhirOidSchema.parse(value) as FhirOid;{% else %}return value as FhirOid;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirOidSchema, value) as FhirOid;{% else %}return FhirOidSchema.parse(value) as FhirOid;{% endif %}{% else %}return value as FhirOid;{% endif %}
 }
 
 export function fhirUri(value: string): FhirUri {
-  {% if zod_schemas %}return FhirUriSchema.parse(value) as FhirUri;{% else %}return value as FhirUri;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirUriSchema, value) as FhirUri;{% else %}return FhirUriSchema.parse(value) as FhirUri;{% endif %}{% else %}return value as FhirUri;{% endif %}
 }
 
 export function fhirCanonical(value: string): FhirCanonical {
-  {% if zod_schemas %}return FhirCanonicalSchema.parse(value) as FhirCanonical;{% else %}return value as FhirCanonical;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirCanonicalSchema, value) as FhirCanonical;{% else %}return FhirCanonicalSchema.parse(value) as FhirCanonical;{% endif %}{% else %}return value as FhirCanonical;{% endif %}
 }
 
 export function fhirUrl(value: string): FhirUrl {
-  {% if zod_schemas %}return FhirUrlSchema.parse(value) as FhirUrl;{% else %}return value as FhirUrl;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirUrlSchema, value) as FhirUrl;{% else %}return FhirUrlSchema.parse(value) as FhirUrl;{% endif %}{% else %}return value as FhirUrl;{% endif %}
 }
 
 export function fhirUuid(value: string): FhirUuid {
-  {% if zod_schemas %}return FhirUuidSchema.parse(value) as FhirUuid;{% else %}return value as FhirUuid;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirUuidSchema, value) as FhirUuid;{% else %}return FhirUuidSchema.parse(value) as FhirUuid;{% endif %}{% else %}return value as FhirUuid;{% endif %}
 }
 
 export function fhirBase64Binary(value: string): FhirBase64Binary {
-  {% if zod_schemas %}return FhirBase64BinarySchema.parse(value) as FhirBase64Binary;{% else %}return value as FhirBase64Binary;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirBase64BinarySchema, value) as FhirBase64Binary;{% else %}return FhirBase64BinarySchema.parse(value) as FhirBase64Binary;{% endif %}{% else %}return value as FhirBase64Binary;{% endif %}
 }
 
 export function fhirDate(value: string): FhirDate {
-  {% if zod_schemas %}return FhirDateSchema.parse(value) as FhirDate;{% else %}return value as FhirDate;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirDateSchema, value) as FhirDate;{% else %}return FhirDateSchema.parse(value) as FhirDate;{% endif %}{% else %}return value as FhirDate;{% endif %}
 }
 
 export function fhirDateTime(value: string): FhirDateTime {
-  {% if zod_schemas %}return FhirDateTimeSchema.parse(value) as FhirDateTime;{% else %}return value as FhirDateTime;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirDateTimeSchema, value) as FhirDateTime;{% else %}return FhirDateTimeSchema.parse(value) as FhirDateTime;{% endif %}{% else %}return value as FhirDateTime;{% endif %}
 }
 
 export function fhirTime(value: string): FhirTime {
-  {% if zod_schemas %}return FhirTimeSchema.parse(value) as FhirTime;{% else %}return value as FhirTime;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirTimeSchema, value) as FhirTime;{% else %}return FhirTimeSchema.parse(value) as FhirTime;{% endif %}{% else %}return value as FhirTime;{% endif %}
 }
 
 export function fhirInstant(value: string): FhirInstant {
-  {% if zod_schemas %}return FhirInstantSchema.parse(value) as FhirInstant;{% else %}return value as FhirInstant;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirInstantSchema, value) as FhirInstant;{% else %}return FhirInstantSchema.parse(value) as FhirInstant;{% endif %}{% else %}return value as FhirInstant;{% endif %}
 }
 
 export function fhirXhtml(value: string): FhirXhtml {
-  {% if zod_schemas %}return FhirXhtmlSchema.parse(value) as FhirXhtml;{% else %}return value as FhirXhtml;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirXhtmlSchema, value) as FhirXhtml;{% else %}return FhirXhtmlSchema.parse(value) as FhirXhtml;{% endif %}{% else %}return value as FhirXhtml;{% endif %}
 }
 
 export function fhirInteger(value: number): FhirInteger {
-  {% if zod_schemas %}return FhirIntegerSchema.parse(value) as FhirInteger;{% else %}if (!Number.isInteger(value)) {
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirIntegerSchema, value) as FhirInteger;{% else %}return FhirIntegerSchema.parse(value) as FhirInteger;{% endif %}{% else %}if (!Number.isInteger(value)) {
     throw new Error('FhirInteger must be an integer');
   }
   return value as FhirInteger;{% endif %}
 }
 
 export function fhirDecimal(value: number): FhirDecimal {
-  {% if zod_schemas %}return FhirDecimalSchema.parse(value) as FhirDecimal;{% else %}return value as FhirDecimal;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirDecimalSchema, value) as FhirDecimal;{% else %}return FhirDecimalSchema.parse(value) as FhirDecimal;{% endif %}{% else %}return value as FhirDecimal;{% endif %}
 }
 
 export function fhirPositiveInt(value: number): FhirPositiveInt {
-  {% if zod_schemas %}return FhirPositiveIntSchema.parse(value) as FhirPositiveInt;{% else %}if (!Number.isInteger(value) || value <= 0) {
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirPositiveIntSchema, value) as FhirPositiveInt;{% else %}return FhirPositiveIntSchema.parse(value) as FhirPositiveInt;{% endif %}{% else %}if (!Number.isInteger(value) || value <= 0) {
     throw new Error('FhirPositiveInt must be a positive integer');
   }
   return value as FhirPositiveInt;{% endif %}
 }
 
 export function fhirUnsignedInt(value: number): FhirUnsignedInt {
-  {% if zod_schemas %}return FhirUnsignedIntSchema.parse(value) as FhirUnsignedInt;{% else %}if (!Number.isInteger(value) || value < 0) {
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirUnsignedIntSchema, value) as FhirUnsignedInt;{% else %}return FhirUnsignedIntSchema.parse(value) as FhirUnsignedInt;{% endif %}{% else %}if (!Number.isInteger(value) || value < 0) {
     throw new Error('FhirUnsignedInt must be a non-negative integer');
   }
   return value as FhirUnsignedInt;{% endif %}
 }
 
 export function fhirInteger64(value: string): FhirInteger64 {
-  {% if zod_schemas %}return FhirInteger64Schema.parse(value) as FhirInteger64;{% else %}return value as FhirInteger64;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirInteger64Schema, value) as FhirInteger64;{% else %}return FhirInteger64Schema.parse(value) as FhirInteger64;{% endif %}{% else %}return value as FhirInteger64;{% endif %}
 }
 
 export function fhirBoolean(value: boolean): FhirBoolean {
-  {% if zod_schemas %}return FhirBooleanSchema.parse(value) as FhirBoolean;{% else %}return value as FhirBoolean;{% endif %}
+  {% if validation_schemas %}{% if validation_library == "valibot" %}return v.parse(FhirBooleanSchema, value) as FhirBoolean;{% else %}return FhirBooleanSchema.parse(value) as FhirBoolean;{% endif %}{% else %}return value as FhirBoolean;{% endif %}
 }
 {% endif %}

@@ -1,0 +1,17 @@
+---
+source: crates/inkgen-typescript/tests/valibot_tests.rs
+expression: "file(&output, \"package.json\")"
+---
+{
+  "dependencies": {
+    "valibot": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "name": "@inkgen/fhir",
+  "packageManager": "bun@1.0.0",
+  "type": "module",
+  "version": "0.1.0"
+}

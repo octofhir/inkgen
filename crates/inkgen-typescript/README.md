@@ -47,7 +47,8 @@ output_structure = "flat"
 # generate_profiles = false
 # generate_valuesets = false
 # profile_classes = false
-# zod_schemas = false
+# validation_schemas = false
+# validation_library = "valibot"   # "zod" (default) or "valibot"
 ```
 
 ## Usage

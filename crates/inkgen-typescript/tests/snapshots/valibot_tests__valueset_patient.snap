@@ -1,0 +1,78 @@
+---
+source: crates/inkgen-typescript/tests/valibot_tests.rs
+expression: "file(&output, \"patient.ts\")"
+---
+
+import * as v from 'valibot';
+import type { FhirBoolean, FhirString } from "./primitives";
+
+
+import type { AuditStatus } from "./valuesets/audit-status";
+
+import { AuditStatusValues } from "./valuesets/audit-status";
+
+export interface Patient {
+  /** Resource type identifier */
+  resourceType: "Patient";
+  /** Пациент — 日本語 Patient.active */
+  active?: FhirBoolean;
+  /** Пациент — 日本語 Patient.alias */
+  alias?: Array<FhirString>;
+  status: AuditStatus;
+  /** Пациент — 日本語 Patient.value[x] */
+  valueBoolean?: FhirBoolean;
+  /** Пациент — 日本語 Patient.value[x] */
+  valueString?: FhirString;
+}
+/**
+ * Type guard to check if input is a valid Patient
+ */
+export function isPatient(input: unknown): input is Patient {
+  if (typeof input !== "object" || input === null) {
+    return false;
+  }
+  const obj = input as Record<string, unknown>;
+  if (obj.resourceType !== undefined && obj.resourceType !== "Patient") {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Valibot schema for Patient
+ */
+export const PatientSchema = v.object({
+  resourceType: v.literal("Patient"),
+  active: v.optional(v.boolean()),
+  alias: v.optional(v.array(v.string())),
+  status: v.picklist(AuditStatusValues),
+  valueBoolean: v.optional(v.boolean()),
+  valueString: v.optional(v.string()),
+});
+
+/**
+ * Type inferred from Valibot schema
+ */
+export type PatientValidated = v.InferOutput<typeof PatientSchema>;
+
+/**
+ * Safely parse and validate input as Patient using Valibot schema
+ * @param input - The input to parse
+ * @returns The parsed Patient if valid, or false if invalid
+ */
+export function parsePatient(input: unknown): PatientValidated | false {
+  // FHIR choice (`value[x]`) elements carry at most one typed member
+  // (exactly one when the choice is required).
+  const schema = v.pipe(PatientSchema, v.rawCheck(({ dataset, addIssue }) => {
+    if (!dataset.typed) {
+      return;
+    }
+    const obj = dataset.value as Record<string, unknown>;
+    if ([obj.valueBoolean, obj.valueString].filter((x) => x !== undefined).length > 1) {
+      addIssue({ message: "At most one of valueBoolean, valueString may be present" });
+    }
+  }));
+  const result = v.safeParse(schema, input);
+  return result.success ? result.output : false;
+}

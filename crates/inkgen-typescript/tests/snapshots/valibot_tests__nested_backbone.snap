@@ -1,0 +1,88 @@
+---
+source: crates/inkgen-typescript/tests/valibot_tests.rs
+expression: "file(&output, \"patient.ts\")"
+---
+
+import * as v from 'valibot';
+import type { FhirPositiveInt, FhirString } from "./primitives";
+
+export interface PatientContact {
+  name?: FhirString;
+  rank?: FhirPositiveInt;
+  detail?: PatientContactDetail;
+}
+
+/**
+ * Valibot schema for PatientContact
+ */
+export const PatientContactSchema: v.GenericSchema<Record<string, unknown>> = v.object({
+  name: v.optional(v.string()),
+  rank: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
+  detail: v.optional(v.lazy(() => PatientContactDetailSchema)),
+});
+
+/**
+ * Type inferred from Valibot schema
+ */
+export type PatientContactValidated = v.InferOutput<typeof PatientContactSchema>;
+
+
+export interface PatientContactDetail {
+  note: FhirString;
+}
+
+/**
+ * Valibot schema for PatientContactDetail
+ */
+export const PatientContactDetailSchema = v.object({
+  note: v.string(),
+});
+
+/**
+ * Type inferred from Valibot schema
+ */
+export type PatientContactDetailValidated = v.InferOutput<typeof PatientContactDetailSchema>;
+
+
+export interface Patient {
+  /** Resource type identifier */
+  resourceType: "Patient";
+  contact?: Array<PatientContact>;
+}
+/**
+ * Type guard to check if input is a valid Patient
+ */
+export function isPatient(input: unknown): input is Patient {
+  if (typeof input !== "object" || input === null) {
+    return false;
+  }
+  const obj = input as Record<string, unknown>;
+  if (obj.resourceType !== undefined && obj.resourceType !== "Patient") {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Valibot schema for Patient
+ */
+export const PatientSchema = v.object({
+  resourceType: v.literal("Patient"),
+  contact: v.optional(v.array(PatientContactSchema)),
+});
+
+/**
+ * Type inferred from Valibot schema
+ */
+export type PatientValidated = v.InferOutput<typeof PatientSchema>;
+
+/**
+ * Safely parse and validate input as Patient using Valibot schema
+ * @param input - The input to parse
+ * @returns The parsed Patient if valid, or false if invalid
+ */
+export function parsePatient(input: unknown): PatientValidated | false {
+  const result = v.safeParse(PatientSchema, input);
+  return result.success ? result.output : false;
+}

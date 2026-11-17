@@ -10,8 +10,10 @@ use inkgen_core::config::{ExtensionAccessorStyle, ProfileMethodConfig};
 use inkgen_core::ir::{Derivation, ElementDefinition, ResourceDefinition};
 use serde::Serialize;
 
+use crate::ValidationLibrary;
 use crate::imports::{TypeRegistry, calculate_import_path};
 use crate::naming;
+use crate::schema::SchemaExpr;
 
 /// TypeScript reserved words that cannot be used as property names in class declarations.
 const TS_RESERVED_WORDS: &[&str] = &[
@@ -207,6 +209,16 @@ pub struct ProfileRenderContext {
     pub extension_style: ExtensionAccessorStyle,
     /// Generate Zod schema
     pub generate_zod: bool,
+    /// Validation library dialect ("zod" or "valibot")
+    pub validation_library: ValidationLibrary,
+    /// Library import line for the schema block
+    pub validation_import: &'static str,
+    /// Library display name for doc comments
+    pub validation_name: &'static str,
+    /// Output-type inference helper for the dialect
+    pub infer_type: &'static str,
+    /// Error type thrown by the library's parse function
+    pub error_type: &'static str,
     /// Generate serialization methods
     pub with_serialization: bool,
     /// Generate validation methods
@@ -400,13 +412,14 @@ impl ProfileInfo {
         as_class: bool,
         with_methods: bool,
         with_zod: bool,
+        library: ValidationLibrary,
         context: Option<&ProfileGenerationContext>,
     ) -> String {
         let mut output = String::new();
 
         // Generate imports if context is provided
         if let Some(ctx) = context {
-            self.generate_imports(&mut output, as_class, with_zod, ctx);
+            self.generate_imports(&mut output, as_class, with_zod, library, ctx);
         }
 
         // Generate flat input types for complex extensions
@@ -566,12 +579,17 @@ impl ProfileInfo {
         ));
         output.push_str("}\n");
 
-        // Generate Zod schema if requested
-        // Use z.intersection() instead of .extend() because .extend() doesn't work
-        // on z.ZodType<object> which is used for recursive schemas like Extension
+        // Generate validation schema if requested.
+        // Combine the base schema with constraints via intersection rather than
+        // extension: extension does not compose with the explicit type annotations
+        // used for recursive schemas like Extension.
         if with_zod {
             output.push('\n');
-            output.push_str(&format!("/**\n * Zod schema for {}\n */\n", self.type_name));
+            output.push_str(&format!(
+                "/**\n * {} schema for {}\n */\n",
+                library.display_name(),
+                self.type_name
+            ));
 
             if self.constrained_elements.is_empty() {
                 // No additional constraints, just re-export the base schema
@@ -581,10 +599,23 @@ impl ProfileInfo {
                 ));
             } else {
                 // Use intersection to combine base schema with additional constraints
-                output.push_str(&format!(
-                    "export const {}Schema = z.intersection(\n  {}Schema,\n  z.object({{\n",
-                    self.type_name, self.base_type
-                ));
+                let (open, close) = match library {
+                    ValidationLibrary::Zod => (
+                        format!(
+                            "export const {}Schema = z.intersection(\n  {}Schema,\n  z.object({{\n",
+                            self.type_name, self.base_type
+                        ),
+                        "  })\n);\n",
+                    ),
+                    ValidationLibrary::Valibot => (
+                        format!(
+                            "export const {}Schema = v.intersect([\n  {}Schema,\n  v.object({{\n",
+                            self.type_name, self.base_type
+                        ),
+                        "  }),\n]);\n",
+                    ),
+                };
+                output.push_str(&open);
 
                 // Add constrained fields to the schema
                 for constrained in &self.constrained_elements {
@@ -603,14 +634,20 @@ impl ProfileInfo {
                             continue;
                         }
                         // Override to make required
+                        let constraint = SchemaExpr::Array {
+                            item: Box::new(SchemaExpr::Unknown),
+                            min: Some(constrained.min),
+                            max: None,
+                        }
+                        .render(library);
                         output.push_str(&format!(
-                            "    {}: z.array(z.unknown()).min({}),\n",
-                            constrained.field_name, constrained.min
+                            "    {}: {},\n",
+                            constrained.field_name, constraint
                         ));
                     }
                 }
 
-                output.push_str("  })\n);\n");
+                output.push_str(close);
             }
         }
 
@@ -789,6 +826,7 @@ impl ProfileInfo {
         output: &mut String,
         as_class: bool,
         with_zod: bool,
+        library: ValidationLibrary,
         ctx: &ProfileGenerationContext,
     ) {
         // Collect all types that need to be imported
@@ -883,9 +921,12 @@ impl ProfileInfo {
         // Build import statements sorted by path
         let mut import_statements: Vec<String> = Vec::new();
 
-        // Add zod import if needed
+        // Add validation library import if needed
         if with_zod {
-            import_statements.push("import { z } from \"zod\";".to_string());
+            import_statements.push(match library {
+                ValidationLibrary::Zod => "import { z } from \"zod\";".to_string(),
+                ValidationLibrary::Valibot => "import * as v from \"valibot\";".to_string(),
+            });
         }
 
         // Sort paths for deterministic output
@@ -1107,6 +1148,7 @@ impl ProfileInfo {
         &self,
         method_config: &ProfileMethodConfig,
         with_zod: bool,
+        library: ValidationLibrary,
     ) -> ProfileRenderContext {
         // Collect imports needed
         let mut imports = Vec::new();
@@ -1154,7 +1196,14 @@ impl ProfileInfo {
             .map(|c| MustSupportElementRender {
                 path: c.path.clone(),
                 field_name: c.field_name.clone(),
-                zod_constraint: Some(format!("z.array(z.unknown()).min({})", c.min)),
+                zod_constraint: Some(
+                    SchemaExpr::Array {
+                        item: Box::new(SchemaExpr::Unknown),
+                        min: Some(c.min),
+                        max: None,
+                    }
+                    .render(library),
+                ),
             })
             .collect();
 
@@ -1180,6 +1229,11 @@ impl ProfileInfo {
             extension_accessors,
             extension_style: method_config.extension_style,
             generate_zod: with_zod,
+            validation_library: library,
+            validation_import: library.import_line(),
+            validation_name: library.display_name(),
+            infer_type: library.infer_fn(),
+            error_type: library.error_type(),
             with_serialization: method_config.serialization,
             with_validation: method_config.validation,
         }
@@ -1191,8 +1245,9 @@ impl ProfileInfo {
         tera: &tera::Tera,
         method_config: &ProfileMethodConfig,
         with_zod: bool,
+        library: ValidationLibrary,
     ) -> Result<String, tera::Error> {
-        let context = self.to_render_context(method_config, with_zod);
+        let context = self.to_render_context(method_config, with_zod, library);
         let mut tera_context = tera::Context::new();
         tera_context.insert("profile", &context);
         tera.render("profile.ts.tera", &tera_context)
@@ -2116,7 +2171,7 @@ mod tests {
             extensions: vec![],
         };
 
-        let output = profile.generate_typescript(false, false, false, None);
+        let output = profile.generate_typescript(false, false, false, ValidationLibrary::Zod, None);
 
         assert!(output.contains("export interface USCorePatient extends Patient"));
         assert!(output.contains("readonly __profileUrl"));
@@ -2163,7 +2218,7 @@ mod tests {
         };
 
         // Test class generation with extension methods
-        let output = profile.generate_typescript(true, true, false, None);
+        let output = profile.generate_typescript(true, true, false, ValidationLibrary::Zod, None);
 
         assert!(output.contains("export class USCorePatient extends Patient"));
         assert!(output.contains("readonly __profile ="));
@@ -2173,19 +2228,22 @@ mod tests {
         assert!(output.contains("valueCodeableConcept"));
 
         // Test class generation without extension methods
-        let output_no_methods = profile.generate_typescript(true, false, false, None);
+        let output_no_methods =
+            profile.generate_typescript(true, false, false, ValidationLibrary::Zod, None);
         assert!(output_no_methods.contains("export class USCorePatient extends Patient"));
         assert!(!output_no_methods.contains("getUSCoreRace()"));
 
         // Test interface generation (original behavior)
-        let output_interface = profile.generate_typescript(false, false, false, None);
+        let output_interface =
+            profile.generate_typescript(false, false, false, ValidationLibrary::Zod, None);
         assert!(output_interface.contains("export interface USCorePatient extends Patient"));
         assert!(output_interface.contains("readonly __profileUrl"));
         assert!(!output_interface.contains("getUSCoreRace()"));
 
         // Test Zod schema generation. Profile schemas use z.intersection() over
         // the base schema (Zod .extend() does not compose with branded primitives).
-        let output_with_zod = profile.generate_typescript(false, false, true, None);
+        let output_with_zod =
+            profile.generate_typescript(false, false, true, ValidationLibrary::Zod, None);
         assert!(output_with_zod.contains("export const USCorePatientSchema = z.intersection("));
         assert!(output_with_zod.contains("PatientSchema,"));
     }
@@ -2261,7 +2319,7 @@ mod tests {
         };
 
         let method_config = ProfileMethodConfig::default();
-        let context = profile.to_render_context(&method_config, true);
+        let context = profile.to_render_context(&method_config, true, ValidationLibrary::Zod);
 
         assert_eq!(context.type_name, "USCorePatient");
         assert_eq!(context.base_type, "Patient");
@@ -2340,7 +2398,7 @@ mod tests {
         };
 
         let output = profile
-            .generate_typescript_with_template(&tera, &method_config, false)
+            .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
             .unwrap();
 
         // Should have typed accessors
@@ -2391,7 +2449,7 @@ mod tests {
         };
 
         let output = profile
-            .generate_typescript_with_template(&tera, &method_config, false)
+            .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
             .unwrap();
 
         // Should have raw Extension accessors
@@ -2441,7 +2499,7 @@ mod tests {
         };
 
         let output = profile
-            .generate_typescript_with_template(&tera, &method_config, false)
+            .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
             .unwrap();
 
         // Should have both typed accessors
@@ -2477,7 +2535,7 @@ mod tests {
         };
 
         let output = profile
-            .generate_typescript_with_template(&tera, &method_config, false)
+            .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
             .unwrap();
 
         // Should NOT have serialization methods
@@ -2509,7 +2567,7 @@ mod tests {
         };
 
         let output = profile
-            .generate_typescript_with_template(&tera, &method_config, false)
+            .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
             .unwrap();
 
         // Should NOT have validation methods
@@ -2554,13 +2612,13 @@ mod tests {
             validation: true,
         };
 
-        let context = profile.to_render_context(&method_config, false);
+        let context = profile.to_render_context(&method_config, false, ValidationLibrary::Zod);
 
         // Should have no extension accessors
         assert_eq!(context.extension_accessors.len(), 0);
 
         let output = profile
-            .generate_typescript_with_template(&tera, &method_config, false)
+            .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
             .unwrap();
 
         // Should NOT have any extension accessors
@@ -2615,7 +2673,7 @@ mod tests {
         };
 
         let output = profile
-            .generate_typescript_with_template(&tera, &method_config, false)
+            .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
             .unwrap();
 
         // Should have basic class structure

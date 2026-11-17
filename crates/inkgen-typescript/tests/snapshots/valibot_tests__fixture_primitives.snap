@@ -1,0 +1,61 @@
+---
+source: crates/inkgen-typescript/tests/valibot_tests.rs
+expression: "file(&output, \"primitives.ts\")"
+---
+// FHIR Primitive Types
+// Plain type aliases
+export type FhirString = string;
+export type FhirCode = string;
+export type FhirId = string;
+export type FhirMarkdown = string;
+export type FhirOid = string;
+export type FhirUri = string;
+export type FhirCanonical = string;
+export type FhirUrl = string;
+export type FhirUuid = string;
+export type FhirBase64Binary = string;
+export type FhirDate = string;
+export type FhirDateTime = string;
+export type FhirTime = string;
+export type FhirInstant = string;
+export type FhirXhtml = string;
+export type FhirInteger = number;
+export type FhirDecimal = number;
+export type FhirPositiveInt = number;
+export type FhirUnsignedInt = number;
+export type FhirInteger64 = string; // int64 is serialized as string in JSON
+export type FhirBoolean = boolean;
+
+
+import * as v from 'valibot';
+
+// Valibot schemas for runtime validation
+export const FhirStringSchema = v.string();
+export const FhirBooleanSchema = v.boolean();
+export const FhirIntegerSchema = v.pipe(v.number(), v.integer());
+export const FhirDecimalSchema = v.number();
+export const FhirPositiveIntSchema = v.pipe(v.number(), v.integer(), v.minValue(1));
+export const FhirUnsignedIntSchema = v.pipe(v.number(), v.integer(), v.minValue(0));
+
+// Regex-validated string primitives
+export const FhirIdSchema = v.pipe(v.string(), v.regex(/^[A-Za-z0-9\-\.]{1,64}$/));
+export const FhirCodeSchema = v.pipe(v.string(), v.regex(/^[^\s]+(\s[^\s]+)*$/));
+
+// Date/time primitives (Valibot ISO actions)
+export const FhirDateSchema = v.pipe(v.string(), v.isoDate());
+export const FhirTimeSchema = v.pipe(v.string(), v.isoTime());
+export const FhirDateTimeSchema = v.pipe(v.string(), v.isoDateTime());
+export const FhirInstantSchema = v.pipe(v.string(), v.isoTimestamp());
+
+// URI-based primitives
+export const FhirUriSchema = v.pipe(v.string(), v.url());
+export const FhirUrlSchema = v.pipe(v.string(), v.url());
+export const FhirCanonicalSchema = v.pipe(v.string(), v.url());
+export const FhirOidSchema = v.pipe(v.string(), v.regex(/^urn:oid:[0-2](\.(0|[1-9]\d*))+$/));
+export const FhirUuidSchema = v.pipe(v.string(), v.uuid());
+
+// Text primitives
+export const FhirMarkdownSchema = v.string();
+export const FhirBase64BinarySchema = v.pipe(v.string(), v.base64());
+export const FhirXhtmlSchema = v.string();
+export const FhirInteger64Schema = v.string();

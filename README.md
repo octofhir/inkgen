@@ -136,7 +136,8 @@ branded_primitives = true
 # structural_guards = false
 # generate_profiles = false
 # generate_valuesets = false
-# zod_schemas = false
+# validation_schemas = false
+# validation_library = "valibot"   # "zod" (default) or "valibot"
 ```
 
 ### Generate options

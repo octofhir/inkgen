@@ -18,7 +18,8 @@ output_dir = "generated"
 # generate_profiles = false
 # generate_valuesets = false
 # profile_classes = false
-# zod_schemas = false
+# validation_schemas = false
+# validation_library = "valibot"   # "zod" (default) or "valibot"
 
 branded_primitives = true    # Use branded types for FHIR primitives (compile-time safety)
 

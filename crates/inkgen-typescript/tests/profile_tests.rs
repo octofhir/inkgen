@@ -9,6 +9,7 @@ use inkgen_core::ir::{
     Derivation, ElementCardinality, ElementDefinition, ElementMax, ProfileLineage,
     ResourceDefinition, ResourceKind,
 };
+use inkgen_typescript::ValidationLibrary;
 use inkgen_typescript::extensions::RenderExtension;
 use inkgen_typescript::profiles::{ConstrainedElement, FixedElement, ProfileInfo};
 use insta::assert_snapshot;
@@ -89,7 +90,7 @@ fn test_profile_class_structure() {
     let method_config = ProfileMethodConfig::default();
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     // Check class declaration
@@ -142,7 +143,7 @@ fn test_extension_accessor_typed_style() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     // Should have typed accessors
@@ -184,7 +185,7 @@ fn test_extension_accessor_raw_style() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     // Should have raw Extension accessors
@@ -222,7 +223,7 @@ fn test_extension_accessor_both_style() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     // Should have both typed accessors
@@ -260,7 +261,7 @@ fn test_complex_extension_accessor() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     // Complex extensions should generate Extension type accessors
@@ -301,7 +302,7 @@ fn test_fixed_value_constraints() {
 
     let method_config = ProfileMethodConfig::default();
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     // Check fixed value declarations
@@ -337,7 +338,7 @@ fn test_serialization_methods() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     // Check toJson method
@@ -378,7 +379,7 @@ fn test_validation_methods_without_zod() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     // Check fromJson method
@@ -419,7 +420,7 @@ fn test_validation_methods_with_zod() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, true)
+        .generate_typescript_with_template(&tera, &method_config, true, ValidationLibrary::Zod)
         .unwrap();
 
     // Check Zod schema generation
@@ -462,7 +463,7 @@ fn test_serialization_disabled() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     // Should NOT have serialization methods
@@ -489,7 +490,7 @@ fn test_validation_disabled() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     // Should NOT have validation methods
@@ -517,7 +518,7 @@ fn test_extension_accessors_disabled() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     // Should NOT have any extension accessors
@@ -559,7 +560,7 @@ fn test_all_methods_disabled() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     // Should have minimal class structure
@@ -604,7 +605,7 @@ fn test_zod_schema_generation() {
 
     let method_config = ProfileMethodConfig::default();
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, true)
+        .generate_typescript_with_template(&tera, &method_config, true, ValidationLibrary::Zod)
         .unwrap();
 
     // Check Zod schema structure
@@ -633,7 +634,7 @@ fn test_type_guard_generation() {
     let method_config = ProfileMethodConfig::default();
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     // Check type guard function
@@ -671,7 +672,7 @@ fn test_multiple_extensions() {
 
     let method_config = ProfileMethodConfig::default();
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     // Should have accessors for both extensions
@@ -848,7 +849,7 @@ fn test_profile_snapshot_all_features() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, true)
+        .generate_typescript_with_template(&tera, &method_config, true, ValidationLibrary::Zod)
         .unwrap();
 
     assert_snapshot!("profile_all_features", generated);
@@ -868,7 +869,7 @@ fn test_profile_snapshot_typed_accessors() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     assert_snapshot!("profile_typed_accessors", generated);
@@ -888,7 +889,7 @@ fn test_profile_snapshot_raw_accessors() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     assert_snapshot!("profile_raw_accessors", generated);
@@ -907,7 +908,7 @@ fn test_profile_snapshot_minimal_config() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     assert_snapshot!("profile_minimal_config", generated);
@@ -927,7 +928,7 @@ fn test_profile_snapshot_complex_extension() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     assert_snapshot!("profile_complex_extension", generated);
@@ -979,7 +980,7 @@ fn test_profile_snapshot_multiple_constraints() {
 
     let method_config = ProfileMethodConfig::default();
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, true)
+        .generate_typescript_with_template(&tera, &method_config, true, ValidationLibrary::Zod)
         .unwrap();
 
     assert_snapshot!("profile_multiple_constraints", generated);

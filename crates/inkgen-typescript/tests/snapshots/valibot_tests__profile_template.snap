@@ -1,0 +1,83 @@
+---
+source: crates/inkgen-typescript/tests/valibot_tests.rs
+expression: generated
+---
+
+import * as v from 'valibot';
+import { PatientSchema } from "./Patient";
+/**
+ * Audit Patient Profile
+ *
+ * Patient constrained for audit events
+ * @profile http://example.org/fhir/StructureDefinition/audit-patient
+ */
+export class AuditPatient extends Patient {
+  /** Profile URL for runtime validation */
+  readonly __profile = 'http://example.org/fhir/StructureDefinition/audit-patient';
+
+  // Fixed value constraints
+  /** Fixed value: true */
+  declare active: true;
+
+  // Must-support elements (required by profile)
+  /** Required by profile: Patient.identifier */
+  declare identifier: NonNullable<Patient['identifier']>;
+
+  /**
+   * Serialize to JSON string
+   * @param pretty Whether to pretty-print the JSON
+   */
+  toJson(pretty?: boolean): string {
+    return pretty ? JSON.stringify(this, null, 2) : JSON.stringify(this);
+  }
+
+  /**
+   * Convert to plain object (strips __profile metadata)
+   */
+  toObject(): Patient {
+    const { __profile, ...rest } = this;
+    return rest as Patient;
+  }
+
+  /**
+   * Create instance from JSON string with validation
+   * @param json JSON string to parse
+   * @throws {v.ValiError} if validation fails
+   */
+  static fromJson(json: string): AuditPatient {
+    const parsed = JSON.parse(json);
+    return AuditPatient.fromObject(parsed);
+  }
+
+  /**
+   * Create instance from object with validation
+   * @param obj Object to validate
+   * @throws {v.ValiError} if validation fails
+   */
+  static fromObject(obj: unknown): AuditPatient {
+    const validated = v.parse(AuditPatientSchema, obj);
+    return Object.assign(new AuditPatient(), validated);
+  }
+}
+
+/**
+ * Valibot schema for AuditPatient
+ */
+export const AuditPatientSchema = v.intersect([
+  PatientSchema,
+  v.object({
+    identifier: v.pipe(v.array(v.unknown()), v.minLength(1)),
+  }),
+]);
+
+/**
+ * Type inferred from Valibot schema
+ */
+export type AuditPatientValidated = v.InferOutput<typeof AuditPatientSchema>;
+
+/**
+ * Type guard to check if a value is a AuditPatient
+ */
+export function isAuditPatient(value: Patient): value is AuditPatient {
+  return '__profile' in value && value.__profile === 'http://example.org/fhir/StructureDefinition/audit-patient';
+}

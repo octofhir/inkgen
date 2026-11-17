@@ -240,7 +240,8 @@ version = "4.0.1"
 # generate_profiles = false        # Skip profile classes/interfaces
 # generate_valuesets = false       # Skip ValueSet helpers
 # profile_classes = false          # Generate interfaces instead of classes for profiles
-# zod_schemas = false              # Skip Zod schema generation
+# validation_schemas = false       # Skip runtime-validation schema generation
+# validation_library = "valibot"   # Runtime-validation library: "zod" (default) or "valibot"
 "#;
 
 #[tokio::main]
@@ -547,7 +548,7 @@ async fn generate_typescript(args: GenerateTypescriptArgs) -> Result<()> {
         dependency_analyzer,
         Some(type_registry),
         Some(cache.clone()),
-    );
+    )?;
 
     // --verify: regenerate into a temp dir and diff against the real output,
     // without touching it. Hold the TempDir guard until after the comparison.

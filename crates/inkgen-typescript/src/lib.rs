@@ -1,7 +1,8 @@
-//! TypeScript/Zod code-generation backend for inkgen.
+//! TypeScript code-generation backend for inkgen.
 //!
 //! Renders resolved FHIR package IR into TypeScript interfaces or classes,
-//! Zod schemas, ValueSets, profiles and interop helpers via Tera templates.
+//! Zod or Valibot schemas, ValueSets, profiles and interop helpers via Tera
+//! templates.
 
 use std::collections::{HashMap, HashSet};
 // Only tests touch the filesystem now — the backend returns files in memory and
@@ -30,7 +31,11 @@ use std::sync::LazyLock;
 use tera::{Context as TeraContext, Tera};
 use tracing::{debug, info, warn};
 
-pub use config::{GenerationMode, NamingConvention, OutputStructure, TypescriptGeneratorConfig};
+use schema::{SchemaExpr, SchemaInfo};
+
+pub use config::{
+    GenerationMode, NamingConvention, OutputStructure, TypescriptGeneratorConfig, ValidationLibrary,
+};
 
 /// Well-known external code systems that are not included in FHIR packages.
 /// These are external terminology standards that we don't attempt to resolve.
@@ -94,12 +99,10 @@ pub mod nested;
 pub mod overlays;
 pub mod profile_helpers;
 pub mod profiles;
+pub mod schema;
 pub mod slices;
 pub mod template_functions;
-/// Pluggable runtime-validation code generation (currently Zod schemas).
-pub mod validation;
 pub mod valuesets;
-pub mod zod;
 
 mod config {
     use super::*;
@@ -123,6 +126,93 @@ mod config {
                 "class" => Self::Class,
                 "class_with_builder" | "class-with-builder" => Self::ClassWithBuilder,
                 _ => Self::Interface,
+            }
+        }
+    }
+
+    /// Runtime-validation library used for generated schemas.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum ValidationLibrary {
+        /// Zod schemas (method-chaining API).
+        Zod,
+        /// Valibot schemas (modular pipe API).
+        Valibot,
+    }
+
+    impl ValidationLibrary {
+        /// Parse a manifest/config string; unknown values are an error.
+        pub fn parse(value: &str) -> Result<Self> {
+            match value.to_lowercase().as_str() {
+                "zod" => Ok(Self::Zod),
+                "valibot" => Ok(Self::Valibot),
+                other => anyhow::bail!(
+                    "unknown validation_library {other:?}; expected \"zod\" or \"valibot\""
+                ),
+            }
+        }
+
+        /// Library name as used in config and generated package.json.
+        pub fn name(self) -> &'static str {
+            match self {
+                Self::Zod => "zod",
+                Self::Valibot => "valibot",
+            }
+        }
+
+        /// Human-readable library name for generated doc comments.
+        pub fn display_name(self) -> &'static str {
+            match self {
+                Self::Zod => "Zod",
+                Self::Valibot => "Valibot",
+            }
+        }
+
+        /// Source line importing the library.
+        pub fn import_line(self) -> &'static str {
+            match self {
+                Self::Zod => "import { z } from 'zod';",
+                Self::Valibot => "import * as v from 'valibot';",
+            }
+        }
+
+        /// Object-schema constructor.
+        pub fn object_fn(self) -> &'static str {
+            match self {
+                Self::Zod => "z.object",
+                Self::Valibot => "v.object",
+            }
+        }
+
+        /// Type-level output inference helper.
+        pub fn infer_fn(self) -> &'static str {
+            match self {
+                Self::Zod => "z.infer",
+                Self::Valibot => "v.InferOutput",
+            }
+        }
+
+        /// Explicit type annotation for recursive schema constants.
+        pub fn recursive_annotation(self) -> &'static str {
+            match self {
+                Self::Zod => ": z.ZodType<object>",
+                Self::Valibot => ": v.GenericSchema<Record<string, unknown>>",
+            }
+        }
+
+        /// Semver range used in the generated package.json.
+        pub fn dependency_version(self) -> &'static str {
+            match self {
+                Self::Zod => "^4.0.0",
+                Self::Valibot => "^1.0.0",
+            }
+        }
+
+        /// Error type thrown by the library's parse function (for doc comments).
+        pub fn error_type(self) -> &'static str {
+            match self {
+                Self::Zod => "z.ZodError",
+                Self::Valibot => "v.ValiError",
             }
         }
     }
@@ -247,10 +337,10 @@ mod config {
         pub profile_classes: bool,
         /// Profile method generation configuration
         pub profile_methods: ProfileMethodConfig,
-        /// Generate Zod schemas for runtime validation
-        pub zod_schemas: bool,
-        /// Co-locate Zod schemas in same file as types
-        pub zod_colocated: bool,
+        /// Generate runtime-validation schemas
+        pub validation_schemas: bool,
+        /// Runtime-validation library for generated schemas
+        pub validation_library: ValidationLibrary,
         /// Generate branded primitive types for type-level safety
         pub branded_primitives: bool,
         // Interop utilities
@@ -270,8 +360,6 @@ mod config {
         pub tree_shaking: TreeShakingLevel,
         /// Import style (named vs namespace)
         pub import_style: ImportStyle,
-        /// Lazy load validation schemas
-        pub lazy_schemas: bool,
         // Project files configuration
         /// Settings for project scaffolding files (package.json, tsconfig, ...).
         pub config: ProjectFilesConfig,
@@ -298,12 +386,11 @@ mod config {
                 .field("package_cache", &"<PackageCache>")
                 .field("profile_classes", &self.profile_classes)
                 .field("profile_methods", &self.profile_methods)
-                .field("zod_schemas", &self.zod_schemas)
-                .field("zod_colocated", &self.zod_colocated)
+                .field("validation_schemas", &self.validation_schemas)
+                .field("validation_library", &self.validation_library)
                 .field("branded_primitives", &self.branded_primitives)
                 .field("tree_shaking", &self.tree_shaking)
                 .field("import_style", &self.import_style)
-                .field("lazy_schemas", &self.lazy_schemas)
                 .finish()
         }
     }
@@ -314,7 +401,7 @@ mod config {
             ir: std::sync::Arc<inkgen_core::PackageIr>,
             section: Option<&TypescriptLanguageConfig>,
             output_dir: PathBuf,
-        ) -> Self {
+        ) -> Result<Self> {
             let mut config = Self::from_manifest(
                 section,
                 output_dir,
@@ -325,9 +412,9 @@ mod config {
                 None,
                 #[cfg(feature = "resolver")]
                 None,
-            );
+            )?;
             config.package_ir = Some(ir);
-            config
+            Ok(config)
         }
 
         /// Build a config from the manifest's TypeScript section, applying CLI
@@ -342,7 +429,7 @@ mod config {
             dependency_analyzer: Option<DependencyAnalyzer>,
             type_registry: Option<super::imports::TypeRegistry>,
             #[cfg(feature = "resolver")] package_cache: Option<std::sync::Arc<PackageCache>>,
-        ) -> Self {
+        ) -> Result<Self> {
             let section = section.cloned();
             let mode = section
                 .as_ref()
@@ -368,9 +455,15 @@ mod config {
                 .map(|s| s.profile_methods.clone())
                 .unwrap_or_default();
 
-            let zod_schemas = section.as_ref().map(|s| s.zod_schemas).unwrap_or(true);
+            let validation_schemas = section
+                .as_ref()
+                .map(|s| s.validation_schemas)
+                .unwrap_or(true);
 
-            let zod_colocated = section.as_ref().map(|s| s.zod_colocated).unwrap_or(true);
+            let validation_library = match section.as_ref() {
+                Some(s) => ValidationLibrary::parse(&s.validation_library)?,
+                None => ValidationLibrary::Zod,
+            };
 
             let branded_primitives = section
                 .as_ref()
@@ -441,8 +534,6 @@ mod config {
                 .map(|s| ImportStyle::from_str(&s.import_style))
                 .unwrap_or(ImportStyle::Named);
 
-            let lazy_schemas = section.as_ref().map(|s| s.lazy_schemas).unwrap_or(false);
-
             let config = section
                 .as_ref()
                 .map(|s| s.config.clone())
@@ -459,7 +550,7 @@ mod config {
                     .join(output_dir);
             }
 
-            Self {
+            Ok(Self {
                 mode,
                 structural_guards,
                 naming,
@@ -480,8 +571,8 @@ mod config {
                 package_ir: None,
                 profile_classes,
                 profile_methods,
-                zod_schemas,
-                zod_colocated,
+                validation_schemas,
+                validation_library,
                 branded_primitives,
                 generate_interop,
                 interop_typed_references,
@@ -491,9 +582,8 @@ mod config {
                 interop_search_advanced,
                 tree_shaking,
                 import_style,
-                lazy_schemas,
                 config,
-            }
+            })
         }
     }
 }
@@ -978,6 +1068,18 @@ struct RenderStructure {
     output_folder: String,
     /// Generate Zod schema
     generate_zod_schema: bool,
+    /// Validation library dialect ("zod" or "valibot")
+    validation_library: ValidationLibrary,
+    /// Library import line for the schema block
+    validation_import: &'static str,
+    /// Library display name for doc comments
+    validation_name: &'static str,
+    /// Object-schema constructor for the dialect
+    schema_object: &'static str,
+    /// Output-type inference helper for the dialect
+    infer_type: &'static str,
+    /// Type annotation for recursive schema constants
+    recursive_annotation: &'static str,
     /// Zod schema fields
     zod_fields: Vec<ZodSchemaField>,
     /// `value[x]` choice groups for the at-most-one parse refinement
@@ -1023,7 +1125,8 @@ struct PackageOutput {
     profiles: Vec<ProfileOutput>,
     extensions: IndexMap<String, extensions::RenderExtension>,
     branded_primitives: bool,
-    zod_schemas: bool,
+    validation_schemas: bool,
+    validation_library: ValidationLibrary,
     // Interop utilities
     generate_interop: bool,
     interop_config: Option<interop::InteropConfig>,
@@ -2122,7 +2225,8 @@ impl TypescriptGenerator {
                     let mut ts_code = profile_info.generate_typescript(
                         profile_as_class,
                         with_methods,
-                        self.config.zod_schemas,
+                        self.config.validation_schemas,
+                        self.config.validation_library,
                         generation_context.as_ref(),
                     );
                     // Typed slice accessors for value/pattern-discriminated array
@@ -2157,7 +2261,7 @@ impl TypescriptGenerator {
                         profile_value_exports.push(acc.fn_name.clone());
                     }
 
-                    if self.config.zod_schemas {
+                    if self.config.validation_schemas {
                         profile_value_exports.push(format!("{}Schema", profile_info.type_name));
                     }
 
@@ -2253,7 +2357,8 @@ impl TypescriptGenerator {
             profiles,
             extensions: all_extensions,
             branded_primitives: self.config.branded_primitives,
-            zod_schemas: self.config.zod_schemas,
+            validation_schemas: self.config.validation_schemas,
+            validation_library: self.config.validation_library,
             generate_interop,
             interop_config,
             resource_types,
@@ -2287,7 +2392,8 @@ fn write_package(package: &PackageOutput, files: &mut Vec<(PathBuf, String)>) ->
     // Write FHIR primitives with branded types first (needed by all other files)
     let mut primitives_context = TeraContext::new();
     primitives_context.insert("branded_primitives", &package.branded_primitives);
-    primitives_context.insert("zod_schemas", &package.zod_schemas);
+    primitives_context.insert("validation_schemas", &package.validation_schemas);
+    primitives_context.insert("validation_library", package.validation_library.name());
     let primitives_content = templates::render("primitives.ts.tera", &primitives_context)?;
     files.push((package.path.join("primitives.ts"), primitives_content));
 
@@ -2395,7 +2501,7 @@ fn write_package(package: &PackageOutput, files: &mut Vec<(PathBuf, String)>) ->
     // Generate package.json with dependencies at root output directory
     // Only generate if enabled in config (default: true)
     if package.project_config.generate_package_json
-        && (package.generate_interop || package.zod_schemas)
+        && (package.generate_interop || package.validation_schemas)
     {
         use serde_json::json;
 
@@ -2407,9 +2513,12 @@ fn write_package(package: &PackageOutput, files: &mut Vec<(PathBuf, String)>) ->
             if !package_json_path.exists() {
                 let mut dependencies = serde_json::Map::new();
 
-                // Add zod if validation is enabled (use v4)
-                if package.zod_schemas {
-                    dependencies.insert("zod".to_string(), json!("^4.0.0"));
+                // Add the validation library if schema generation is enabled
+                if package.validation_schemas {
+                    dependencies.insert(
+                        package.validation_library.name().to_string(),
+                        json!(package.validation_library.dependency_version()),
+                    );
                 }
 
                 let package_json = json!({
@@ -2589,7 +2698,7 @@ fn build_render_structure(
         }
 
         // Add Zod types to nested fields if enabled
-        if config.zod_schemas {
+        if config.validation_schemas {
             for field in &mut nested_fields {
                 // Find the element for this field
                 if let Some(element) = nested_children.iter().find(|e| {
@@ -2602,18 +2711,16 @@ fn build_render_structure(
                     naming::camel_case(&field_name) == field.name
                 }) {
                     if let Some(nested_type_name) = element_to_nested_type.get(&element.path) {
-                        let base_info = crate::zod::ZodSchemaInfo {
-                            schema: format!("z.lazy(() => {}Schema)", nested_type_name),
+                        let base_info = SchemaInfo {
+                            expr: SchemaExpr::Lazy(nested_type_name.clone()),
                             type_refs: Vec::new(),
                         };
                         let schema_info =
-                            crate::zod::apply_cardinality(base_info, &element.cardinality);
-                        field.zod_type = Some(schema_info.schema);
-                    } else if let Some(schema_info) =
-                        crate::zod::element_to_zod_schema_info(element)
-                    {
+                            schema::apply_cardinality(base_info, &element.cardinality);
+                        field.zod_type = Some(schema_info.render(config.validation_library));
+                    } else if let Some(schema_info) = schema::element_to_schema_info(element) {
                         nested_schema_type_refs.extend(schema_info.type_refs.clone());
-                        field.zod_type = Some(schema_info.schema);
+                        field.zod_type = Some(schema_info.render(config.validation_library));
                     }
                 }
             }
@@ -2622,13 +2729,13 @@ fn build_render_structure(
         // Emit FHIR primitive-extension companions (`_field`) for primitive
         // fields. The companion carries both its type and Zod schema, so it
         // renders in the nested interface and the nested Zod schema.
-        inject_primitive_companions(&mut nested_fields, type_name);
+        inject_primitive_companions(&mut nested_fields, type_name, config.validation_library);
 
-        // Detect if this nested type uses z.lazy() (needs type annotation for TypeScript)
+        // Detect if this nested type uses lazy schemas (needs type annotation for TypeScript)
         let is_recursive = nested_fields
             .iter()
             .filter_map(|f| f.zod_type.as_ref())
-            .any(|zod_type| zod_type.contains("z.lazy("));
+            .any(|zod_type| zod_type.contains("z.lazy(") || zod_type.contains("v.lazy("));
 
         nested_types.push(RenderNestedType {
             type_name: nested_info.type_name,
@@ -2694,7 +2801,7 @@ fn build_render_structure(
         .collect();
 
     // Emit FHIR primitive-extension companions (`_field`) on the interface/class.
-    inject_primitive_companions(&mut fields, type_name);
+    inject_primitive_companions(&mut fields, type_name, config.validation_library);
 
     ensure_field_dependencies(
         &fields,
@@ -2733,7 +2840,7 @@ fn build_render_structure(
     // We do this BEFORE grouping imports to ensure schema-referenced types are included.
     let mut schema_type_refs_to_add: HashMap<String, (String, String)> = HashMap::new();
 
-    if config.zod_schemas {
+    if config.validation_schemas {
         // Pre-scan to collect all types that will be referenced in schemas
         for element in top_level_elements(definition)
             .iter()
@@ -2745,7 +2852,7 @@ fn build_render_structure(
                 continue;
             }
 
-            if let Some(schema_info) = crate::zod::element_to_zod_schema_info(element) {
+            if let Some(schema_info) = schema::element_to_schema_info(element) {
                 for type_ref in &schema_info.type_refs {
                     // Skip if already in imports_map
                     if imports_map.contains_key(type_ref) {
@@ -2858,7 +2965,7 @@ fn build_render_structure(
     };
 
     // Generate Zod schema fields if enabled, collecting schema imports
-    let generate_zod_schema = config.zod_schemas;
+    let generate_zod_schema = config.validation_schemas;
     let (zod_fields, schema_imports, valueset_value_imports, choice_groups) = if generate_zod_schema
     {
         let mut fields = Vec::new();
@@ -2869,13 +2976,14 @@ fn build_render_structure(
             definition.kind,
             ResourceKind::Resource | ResourceKind::Logical
         ) {
-            // For abstract base types (Resource, DomainResource), use z.string()
+            // For abstract base types (Resource, DomainResource), use a plain string
             // For concrete resources, use literal type for validation
             let zod_type = if is_abstract_base {
-                "z.string()".to_string()
+                SchemaExpr::Primitive(schema::FhirPrimitive::String)
             } else {
-                format!("z.literal(\"{}\")", type_name)
-            };
+                SchemaExpr::Literal(type_name.to_string())
+            }
+            .render(config.validation_library);
             fields.push(ZodSchemaField {
                 name: "resourceType".to_string(),
                 zod_type,
@@ -2968,7 +3076,7 @@ fn build_render_structure(
             // Keep only the specific variants (e.g., "deceasedBoolean", "deceasedDateTime")
             .filter(|element| !element.path.contains("[x]"))
         {
-            let field_name = crate::zod::element_to_field_name(element);
+            let field_name = schema::element_to_field_name(element);
 
             // Check if this element has a ValueSet binding that lowers to a
             // closed/enumerated type (required/extensible). The decision is
@@ -2979,17 +3087,17 @@ fn build_render_structure(
                     enumerated_valueset_type(config, binding, valueset_url_to_type)
             {
                 let vs_type_name = &vs_type_name;
-                // Use z.enum for ValueSet-bound fields
+                // Use an enum/picklist over the ValueSet values array
                 let values_name = format!("{}Values", vs_type_name);
-                let base_info = crate::zod::ZodSchemaInfo {
-                    schema: format!("z.enum({})", values_name),
+                let base_info = SchemaInfo {
+                    expr: SchemaExpr::Enum(values_name.clone()),
                     type_refs: Vec::new(),
                 };
-                let schema_info = crate::zod::apply_cardinality(base_info, &element.cardinality);
+                let schema_info = schema::apply_cardinality(base_info, &element.cardinality);
 
                 fields.push(ZodSchemaField {
                     name: field_name.clone(),
-                    zod_type: schema_info.schema,
+                    zod_type: schema_info.render(config.validation_library),
                 });
 
                 // Add import for the ValueSet Values array
@@ -3011,18 +3119,17 @@ fn build_render_structure(
                 // Check if this element has a nested type (backbone element)
                 if let Some(nested_type_name) = element_to_nested_type.get(&element.path) {
                     // Use the specific nested type schema (defined in same file, no import needed)
-                    let base_info = crate::zod::ZodSchemaInfo {
-                        schema: format!("{}Schema", nested_type_name),
+                    let base_info = SchemaInfo {
+                        expr: SchemaExpr::Ref(nested_type_name.clone()),
                         type_refs: Vec::new(), // Nested types are in the same file
                     };
-                    let schema_info =
-                        crate::zod::apply_cardinality(base_info, &element.cardinality);
+                    let schema_info = schema::apply_cardinality(base_info, &element.cardinality);
 
                     fields.push(ZodSchemaField {
                         name: field_name,
-                        zod_type: schema_info.schema,
+                        zod_type: schema_info.render(config.validation_library),
                     });
-                } else if let Some(schema_info) = crate::zod::element_to_zod_schema_info(element) {
+                } else if let Some(schema_info) = schema::element_to_schema_info(element) {
                     // Check if this is a self-referential field (element type == current type)
                     let is_self_reference = element.types.iter().any(|t| {
                         let type_code = naming::pascal_case(&t.code);
@@ -3030,19 +3137,19 @@ fn build_render_structure(
                     });
 
                     let final_schema = if is_self_reference {
-                        // Wrap in z.lazy() to handle forward reference
-                        let base_schema = format!("z.lazy(() => {}Schema)", type_name);
-                        let base_info = crate::zod::ZodSchemaInfo {
-                            schema: base_schema,
+                        // Defer the reference to handle the forward reference
+                        let base_info = SchemaInfo {
+                            expr: SchemaExpr::Lazy(type_name.to_string()),
                             type_refs: Vec::new(),
                         };
-                        crate::zod::apply_cardinality(base_info, &element.cardinality).schema
+                        schema::apply_cardinality(base_info, &element.cardinality)
+                            .render(config.validation_library)
                     } else {
                         // Collect type references for schema imports (not for self-references)
                         for type_ref in &schema_info.type_refs {
                             add_schema_type_ref(&mut schema_type_refs, type_ref);
                         }
-                        schema_info.schema
+                        schema_info.render(config.validation_library)
                     };
 
                     // Record choice-variant membership for the choice refinement
@@ -3213,7 +3320,12 @@ fn build_render_structure(
         schema_imports.sort_by(|a, b| a.path.cmp(&b.path));
 
         // Mirror the interface's `_field` companions in the Zod schema.
-        inject_primitive_companions_zod(&mut fields, &primitive_fields, type_name);
+        inject_primitive_companions_zod(
+            &mut fields,
+            &primitive_fields,
+            type_name,
+            config.validation_library,
+        );
 
         (
             fields,
@@ -3355,11 +3467,11 @@ fn build_render_structure(
     value_exports.sort();
     value_exports.dedup();
 
-    // Detect if any zod_field uses z.lazy() - these need type annotation for TypeScript
+    // Detect if any schema field uses a lazy reference - these need type annotation for TypeScript
     // This includes self-references and forward references to other types
     let is_recursive_schema = zod_fields
         .iter()
-        .any(|field| field.zod_type.contains("z.lazy("));
+        .any(|field| field.zod_type.contains("z.lazy(") || field.zod_type.contains("v.lazy("));
 
     RenderStructure {
         type_name: type_name.to_string(),
@@ -3387,6 +3499,12 @@ fn build_render_structure(
         is_profile,
         output_folder,
         generate_zod_schema,
+        validation_library: config.validation_library,
+        validation_import: config.validation_library.import_line(),
+        validation_name: config.validation_library.display_name(),
+        schema_object: config.validation_library.object_fn(),
+        infer_type: config.validation_library.infer_fn(),
+        recursive_annotation: config.validation_library.recursive_annotation(),
         zod_fields,
         choice_groups,
         is_recursive_schema,
@@ -3665,8 +3783,12 @@ fn map_field_with_nested_context(
 /// `Element` (`{ id?, extension? }`); arrays use a parallel `(Element | null)[]`.
 /// Returns `None` for non-primitive fields. `current_type` is the type being
 /// generated — when it is `Element` itself the schema is self-referential and
-/// must defer with `z.lazy`.
-fn primitive_extension_companion(field: &RenderField, current_type: &str) -> Option<RenderField> {
+/// must be deferred.
+fn primitive_extension_companion(
+    field: &RenderField,
+    current_type: &str,
+    library: ValidationLibrary,
+) -> Option<RenderField> {
     if !field.is_primitive {
         return None;
     }
@@ -3676,16 +3798,7 @@ fn primitive_extension_companion(field: &RenderField, current_type: &str) -> Opt
     } else {
         "Element".to_string()
     };
-    let element_schema = if current_type == "Element" {
-        "z.lazy(() => ElementSchema)".to_string()
-    } else {
-        "ElementSchema".to_string()
-    };
-    let zod_type = if is_array {
-        format!("z.array({element_schema}.nullable()).optional()")
-    } else {
-        format!("{element_schema}.optional()")
-    };
+    let zod_type = companion_schema_expr(current_type, is_array, library).render(library);
     Some(RenderField {
         name: format!("_{}", field.name),
         type_expr,
@@ -3699,12 +3812,43 @@ fn primitive_extension_companion(field: &RenderField, current_type: &str) -> Opt
     })
 }
 
+/// Schema expression for a primitive-extension companion: an optional
+/// `Element`, or an optional array of nullable `Element` for array fields.
+/// Valibot always defers the reference: `Element` participates in import
+/// cycles (Element ↔ Extension) and eager evaluation would see an
+/// uninitialized binding.
+fn companion_schema_expr(
+    current_type: &str,
+    is_array: bool,
+    library: ValidationLibrary,
+) -> SchemaExpr {
+    let element_schema = if current_type == "Element" || library == ValidationLibrary::Valibot {
+        SchemaExpr::Lazy("Element".to_string())
+    } else {
+        SchemaExpr::Ref("Element".to_string())
+    };
+    let inner = if is_array {
+        SchemaExpr::Array {
+            item: Box::new(SchemaExpr::Nullable(Box::new(element_schema))),
+            min: None,
+            max: None,
+        }
+    } else {
+        element_schema
+    };
+    SchemaExpr::Optional(Box::new(inner))
+}
+
 /// Insert a primitive-extension companion immediately after each primitive
 /// field, in place.
-fn inject_primitive_companions(fields: &mut Vec<RenderField>, current_type: &str) {
+fn inject_primitive_companions(
+    fields: &mut Vec<RenderField>,
+    current_type: &str,
+    library: ValidationLibrary,
+) {
     let mut out = Vec::with_capacity(fields.len());
     for field in std::mem::take(fields) {
-        let companion = primitive_extension_companion(&field, current_type);
+        let companion = primitive_extension_companion(&field, current_type, library);
         out.push(field);
         if let Some(companion) = companion {
             out.push(companion);
@@ -3713,28 +3857,20 @@ fn inject_primitive_companions(fields: &mut Vec<RenderField>, current_type: &str
     *fields = out;
 }
 
-/// Insert the matching Zod companion field after each primitive field in a Zod
-/// field list, mirroring [`inject_primitive_companions`]. `primitives` maps a
-/// primitive field name → `is_array`.
+/// Insert the matching schema companion field after each primitive field in a
+/// schema field list, mirroring [`inject_primitive_companions`]. `primitives`
+/// maps a primitive field name → `is_array`.
 fn inject_primitive_companions_zod(
     zod_fields: &mut Vec<ZodSchemaField>,
     primitives: &IndexMap<String, bool>,
     current_type: &str,
+    library: ValidationLibrary,
 ) {
-    let element_schema = if current_type == "Element" {
-        "z.lazy(() => ElementSchema)".to_string()
-    } else {
-        "ElementSchema".to_string()
-    };
     let mut out = Vec::with_capacity(zod_fields.len());
     for field in std::mem::take(zod_fields) {
         let companion = primitives.get(&field.name).map(|is_array| ZodSchemaField {
             name: format!("_{}", field.name),
-            zod_type: if *is_array {
-                format!("z.array({element_schema}.nullable()).optional()")
-            } else {
-                format!("{element_schema}.optional()")
-            },
+            zod_type: companion_schema_expr(current_type, *is_array, library).render(library),
         });
         out.push(field);
         if let Some(companion) = companion {
@@ -4083,8 +4219,8 @@ mod tests {
             package_ir: None,
             profile_classes: false,
             profile_methods: ProfileMethodConfig::default(),
-            zod_schemas: false,
-            zod_colocated: true,
+            validation_schemas: false,
+            validation_library: ValidationLibrary::Zod,
             branded_primitives: false,
             generate_interop: false,
             interop_typed_references: false,
@@ -4094,7 +4230,6 @@ mod tests {
             interop_search_advanced: false,
             tree_shaking: config::TreeShakingLevel::None,
             import_style: config::ImportStyle::Named,
-            lazy_schemas: false,
             config: ProjectFilesConfig::default(),
         };
         let ir = inkgen_core::build_package_ir(
@@ -4263,7 +4398,7 @@ mod tests {
 
         let mut context = TeraContext::new();
         context.insert("branded_primitives", &false);
-        context.insert("zod_schemas", &false);
+        context.insert("validation_schemas", &false);
 
         let result = render("primitives.ts.tera", &context);
         assert!(result.is_ok(), "primitives template should render");
@@ -4282,7 +4417,7 @@ mod tests {
 
         let mut context = TeraContext::new();
         context.insert("branded_primitives", &true);
-        context.insert("zod_schemas", &false);
+        context.insert("validation_schemas", &false);
 
         let result = render("primitives.ts.tera", &context);
         assert!(result.is_ok(), "primitives template should render");
@@ -4303,7 +4438,8 @@ mod tests {
 
         let mut context = TeraContext::new();
         context.insert("branded_primitives", &true);
-        context.insert("zod_schemas", &true);
+        context.insert("validation_schemas", &true);
+        context.insert("validation_library", "zod");
 
         let result = render("primitives.ts.tera", &context);
         assert!(result.is_ok(), "primitives template should render");
@@ -4327,7 +4463,8 @@ mod tests {
 
         let mut context = TeraContext::new();
         context.insert("branded_primitives", &false);
-        context.insert("zod_schemas", &true);
+        context.insert("validation_schemas", &true);
+        context.insert("validation_library", "zod");
 
         let result = render("primitives.ts.tera", &context);
         assert!(result.is_ok(), "primitives template should render");
@@ -4337,5 +4474,26 @@ mod tests {
         assert!(content.contains("import { z } from 'zod'"));
         assert!(content.contains("export const FhirStringSchema = z.string()"));
         assert!(!content.contains("export function fhir"));
+    }
+
+    #[test]
+    fn test_primitives_template_valibot() {
+        use templates::*;
+        use tera::Context as TeraContext;
+
+        let mut context = TeraContext::new();
+        context.insert("branded_primitives", &true);
+        context.insert("validation_schemas", &true);
+        context.insert("validation_library", "valibot");
+
+        let result = render("primitives.ts.tera", &context);
+        assert!(result.is_ok(), "primitives template should render");
+
+        let content = result.unwrap();
+        assert!(content.contains("import * as v from 'valibot'"));
+        assert!(content.contains("export const FhirStringSchema = v.string()"));
+        assert!(content.contains("export const FhirDateSchema = v.pipe(v.string(), v.isoDate())"));
+        assert!(content.contains("return v.parse(FhirStringSchema, value) as FhirString"));
+        assert!(!content.contains("from 'zod'"));
     }
 }

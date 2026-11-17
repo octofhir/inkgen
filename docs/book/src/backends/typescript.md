@@ -65,7 +65,8 @@ output_structure = "flat"           # flat or by_package
 # generate_profiles = false
 # generate_valuesets = false
 # profile_classes = false
-# zod_schemas = false
+# validation_schemas = false
+# validation_library = "valibot"   # "zod" (default) or "valibot"
 
 # Profile method configuration (defaults shown)
 [languages.typescript.profile_methods]
@@ -96,7 +97,8 @@ validation = true
 | `extension_style` | string | "both" | Extension accessor style: "typed", "raw", or "both" |
 | `serialization` | boolean | true | Generate toJson/toObject methods |
 | `validation` | boolean | true | Generate fromJson/fromObject methods |
-| `zod_schemas` | boolean | true | Generate Zod schemas for runtime validation |
+| `validation_schemas` | boolean | true | Generate runtime-validation schemas |
+| `validation_library` | string | "zod" | Runtime-validation library: "zod" or "valibot" |
 
 ## CLI Options
 
@@ -429,7 +431,8 @@ Control which methods are generated:
 extension_accessors = false     # Disable extension accessors
 serialization = false           # Disable toJson/toObject
 validation = false              # Disable fromJson/fromObject
-zod_schemas = false    # Disable Zod schema generation
+# Schema generation is controlled in [languages.typescript]:
+# validation_schemas = false    # Disable runtime-validation schema generation
 ```
 
 **Minimal Configuration** (only type constraints):

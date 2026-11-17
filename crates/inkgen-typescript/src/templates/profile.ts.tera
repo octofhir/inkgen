@@ -4,7 +4,7 @@ import type { {{ import.types | join(sep=", ") }} } from "{{ import.path }}";
 {% endfor -%}
 {%- endif %}
 {%- if profile.generate_zod %}
-import { z } from 'zod';
+{{ profile.validation_import }}
 import { {{ profile.base_type }}Schema } from "./{{ profile.base_type }}";
 {%- endif %}
 
@@ -172,7 +172,7 @@ export class {{ profile.type_name }} extends {{ profile.base_type }} {
   /**
    * Create instance from JSON string with validation
    * @param json JSON string to parse
-   * @throws {z.ZodError} if validation fails
+   * @throws {{ '{' }}{{ profile.error_type }}{{ '}' }} if validation fails
    */
   static fromJson(json: string): {{ profile.type_name }} {
     const parsed = JSON.parse(json);
@@ -182,11 +182,15 @@ export class {{ profile.type_name }} extends {{ profile.base_type }} {
   /**
    * Create instance from object with validation
    * @param obj Object to validate
-   * @throws {z.ZodError} if validation fails
+   * @throws {{ '{' }}{{ profile.error_type }}{{ '}' }} if validation fails
    */
   static fromObject(obj: unknown): {{ profile.type_name }} {
 {%- if profile.generate_zod %}
+{%- if profile.validation_library == "valibot" %}
+    const validated = v.parse({{ profile.type_name }}Schema, obj);
+{%- else %}
     const validated = {{ profile.type_name }}Schema.parse(obj);
+{%- endif %}
     return Object.assign(new {{ profile.type_name }}(), validated);
 {%- else %}
     return Object.assign(new {{ profile.type_name }}(), obj);
@@ -198,8 +202,20 @@ export class {{ profile.type_name }} extends {{ profile.base_type }} {
 {%- if profile.generate_zod %}
 
 /**
- * Zod schema for {{ profile.type_name }}
+ * {{ profile.validation_name }} schema for {{ profile.type_name }}
  */
+{%- if profile.validation_library == "valibot" %}
+export const {{ profile.type_name }}Schema = v.intersect([
+  {{ profile.base_type }}Schema,
+  v.object({
+{%- for element in profile.must_support_elements %}
+{%- if element.zod_constraint %}
+    {{ element.field_name }}: {{ element.zod_constraint }},
+{%- endif %}
+{%- endfor %}
+  }),
+]);
+{%- else %}
 export const {{ profile.type_name }}Schema = {{ profile.base_type }}Schema.extend({
 {%- for element in profile.must_support_elements %}
 {%- if element.zod_constraint %}
@@ -207,11 +223,12 @@ export const {{ profile.type_name }}Schema = {{ profile.base_type }}Schema.exten
 {%- endif %}
 {%- endfor %}
 });
+{%- endif %}
 
 /**
- * Type inferred from Zod schema
+ * Type inferred from {{ profile.validation_name }} schema
  */
-export type {{ profile.type_name }}Validated = z.infer<typeof {{ profile.type_name }}Schema>;
+export type {{ profile.type_name }}Validated = {{ profile.infer_type }}<typeof {{ profile.type_name }}Schema>;
 {%- endif %}
 
 /**

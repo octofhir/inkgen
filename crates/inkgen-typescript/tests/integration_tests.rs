@@ -10,6 +10,7 @@ use inkgen_core::ir::{
     BindingDefinition, BindingStrength as IrBindingStrength, Derivation, ElementCardinality,
     ElementDefinition, ElementMax, ElementType, ProfileLineage, ResourceDefinition, ResourceKind,
 };
+use inkgen_typescript::ValidationLibrary;
 use inkgen_typescript::extensions::RenderExtension;
 use inkgen_typescript::profiles::{ConstrainedElement, FixedElement, ProfileInfo};
 use inkgen_typescript::valuesets::{BindingStrength, CodeInfo, ValueSetInfo};
@@ -208,7 +209,7 @@ fn test_profile_with_extensions_integration() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, true)
+        .generate_typescript_with_template(&tera, &method_config, true, ValidationLibrary::Zod)
         .expect("Profile generation should succeed");
 
     // Verify all components are present
@@ -369,7 +370,7 @@ fn test_profile_from_resource_definition_integration() {
     let tera = create_test_tera();
     let method_config = ProfileMethodConfig::default();
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .expect("Generation should succeed");
 
     // Verify generated code
@@ -426,7 +427,7 @@ fn test_configuration_combinations_integration() {
         validation: true,
     };
     let gen1 = profile
-        .generate_typescript_with_template(&tera, &config1, true)
+        .generate_typescript_with_template(&tera, &config1, true, ValidationLibrary::Zod)
         .unwrap();
     assert!(gen1.contains("get test()"), "Should have typed accessor");
     assert!(
@@ -445,7 +446,7 @@ fn test_configuration_combinations_integration() {
         validation: false,
     };
     let gen2 = profile
-        .generate_typescript_with_template(&tera, &config2, false)
+        .generate_typescript_with_template(&tera, &config2, false, ValidationLibrary::Zod)
         .unwrap();
     assert!(gen2.contains("get test()"), "Should have typed accessor");
     assert!(
@@ -466,7 +467,7 @@ fn test_configuration_combinations_integration() {
         validation: true,
     };
     let gen3 = profile
-        .generate_typescript_with_template(&tera, &config3, true)
+        .generate_typescript_with_template(&tera, &config3, true, ValidationLibrary::Zod)
         .unwrap();
     assert!(
         !gen3.contains("get test(): string"),
@@ -488,7 +489,7 @@ fn test_configuration_combinations_integration() {
         validation: false,
     };
     let gen4 = profile
-        .generate_typescript_with_template(&tera, &config4, false)
+        .generate_typescript_with_template(&tera, &config4, false, ValidationLibrary::Zod)
         .unwrap();
     assert!(!gen4.contains("get "), "Should not have any getters");
     assert!(!gen4.contains("set "), "Should not have any setters");
@@ -627,7 +628,7 @@ fn test_profile_type_guard_integration() {
 
     let method_config = ProfileMethodConfig::default();
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     // Verify type guard function
@@ -675,7 +676,7 @@ fn test_zod_schema_with_constraints_integration() {
 
     let method_config = ProfileMethodConfig::default();
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, true)
+        .generate_typescript_with_template(&tera, &method_config, true, ValidationLibrary::Zod)
         .unwrap();
 
     // Verify Zod schema with constraints
@@ -786,7 +787,7 @@ fn test_integration_snapshot_complete_profile() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, true)
+        .generate_typescript_with_template(&tera, &method_config, true, ValidationLibrary::Zod)
         .unwrap();
 
     assert_snapshot!("integration_complete_profile", generated);
@@ -834,7 +835,7 @@ fn test_integration_snapshot_profile_from_resource_definition() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     assert_snapshot!("integration_profile_from_definition", generated);
@@ -870,7 +871,7 @@ fn test_integration_snapshot_minimal_profile() {
     };
 
     let generated = profile
-        .generate_typescript_with_template(&tera, &method_config, false)
+        .generate_typescript_with_template(&tera, &method_config, false, ValidationLibrary::Zod)
         .unwrap();
 
     assert_snapshot!("integration_minimal_profile", generated);

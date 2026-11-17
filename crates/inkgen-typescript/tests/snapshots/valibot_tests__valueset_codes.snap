@@ -1,0 +1,119 @@
+---
+source: crates/inkgen-typescript/tests/valibot_tests.rs
+expression: "file(&output, \"valuesets/audit-status.ts\")"
+---
+import type { Coding } from "../../r4-core/coding";
+import type { CodeableConcept } from "../../r4-core/codeable-concept";
+
+/**
+ * Audit Status
+ * @see http://example.org/fhir/ValueSet/audit-status
+ */
+export const AuditStatusValues = ["draft", "final"] as const;
+
+// Open valueset - allows custom codes
+export type AuditStatus = typeof AuditStatusValues[number] | (string & {});
+
+/**
+ * Type guard for AuditStatus
+ */
+export function isAuditStatus(value: string): value is AuditStatus {
+  return (AuditStatusValues as readonly string[]).includes(value);
+}
+
+/**
+ * Code definitions
+ */
+export const AuditStatusDefinitions = {
+  "draft": {
+    code: "draft",
+    display: "Draft",
+  },
+  "final": {
+    code: "final",
+    display: "Final",
+  }
+} as const;
+
+/**
+ * Metadata for AuditStatus codes
+ * Includes display names, definitions, and code system information
+ */
+export const AuditStatusMetadata = {
+  canonical: "http://example.org/fhir/ValueSet/audit-status",
+  system: "http://example.org/fhir/CodeSystem/audit-status",
+  codes: {
+    "draft": {
+      code: "draft",
+      display: "Draft",
+    },
+    "final": {
+      code: "final",
+      display: "Final",
+    },
+  }
+} as const;
+
+
+/**
+ * Create a Coding for AuditStatus ValueSet
+ * @param code - The code value
+ * @param display - Optional display text (uses metadata if not provided)
+ * @returns A Coding object
+ */
+export function createAuditStatusCoding(
+  code: AuditStatus,
+  display?: string
+): Coding {
+  const meta = AuditStatusMetadata.codes[code as keyof typeof AuditStatusMetadata.codes] as { display?: string } | undefined;
+  return {
+    system: "http://example.org/fhir/CodeSystem/audit-status",
+    code: code,
+    display: (display ?? meta?.display),
+  };
+}
+
+/**
+ * Create a CodeableConcept for AuditStatus ValueSet
+ * @param code - The code value
+ * @param text - Optional text description
+ * @returns A CodeableConcept object
+ */
+export function createAuditStatusCodeableConcept(
+  code: AuditStatus,
+  text?: string
+): CodeableConcept {
+  return {
+    coding: [createAuditStatusCoding(code)],
+    text: text,
+  };
+}
+
+/**
+ * Validate if a Coding belongs to the AuditStatus ValueSet
+ * @param coding - The Coding to validate
+ * @returns true if the Coding is valid for this ValueSet
+ */
+export function isValidAuditStatusCoding(coding: Coding): boolean {
+  return (
+    coding.system === "http://example.org/fhir/CodeSystem/audit-status" &&
+    !!coding.code &&
+    isAuditStatus(coding.code)
+  );
+}
+
+/**
+ * Extract AuditStatus code from a CodeableConcept
+ * @param concept - The CodeableConcept to extract from
+ * @returns The code if found and valid, undefined otherwise
+ */
+export function extractAuditStatus(
+  concept: CodeableConcept
+): AuditStatus | undefined {
+  const coding = concept.coding?.find(c =>
+    c.system === "http://example.org/fhir/CodeSystem/audit-status"
+  );
+  return coding?.code && isAuditStatus(coding.code)
+    ? coding.code
+    : undefined;
+}

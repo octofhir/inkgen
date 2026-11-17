@@ -1,0 +1,32 @@
+---
+source: crates/inkgen-typescript/tests/valibot_tests.rs
+expression: generated
+---
+/**
+ * Audit Patient Profile
+ *
+ * Patient constrained for audit events
+ * @profile http://example.org/fhir/StructureDefinition/audit-patient
+ */
+export interface AuditPatient extends Patient {
+  /** Profile URL for runtime validation */
+  readonly __profileUrl: "http://example.org/fhir/StructureDefinition/audit-patient";
+  /** Fixed value: true */
+  active: true;
+  /** Required by profile (min: 1) */
+  identifier: NonNullable<Patient['identifier']>;
+}
+
+export function isAuditPatient(value: Patient): value is AuditPatient {
+  return '__profileUrl' in value && value.__profileUrl === 'http://example.org/fhir/StructureDefinition/audit-patient';
+}
+
+/**
+ * Valibot schema for AuditPatient
+ */
+export const AuditPatientSchema = v.intersect([
+  PatientSchema,
+  v.object({
+    identifier: v.pipe(v.array(v.unknown()), v.minLength(1)),
+  }),
+]);

@@ -188,14 +188,9 @@ pub struct TypescriptLanguageConfig {
     #[serde(default)]
     pub profile_methods: ProfileMethodConfig,
 
-    /// Generate Zod schemas for runtime validation (default: true)
+    /// Generate runtime-validation schemas (default: true)
     #[serde(default = "default_true")]
-    pub zod_schemas: bool,
-
-    /// Co-locate Zod schemas in same file as types (default: true)
-    /// If false, generates separate .schemas.ts files
-    #[serde(default = "default_true")]
-    pub zod_colocated: bool,
+    pub validation_schemas: bool,
 
     /// Generate branded primitive types for type-level safety (default: false)
     #[serde(default)]
@@ -209,10 +204,6 @@ pub struct TypescriptLanguageConfig {
     /// Import style: "named" | "namespace" (default: "named")
     #[serde(default = "default_import_style")]
     pub import_style: String,
-
-    /// Lazy load validation schemas (default: false)
-    #[serde(default)]
-    pub lazy_schemas: bool,
 
     // === Feature 2: ValueSet Enhancements ===
     /// Generate rich metadata for ValueSets (definitions, comments, system URLs) (default: true)
@@ -240,14 +231,10 @@ pub struct TypescriptLanguageConfig {
     #[serde(default = "default_profile_extension_helpers")]
     pub profile_extension_helpers: String,
 
-    // === Feature 4: Validation Backend ===
-    /// Validation backend: "zod" | "json-schema" | "superstruct" | "io-ts" | "arktype" | "none" (default: "zod")
-    #[serde(default = "default_validation_backend")]
-    pub validation_backend: String,
-
-    /// Generate modular per-element validators (default: false)
-    #[serde(default)]
-    pub validation_modular: bool,
+    // === Feature 4: Validation Library ===
+    /// Runtime-validation library: "zod" | "valibot" (default: "zod")
+    #[serde(default = "default_validation_library")]
+    pub validation_library: String,
 
     // === Feature 5: Interop Utilities ===
     /// Generate interop utilities (default: false)
@@ -341,7 +328,7 @@ fn default_profile_extension_helpers() -> String {
     "bound".to_string()
 }
 
-fn default_validation_backend() -> String {
+fn default_validation_library() -> String {
     "zod".to_string()
 }
 
@@ -629,7 +616,7 @@ mod tests {
         let ts_config = config.typescript_config().unwrap();
         assert!(ts_config.structural_guards);
         assert!(ts_config.profile_classes);
-        assert!(ts_config.zod_schemas);
+        assert!(ts_config.validation_schemas);
         assert!(ts_config.generate_profiles);
         assert!(ts_config.generate_valuesets);
     }
@@ -640,7 +627,7 @@ mod tests {
             [languages.typescript]
             structural_guards = false
             profile_classes = false
-            zod_schemas = false
+            validation_schemas = false
             generate_profiles = false
             generate_valuesets = false
         "#;
@@ -648,7 +635,7 @@ mod tests {
         let ts_config = config.typescript_config().unwrap();
         assert!(!ts_config.structural_guards);
         assert!(!ts_config.profile_classes);
-        assert!(!ts_config.zod_schemas);
+        assert!(!ts_config.validation_schemas);
         assert!(!ts_config.generate_profiles);
         assert!(!ts_config.generate_valuesets);
     }
