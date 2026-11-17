@@ -1257,6 +1257,7 @@ impl TypescriptGenerator {
                             &content,
                             type_name.clone(),
                             Some(self.config.max_valueset_size),
+                            &ir.value_sets,
                         ) {
                             Ok(Some(mut info)) => {
                                 let file_name = naming::snake_case(&type_name)
@@ -2662,6 +2663,11 @@ fn build_render_structure(
     // Map type_name → (package_folder, file_stem)
     let mut imports_map: IndexMap<String, (String, String)> = IndexMap::new();
 
+    // ValueSet Values-array imports from nested and main schema fields alike;
+    // rendered once at file level.
+    let mut valueset_value_imports: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+
     // Collect nested types (BackboneElements) first
     let collector = nested::NestedTypeCollector::new(definition);
     let nested_type_infos = collector.collect();
@@ -2718,6 +2724,25 @@ fn build_render_structure(
                         let schema_info =
                             schema::apply_cardinality(base_info, &element.cardinality);
                         field.zod_type = Some(schema_info.render(config.validation_library));
+                    } else if let Some(binding) = &element.binding
+                        && let Some(vs_type_name) =
+                            enumerated_valueset_type(config, binding, valueset_url_to_type)
+                    {
+                        let values_name = format!("{}Values", vs_type_name);
+                        let base_info = SchemaInfo {
+                            expr: SchemaExpr::Enum(values_name.clone()),
+                            type_refs: Vec::new(),
+                        };
+                        let schema_info =
+                            schema::apply_cardinality(base_info, &element.cardinality);
+                        field.zod_type = Some(schema_info.render(config.validation_library));
+                        let file_name = naming::snake_case(&vs_type_name)
+                            .replace('_', "-")
+                            .to_ascii_lowercase();
+                        valueset_value_imports
+                            .entry(format!("./valuesets/{}", file_name))
+                            .or_default()
+                            .push(values_name);
                     } else if let Some(schema_info) = schema::element_to_schema_info(element) {
                         nested_schema_type_refs.extend(schema_info.type_refs.clone());
                         field.zod_type = Some(schema_info.render(config.validation_library));
@@ -2991,10 +3016,6 @@ fn build_render_structure(
         }
 
         let mut schema_type_refs: std::collections::HashMap<String, Vec<String>> =
-            std::collections::HashMap::new();
-
-        // Track ValueSet Values imports separately - these don't need the Schema suffix
-        let mut valueset_value_imports: std::collections::HashMap<String, Vec<String>> =
             std::collections::HashMap::new();
 
         let nested_type_names: Vec<String> = nested_types

@@ -203,6 +203,69 @@ fn valibot_valueset_picklist() {
 }
 
 #[test]
+fn nested_valueset_picklist_both_dialects() {
+    let mut ir = fixture();
+    let mut gender = element("Patient.contact.gender", 0, finite(1), &["code"]);
+    gender["binding"] = json!({
+        "strength": "required",
+        "value_set": STATUS_VS_URL,
+        "description": null,
+        "additional": {},
+    });
+    gender["depth"] = json!(2);
+    gender["parent_path"] = json!("Patient.contact");
+
+    let mut contact = element(
+        "Patient.contact",
+        0,
+        json!("unbounded"),
+        &["BackboneElement"],
+    );
+    contact["is_backbone"] = json!(true);
+    contact["depth"] = json!(1);
+    contact["parent_path"] = json!("Patient");
+    contact["children"] = json!([gender]);
+    set_elements(&mut ir, vec![contact]);
+
+    ir["value_sets"][STATUS_VS_URL] = json!({
+        "resourceType": "ValueSet",
+        "id": "audit-status",
+        "url": STATUS_VS_URL,
+        "name": "AuditStatus",
+        "title": "Audit Status",
+        "status": "active",
+        "compose": {
+            "include": [{
+                "system": "http://example.org/fhir/CodeSystem/audit-status",
+                "concept": [
+                    { "code": "draft", "display": "Draft" },
+                    { "code": "final", "display": "Final" },
+                ],
+            }],
+        },
+    });
+    ir["package_descriptor"]["inventory"]["value_sets"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({
+            "canonical_url": STATUS_VS_URL,
+            "name": "AuditStatus",
+            "resource_type": "ValueSet",
+            "version": "1.0.0",
+            "status": "active",
+            "package": { "name": "audit.fhir", "version": "1.0.0" },
+        }));
+
+    for (library, name) in [
+        (ValidationLibrary::Zod, "nested_valueset_zod"),
+        (ValidationLibrary::Valibot, "nested_valueset_valibot"),
+    ] {
+        let output = generate_with(ir.clone(), library);
+        assert_snapshot!(name, file(&output, "patient.ts"));
+    }
+}
+
+#[test]
 fn valibot_nested_backbone() {
     let mut ir = fixture();
     let mut detail = element("Patient.contact.detail", 0, finite(1), &["BackboneElement"]);

@@ -3,6 +3,7 @@
 //! These tests verify the complete ValueSet generation workflow including
 //! code extraction, TypeScript generation, and binding strength handling.
 
+use indexmap::IndexMap;
 use inkgen_typescript::valuesets::{BindingStrength, CodeInfo, ValueSetInfo};
 use insta::assert_snapshot;
 use serde_json::json;
@@ -211,16 +212,26 @@ fn test_large_valueset_handling() {
     });
 
     // With max_codes=50, should return None (skipped)
-    let result =
-        ValueSetInfo::from_valueset(&valueset_json, "Large".to_string(), Some(50)).unwrap();
+    let result = ValueSetInfo::from_valueset(
+        &valueset_json,
+        "Large".to_string(),
+        Some(50),
+        &IndexMap::new(),
+    )
+    .unwrap();
     assert!(
         result.is_none(),
         "ValueSet with 100 codes should be skipped when max is 50"
     );
 
     // With max_codes=150, should return Some
-    let result =
-        ValueSetInfo::from_valueset(&valueset_json, "Large".to_string(), Some(150)).unwrap();
+    let result = ValueSetInfo::from_valueset(
+        &valueset_json,
+        "Large".to_string(),
+        Some(150),
+        &IndexMap::new(),
+    )
+    .unwrap();
     assert!(
         result.is_some(),
         "ValueSet with 100 codes should be included when max is 150"
@@ -228,7 +239,9 @@ fn test_large_valueset_handling() {
     assert_eq!(result.unwrap().code_info.len(), 100);
 
     // With no max, should return Some
-    let result = ValueSetInfo::from_valueset(&valueset_json, "Large".to_string(), None).unwrap();
+    let result =
+        ValueSetInfo::from_valueset(&valueset_json, "Large".to_string(), None, &IndexMap::new())
+            .unwrap();
     assert!(
         result.is_some(),
         "ValueSet should be included when no max is specified"
@@ -252,9 +265,14 @@ fn test_valueset_from_json_extraction() {
         }
     });
 
-    let info = ValueSetInfo::from_valueset(&valueset, "AdministrativeGender".to_string(), None)
-        .unwrap()
-        .unwrap();
+    let info = ValueSetInfo::from_valueset(
+        &valueset,
+        "AdministrativeGender".to_string(),
+        None,
+        &IndexMap::new(),
+    )
+    .unwrap()
+    .unwrap();
 
     assert_eq!(info.type_name, "AdministrativeGender");
     assert_eq!(
@@ -348,7 +366,9 @@ fn test_empty_valueset() {
         }
     });
 
-    let result = ValueSetInfo::from_valueset(&valueset, "Empty".to_string(), None).unwrap();
+    let result =
+        ValueSetInfo::from_valueset(&valueset, "Empty".to_string(), None, &IndexMap::new())
+            .unwrap();
     assert!(result.is_none(), "Empty ValueSet should return None");
 }
 
@@ -366,9 +386,10 @@ fn test_valueset_with_only_codes_no_displays() {
         }
     });
 
-    let info = ValueSetInfo::from_valueset(&valueset, "CodesOnly".to_string(), None)
-        .unwrap()
-        .unwrap();
+    let info =
+        ValueSetInfo::from_valueset(&valueset, "CodesOnly".to_string(), None, &IndexMap::new())
+            .unwrap()
+            .unwrap();
 
     assert_eq!(info.code_info.len(), 3);
     assert_eq!(info.code_info[0].code, "code1");

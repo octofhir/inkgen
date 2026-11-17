@@ -111,10 +111,22 @@ impl PackageIr {
                 reason: OpenReason::NoValueSet,
             };
         };
-        match self.value_sets.get(url) {
-            Some(vs) if vs.get("resourceType").and_then(Value::as_str) == Some("ValueSet") => {
+        // Bindings may pin a canonical version (`url|4.0.1`); the terminology
+        // map is keyed by unversioned canonical URL, so fall back to the base.
+        let resolved = self
+            .value_sets
+            .get(url)
+            .map(|vs| (url.as_str(), vs))
+            .or_else(|| {
+                url.split_once('|')
+                    .and_then(|(base, _)| self.value_sets.get(base).map(|vs| (base, vs)))
+            });
+        match resolved {
+            Some((key, vs))
+                if vs.get("resourceType").and_then(Value::as_str) == Some("ValueSet") =>
+            {
                 BindingLowering::Enumerated {
-                    value_set_url: url.clone(),
+                    value_set_url: key.to_string(),
                     type_name: value_set_type_name(vs),
                 }
             }
@@ -405,6 +417,27 @@ mod tests {
         let ir = ir_with_value_sets(vs);
         assert_eq!(
             ir.lower_binding(&binding(BindingStrength::Required, Some(url))),
+            BindingLowering::Enumerated {
+                value_set_url: url.to_string(),
+                type_name: "AdministrativeGender".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn lower_binding_strips_canonical_version() {
+        let url = "http://hl7.org/fhir/ValueSet/administrative-gender";
+        let mut vs = IndexMap::new();
+        vs.insert(
+            url.to_string(),
+            serde_json::json!({ "resourceType": "ValueSet", "name": "AdministrativeGender" }),
+        );
+        let ir = ir_with_value_sets(vs);
+        assert_eq!(
+            ir.lower_binding(&binding(
+                BindingStrength::Required,
+                Some(&format!("{url}|4.0.1"))
+            )),
             BindingLowering::Enumerated {
                 value_set_url: url.to_string(),
                 type_name: "AdministrativeGender".to_string(),

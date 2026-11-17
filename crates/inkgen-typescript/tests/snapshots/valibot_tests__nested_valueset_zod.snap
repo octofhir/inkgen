@@ -1,0 +1,70 @@
+---
+source: crates/inkgen-typescript/tests/valibot_tests.rs
+expression: "file(&output, \"patient.ts\")"
+---
+
+import { z } from 'zod';
+
+import type { AuditStatus } from "./valuesets/audit-status";
+
+import { AuditStatusValues } from "./valuesets/audit-status";
+
+export interface PatientContact {
+  gender?: AuditStatus;
+}
+
+/**
+ * Zod schema for PatientContact
+ */
+export const PatientContactSchema = z.object({
+  gender: z.enum(AuditStatusValues).optional(),
+});
+
+/**
+ * Type inferred from Zod schema
+ */
+export type PatientContactValidated = z.infer<typeof PatientContactSchema>;
+
+
+export interface Patient {
+  /** Resource type identifier */
+  resourceType: "Patient";
+  contact?: Array<PatientContact>;
+}
+/**
+ * Type guard to check if input is a valid Patient
+ */
+export function isPatient(input: unknown): input is Patient {
+  if (typeof input !== "object" || input === null) {
+    return false;
+  }
+  const obj = input as Record<string, unknown>;
+  if (obj.resourceType !== undefined && obj.resourceType !== "Patient") {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Zod schema for Patient
+ */
+export const PatientSchema = z.object({
+  resourceType: z.literal("Patient"),
+  contact: z.array(PatientContactSchema).optional(),
+});
+
+/**
+ * Type inferred from Zod schema
+ */
+export type PatientValidated = z.infer<typeof PatientSchema>;
+
+/**
+ * Safely parse and validate input as Patient using Zod schema
+ * @param input - The input to parse
+ * @returns The parsed Patient if valid, or false if invalid
+ */
+export function parsePatient(input: unknown): PatientValidated | false {
+  const result = PatientSchema.safeParse(input);
+  return result.success ? result.data : false;
+}

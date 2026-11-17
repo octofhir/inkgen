@@ -79,12 +79,17 @@ impl ValueSetCache {
 /// This function supports multiple ValueSet structures:
 /// - expansion.contains (preferred)
 /// - compose.include with concept lists
-/// - compose.include with complete system references
+/// - compose.include with complete system references (resolved against
+///   `systems`, a canonical-URL → resource map holding CodeSystem content)
+///
+/// Codes listed in compose.exclude are removed from the result.
 ///
 /// # Arguments
 ///
 /// * `value_set_json` - The ValueSet resource as JSON
 /// * `max_codes` - Optional maximum number of codes to extract
+/// * `systems` - CodeSystem (and other terminology) content by canonical URL,
+///   used to expand whole-system includes
 ///
 /// # Returns
 ///
@@ -92,6 +97,7 @@ impl ValueSetCache {
 pub fn extract_codes_from_valueset(
     value_set_json: &Value,
     max_codes: Option<usize>,
+    systems: &IndexMap<String, Value>,
 ) -> CoreResult<ResolvedValueSet> {
     let url = value_set_json
         .get("url")
@@ -121,7 +127,18 @@ pub fn extract_codes_from_valueset(
     if codes.is_empty()
         && let Some(compose) = value_set_json.get("compose")
     {
-        extract_from_compose(compose, &mut codes, &mut displays, max_codes)?;
+        extract_from_compose(compose, &mut codes, &mut displays, max_codes, systems)?;
+
+        if let Some(exclude) = compose.get("exclude").and_then(Value::as_array) {
+            let mut excluded = Vec::new();
+            let mut excluded_displays = IndexMap::new();
+            for item in exclude {
+                collect_include_item(item, systems, &mut excluded, &mut excluded_displays, None);
+            }
+            let excluded: std::collections::HashSet<String> = excluded.into_iter().collect();
+            codes.retain(|code| !excluded.contains(code));
+            displays.retain(|code, _| !excluded.contains(code));
+        }
     }
 
     Ok(ResolvedValueSet {
@@ -168,6 +185,7 @@ fn extract_from_compose(
     codes: &mut Vec<String>,
     displays: &mut IndexMap<String, String>,
     max_codes: Option<usize>,
+    systems: &IndexMap<String, Value>,
 ) -> CoreResult<()> {
     if let Some(include) = compose.get("include").and_then(Value::as_array) {
         for include_item in include {
@@ -176,30 +194,92 @@ fn extract_from_compose(
             {
                 break;
             }
-
-            // Try to get concepts from include item
-            if let Some(concepts) = include_item.get("concept").and_then(Value::as_array) {
-                for concept in concepts {
-                    if let Some(max) = max_codes
-                        && codes.len() >= max
-                    {
-                        break;
-                    }
-
-                    if let Some(code) = concept.get("code").and_then(Value::as_str) {
-                        let code_str = code.to_string();
-                        codes.push(code_str.clone());
-
-                        if let Some(display) = concept.get("display").and_then(Value::as_str) {
-                            displays.insert(code_str, display.to_string());
-                        }
-                    }
-                }
-            }
+            collect_include_item(include_item, systems, codes, displays, max_codes);
         }
     }
 
     Ok(())
+}
+
+/// Collect codes from one compose.include/exclude entry: either its explicit
+/// concept list, or — for a whole-system include without filters — every
+/// concept of the referenced CodeSystem.
+fn collect_include_item(
+    include_item: &Value,
+    systems: &IndexMap<String, Value>,
+    codes: &mut Vec<String>,
+    displays: &mut IndexMap<String, String>,
+    max_codes: Option<usize>,
+) {
+    if let Some(concepts) = include_item.get("concept").and_then(Value::as_array) {
+        for concept in concepts {
+            if let Some(max) = max_codes
+                && codes.len() >= max
+            {
+                break;
+            }
+            push_concept(concept, codes, displays);
+        }
+        return;
+    }
+
+    // Whole-system include: only expand when no filter narrows the system
+    // (filter evaluation is terminology-server territory).
+    if include_item.get("filter").is_some() {
+        return;
+    }
+    let Some(system) = include_item.get("system").and_then(Value::as_str) else {
+        return;
+    };
+    let code_system = systems.get(system).or_else(|| {
+        system
+            .split_once('|')
+            .and_then(|(base, _)| systems.get(base))
+    });
+    if let Some(cs) = code_system
+        && cs.get("resourceType").and_then(Value::as_str) == Some("CodeSystem")
+        && let Some(concepts) = cs.get("concept").and_then(Value::as_array)
+    {
+        for concept in concepts {
+            if let Some(max) = max_codes
+                && codes.len() >= max
+            {
+                break;
+            }
+            collect_codesystem_concept(concept, codes, displays, max_codes);
+        }
+    }
+}
+
+/// Collect a CodeSystem concept and its nested children, depth-first.
+fn collect_codesystem_concept(
+    concept: &Value,
+    codes: &mut Vec<String>,
+    displays: &mut IndexMap<String, String>,
+    max_codes: Option<usize>,
+) {
+    if let Some(max) = max_codes
+        && codes.len() >= max
+    {
+        return;
+    }
+    push_concept(concept, codes, displays);
+    if let Some(children) = concept.get("concept").and_then(Value::as_array) {
+        for child in children {
+            collect_codesystem_concept(child, codes, displays, max_codes);
+        }
+    }
+}
+
+/// Push one concept's code/display pair, if it carries a code.
+fn push_concept(concept: &Value, codes: &mut Vec<String>, displays: &mut IndexMap<String, String>) {
+    if let Some(code) = concept.get("code").and_then(Value::as_str) {
+        let code_str = code.to_string();
+        codes.push(code_str.clone());
+        if let Some(display) = concept.get("display").and_then(Value::as_str) {
+            displays.insert(code_str, display.to_string());
+        }
+    }
 }
 
 /// Determines if a value set should be generated based on size and configuration.
@@ -244,7 +324,7 @@ mod tests {
             }
         });
 
-        let result = extract_codes_from_valueset(&valueset, None).unwrap();
+        let result = extract_codes_from_valueset(&valueset, None, &IndexMap::new()).unwrap();
 
         assert_eq!(result.url, "http://example.org/fhir/ValueSet/test");
         assert_eq!(result.title, Some("Test Value Set".to_string()));
@@ -283,7 +363,7 @@ mod tests {
             }
         });
 
-        let result = extract_codes_from_valueset(&valueset, None).unwrap();
+        let result = extract_codes_from_valueset(&valueset, None, &IndexMap::new()).unwrap();
 
         assert_eq!(result.codes.len(), 2);
         assert!(result.codes.contains(&"code1".to_string()));
@@ -307,12 +387,105 @@ mod tests {
             }
         });
 
-        let result = extract_codes_from_valueset(&valueset, Some(3)).unwrap();
+        let result = extract_codes_from_valueset(&valueset, Some(3), &IndexMap::new()).unwrap();
 
         assert_eq!(result.codes.len(), 3);
         assert!(result.codes.contains(&"code1".to_string()));
         assert!(result.codes.contains(&"code2".to_string()));
         assert!(result.codes.contains(&"code3".to_string()));
+    }
+
+    #[test]
+    fn test_whole_system_include_expands_codesystem() {
+        let valueset = json!({
+            "resourceType": "ValueSet",
+            "url": "http://example.org/fhir/ValueSet/test",
+            "compose": {
+                "include": [
+                    { "system": "http://example.org/codes" },
+                    { "system": "http://example.org/other", "concept": [{ "code": "extra" }] }
+                ]
+            }
+        });
+        let mut systems = IndexMap::new();
+        systems.insert(
+            "http://example.org/codes".to_string(),
+            json!({
+                "resourceType": "CodeSystem",
+                "url": "http://example.org/codes",
+                "concept": [
+                    { "code": "a", "display": "A" },
+                    { "code": "b", "concept": [{ "code": "b1" }] }
+                ]
+            }),
+        );
+
+        let result = extract_codes_from_valueset(&valueset, None, &systems).unwrap();
+        assert_eq!(result.codes, vec!["a", "b", "b1", "extra"]);
+        assert_eq!(result.displays.get("a"), Some(&"A".to_string()));
+    }
+
+    #[test]
+    fn test_versioned_system_url_resolves() {
+        let valueset = json!({
+            "resourceType": "ValueSet",
+            "url": "http://example.org/fhir/ValueSet/test",
+            "compose": { "include": [{ "system": "http://example.org/codes|4.0.1" }] }
+        });
+        let mut systems = IndexMap::new();
+        systems.insert(
+            "http://example.org/codes".to_string(),
+            json!({
+                "resourceType": "CodeSystem",
+                "concept": [{ "code": "a" }]
+            }),
+        );
+        let result = extract_codes_from_valueset(&valueset, None, &systems).unwrap();
+        assert_eq!(result.codes, vec!["a"]);
+    }
+
+    #[test]
+    fn test_filtered_include_is_not_expanded() {
+        let valueset = json!({
+            "resourceType": "ValueSet",
+            "url": "http://example.org/fhir/ValueSet/test",
+            "compose": {
+                "include": [{
+                    "system": "http://example.org/codes",
+                    "filter": [{ "property": "status", "op": "=", "value": "active" }]
+                }]
+            }
+        });
+        let mut systems = IndexMap::new();
+        systems.insert(
+            "http://example.org/codes".to_string(),
+            json!({ "resourceType": "CodeSystem", "concept": [{ "code": "a" }] }),
+        );
+        let result = extract_codes_from_valueset(&valueset, None, &systems).unwrap();
+        assert!(result.codes.is_empty());
+    }
+
+    #[test]
+    fn test_compose_exclude_removes_codes() {
+        let valueset = json!({
+            "resourceType": "ValueSet",
+            "url": "http://example.org/fhir/ValueSet/test",
+            "compose": {
+                "include": [{ "system": "http://example.org/codes" }],
+                "exclude": [{ "system": "http://example.org/codes", "concept": [{ "code": "b" }] }]
+            }
+        });
+        let mut systems = IndexMap::new();
+        systems.insert(
+            "http://example.org/codes".to_string(),
+            json!({
+                "resourceType": "CodeSystem",
+                "concept": [{ "code": "a", "display": "A" }, { "code": "b", "display": "B" }]
+            }),
+        );
+        let result = extract_codes_from_valueset(&valueset, None, &systems).unwrap();
+        assert_eq!(result.codes, vec!["a"]);
+        assert!(!result.displays.contains_key("b"));
     }
 
     #[test]

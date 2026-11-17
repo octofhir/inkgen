@@ -7,7 +7,7 @@ pub mod helpers;
 pub mod metadata;
 
 use self::metadata::EnhancedCodeInfo;
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 use inkgen_core::{extract_codes_from_valueset, should_generate_valueset};
 use serde::Serialize;
 use serde_json::Value;
@@ -62,6 +62,8 @@ impl ValueSetInfo {
     /// * `value_set_json` - The ValueSet resource as JSON
     /// * `type_name` - The TypeScript type name to use
     /// * `max_codes` - Optional maximum number of codes allowed for generation
+    /// * `systems` - CodeSystem content by canonical URL, used to expand
+    ///   whole-system includes
     ///
     /// # Returns
     ///
@@ -71,9 +73,10 @@ impl ValueSetInfo {
         value_set_json: &Value,
         type_name: String,
         max_codes: Option<usize>,
+        systems: &IndexMap<String, Value>,
     ) -> Result<Option<Self>, String> {
         // Extract ALL codes first (no limit) to check total count
-        let resolved = extract_codes_from_valueset(value_set_json, None)
+        let resolved = extract_codes_from_valueset(value_set_json, None, systems)
             .map_err(|e| format!("Failed to extract codes: {}", e))?;
 
         tracing::debug!(
@@ -385,9 +388,14 @@ mod tests {
             }
         });
 
-        let info = ValueSetInfo::from_valueset(&valueset, "AdministrativeGender".to_string(), None)
-            .unwrap()
-            .unwrap();
+        let info = ValueSetInfo::from_valueset(
+            &valueset,
+            "AdministrativeGender".to_string(),
+            None,
+            &IndexMap::new(),
+        )
+        .unwrap()
+        .unwrap();
 
         assert_eq!(info.type_name, "AdministrativeGender");
         assert_eq!(
@@ -417,11 +425,15 @@ mod tests {
         });
 
         // With max_codes=5, should return None because we have 6 codes
-        let result = ValueSetInfo::from_valueset(&valueset, "Large".to_string(), Some(5)).unwrap();
+        let result =
+            ValueSetInfo::from_valueset(&valueset, "Large".to_string(), Some(5), &IndexMap::new())
+                .unwrap();
         assert!(result.is_none());
 
         // With max_codes=10, should return Some
-        let result = ValueSetInfo::from_valueset(&valueset, "Large".to_string(), Some(10)).unwrap();
+        let result =
+            ValueSetInfo::from_valueset(&valueset, "Large".to_string(), Some(10), &IndexMap::new())
+                .unwrap();
         assert!(result.is_some());
     }
 

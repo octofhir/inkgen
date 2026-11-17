@@ -276,10 +276,14 @@ fn test_valueset_generation_integration() {
     });
 
     // Extract valueset
-    let valueset =
-        ValueSetInfo::from_valueset(&valueset_json, "AdministrativeGender".to_string(), Some(50))
-            .expect("Extraction should succeed")
-            .expect("ValueSet should not be skipped");
+    let valueset = ValueSetInfo::from_valueset(
+        &valueset_json,
+        "AdministrativeGender".to_string(),
+        Some(50),
+        &IndexMap::new(),
+    )
+    .expect("Extraction should succeed")
+    .expect("ValueSet should not be skipped");
 
     // Verify extraction
     assert_eq!(valueset.type_name, "AdministrativeGender");
@@ -585,16 +589,26 @@ fn test_large_valueset_size_limit_integration() {
     });
 
     // Test with max_codes = 100 (should skip)
-    let result1 = ValueSetInfo::from_valueset(&valueset_json, "Large".to_string(), Some(100))
-        .expect("Extraction should succeed");
+    let result1 = ValueSetInfo::from_valueset(
+        &valueset_json,
+        "Large".to_string(),
+        Some(100),
+        &IndexMap::new(),
+    )
+    .expect("Extraction should succeed");
     assert!(
         result1.is_none(),
         "Should skip valueset exceeding max_codes"
     );
 
     // Test with max_codes = 200 (should include)
-    let result2 = ValueSetInfo::from_valueset(&valueset_json, "Large".to_string(), Some(200))
-        .expect("Extraction should succeed");
+    let result2 = ValueSetInfo::from_valueset(
+        &valueset_json,
+        "Large".to_string(),
+        Some(200),
+        &IndexMap::new(),
+    )
+    .expect("Extraction should succeed");
     assert!(
         result2.is_some(),
         "Should include valueset within max_codes"
@@ -603,8 +617,9 @@ fn test_large_valueset_size_limit_integration() {
     assert_eq!(vs.code_info.len(), 150);
 
     // Test with no max (should include)
-    let result3 = ValueSetInfo::from_valueset(&valueset_json, "Large".to_string(), None)
-        .expect("Extraction should succeed");
+    let result3 =
+        ValueSetInfo::from_valueset(&valueset_json, "Large".to_string(), None, &IndexMap::new())
+            .expect("Extraction should succeed");
     assert!(
         result3.is_some(),
         "Should include valueset when no max specified"
@@ -811,10 +826,14 @@ fn test_integration_snapshot_valueset_administrative_gender() {
         }
     });
 
-    let valueset =
-        ValueSetInfo::from_valueset(&valueset_json, "AdministrativeGender".to_string(), None)
-            .unwrap()
-            .unwrap();
+    let valueset = ValueSetInfo::from_valueset(
+        &valueset_json,
+        "AdministrativeGender".to_string(),
+        None,
+        &IndexMap::new(),
+    )
+    .unwrap()
+    .unwrap();
 
     let generated = valueset.generate_typescript();
     assert_snapshot!("integration_valueset_administrative_gender", generated);
