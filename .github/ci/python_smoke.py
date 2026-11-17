@@ -29,7 +29,10 @@ def expect_invalid(label, fn, message_part=None):
 # A valid Patient passes and round-trips through wire-format JSON.
 patient = Patient(gender="female", active=True)
 assert patient.gender == "female"
-restored = Patient.model_validate_json(patient.model_dump_json())
+wire = patient.model_dump_json()
+assert '"gender":"female"' in wire
+assert "null" not in wire, f"absent fields must be omitted, got: {wire}"
+restored = Patient.model_validate_json(wire)
 assert restored.gender == "female"
 assert restored.active is True
 

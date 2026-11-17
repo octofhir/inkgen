@@ -1,6 +1,6 @@
 <p align="center"><img src=".github/banner.png" alt="octo/inkgen — Typed FHIR SDKs, generated from packages" width="100%"></p>
 
-<p align="center"><b>A Rust FHIR code generator for deterministic, inspectable TypeScript SDKs, built from FHIR packages, profiles and implementation guides.</b></p>
+<p align="center"><b>A Rust FHIR code generator for deterministic, inspectable SDKs — TypeScript, Python, Rust and Gleam — built from FHIR packages, profiles and implementation guides.</b></p>
 
 <p align="center">
   <a href="https://github.com/octofhir/inkgen/actions/workflows/ci.yml"><img src="https://github.com/octofhir/inkgen/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -9,13 +9,15 @@
 
 InkGen turns canonical FHIR packages into type-safe, idiomatic code. Core
 resolves a FHIR package once into a language-neutral `PackageIr`; each backend is
-a small pure function of it. The TypeScript backend is full-featured today, and a
-reference Rust backend proves the contract — new backends add a language without
+a small pure function of it. The TypeScript backend is full-featured today, a
+Python backend emits Pydantic v2 models with runtime validation, and reference
+Rust and Gleam backends prove the contract — new backends add a language without
 re-implementing FHIR semantics.
 
-> **Status:** active development. The TypeScript backend works and is tested; a
-> reference Rust backend ships. APIs may change. Early adopters and contributors
-> welcome.
+> **Status:** active development. The TypeScript backend works and is tested; the
+> Python backend generates Pydantic v2 models that typecheck (pyright) and pass
+> runtime smoke tests over R4; reference Rust and Gleam backends ship. APIs may
+> change. Early adopters and contributors welcome.
 
 ---
 
@@ -33,7 +35,7 @@ re-implementing FHIR semantics.
   metadata, value sets, search parameters); backends read only from it.
 - **Tiny backend contract** — one synchronous `Backend` trait
   (`&PackageIr → GenerationOutput`, no I/O, no async, no FHIR resolution). The
-  TypeScript backend and a reference Rust backend both implement it.
+  TypeScript, Python, Rust and Gleam backends all implement it.
 - **Rust performance** — fast, single-binary CLI (`inkgen`).
 
 Each claim above maps to code in `crates/`; capabilities that are not yet
@@ -66,8 +68,13 @@ implemented are listed as **Planned** in the matrix below.
 | `PackageIr` single source of truth | ✅ Implemented | resolved once in core; backends make zero provider/resolver calls |
 | `Backend` contract (`&PackageIr → GenerationOutput`) | ✅ Implemented | sync, no I/O; core writes files |
 | Reference Rust backend | ✅ Implemented | `inkgen generate rust` emits compiling structs from the IR alone |
+| Gleam backend | ✅ Implemented | `inkgen generate gleam` emits record types from the IR alone |
+| Python Pydantic v2 models | ✅ Implemented | `inkgen generate python`; snake_case fields aliased to FHIR wire names, `extra="forbid"`, wire-faithful JSON serialization |
+| Python ValueSet enums | ✅ Implemented | closed `Literal` aliases for required/extensible bindings |
+| Python runtime validation | ✅ Implemented | `model_validator` checks for `value[x]` choice groups and XOR-exists invariants (e.g. `ext-1`); cross-module cycles resolved via `model_rebuild()` |
+| Generated Python typechecks in CI | ✅ Implemented | `pyright` gate + Pydantic runtime smoke tests over generated r4-core |
 | `inspect ir` / `explain` / report | ✅ Implemented | IR-as-JSON; `explain` shows why each field maps as it does; `--report` writes report.md + file map |
-| Python / C# / other backends | 🗺️ Planned | — |
+| C# / other backends | 🗺️ Planned | — |
 | WASM plugins | 🗺️ Planned | RFC stage |
 
 ---
@@ -80,7 +87,7 @@ flowchart TD
     B --> C[Canonical Resolver]
     C --> D[StructureDefinition → IR<br/>profile / lineage]
     D --> E[PackageIr aggregate<br/>types · value sets · search params]
-    E --> F[Backend<br/>TypeScript · Rust]
+    E --> F[Backend<br/>TypeScript · Python · Rust · Gleam]
     F --> G[GenerationOutput<br/>files in memory]
     G --> H[Core file writer]
     H --> I[Generated SDK<br/>./generated]
@@ -151,6 +158,38 @@ inkgen generate typescript [--output <dir>] [--offline] [--dry-run] [--config <p
 - `--dry-run` — show what would be generated without writing files
 - `--package <name>` — restrict to a subset of configured packages
 
+### Python (Pydantic v2)
+
+```bash
+inkgen generate python             # emit a Python package into ./generated/python
+```
+
+The output is an importable `fhir` package: one module per resource/complex type,
+composite classes for backbone elements, `Literal` aliases for enumerated ValueSet
+bindings (`enums.py`), and a shared `_runtime.py` base. Fields use `snake_case`
+attribute names aliased to FHIR wire names, so both `patient.birth_date` and
+`Patient(birthDate=...)` work; models serialize with wire aliases by default,
+omit absent (`None`) fields for FHIR-conformant JSON, and reject unknown fields
+(`extra="forbid"`). `value[x]` choice groups and XOR-exists
+invariants (e.g. `ext-1`) are enforced at runtime by `model_validator`, and
+cross-module cycles are resolved with `model_rebuild()` in `__init__.py`.
+
+```python
+from fhir import Patient
+
+patient = Patient(gender="female", active=True)
+patient.model_dump_json()           # {"resourceType":"Patient","active":true,"gender":"female"}
+Patient(gender="not-a-code")        # raises pydantic.ValidationError
+```
+
+The generated code requires **Python >= 3.11** and **`pydantic >= 2.11, < 3`** —
+dependencies of the output, not of the generator. CI typechecks the generated R4
+package with `pyright` and runs runtime smoke tests.
+
+```
+inkgen generate python [--output <dir>] [--offline] [--dry-run] [--config <path>] [--package <name>]
+```
+
 ---
 
 ## CLI commands
@@ -164,6 +203,7 @@ inkgen generate typescript [--output <dir>] [--offline] [--dry-run] [--config <p
 | `inkgen generate typescript` | generate the TypeScript SDK |
 | `inkgen generate rust` | generate Rust structs via the reference backend |
 | `inkgen generate gleam` | generate Gleam record types from the `PackageIr` |
+| `inkgen generate python` | generate Python Pydantic v2 models from the `PackageIr` |
 | `inkgen inspect ir <canonical>` | resolve a canonical URL and print its IR as JSON |
 | `inkgen explain <canonical>` | explain how each element maps to generated code, and why |
 | `inkgen backends` | list available code-generation backends |
@@ -198,8 +238,9 @@ impl Backend for MyBackend {
 }
 ```
 
-- Reference implementations: `crates/inkgen-typescript` (full SDK) and
-  `crates/inkgen-rust` (`inkgen generate rust` — compact structs, the proof the
+- Reference implementations: `crates/inkgen-typescript` (full SDK),
+  `crates/inkgen-python` (Pydantic v2 models with runtime validation), and
+  `crates/inkgen-rust` / `crates/inkgen-gleam` (compact types — the proof the
   IR is language-neutral).
 - The IR you consume lives in `crates/inkgen-core/src/ir` and `package_ir.rs`.
 - `GenerationOutput` is a map of relative path → file contents; the CLI writes it.
@@ -255,6 +296,7 @@ inkgen/
 │   ├── inkgen-cli/         # CLI (binary: `inkgen`)
 │   ├── inkgen-core/        # IR, config, cache, services, traits
 │   ├── inkgen-typescript/  # TypeScript backend (overlays, Zod, interop)
+│   ├── inkgen-python/      # Python backend (Pydantic v2 models)
 │   ├── inkgen-rust/        # Reference Rust backend (Backend contract)
 │   ├── inkgen-gleam/       # Gleam backend (record types)
 │   └── inkgen-testing/     # Shared test helpers
@@ -310,6 +352,7 @@ backend. Existing core and TypeScript defaults retain the resolver/cache API.
 inkgen-core = { git = "https://github.com/octofhir/inkgen", tag = "v0.1.4", default-features = false }
 inkgen-rust = { git = "https://github.com/octofhir/inkgen", tag = "v0.1.4" }
 inkgen-gleam = { git = "https://github.com/octofhir/inkgen", tag = "v0.1.4" }
+inkgen-python = { git = "https://github.com/octofhir/inkgen", tag = "v0.1.4" }
 inkgen-typescript = { git = "https://github.com/octofhir/inkgen", tag = "v0.1.4", default-features = false }
 ```
 
