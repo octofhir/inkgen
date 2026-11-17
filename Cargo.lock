@@ -1130,6 +1130,7 @@ dependencies = [
  "indexmap",
  "inkgen-core",
  "inkgen-gleam",
+ "inkgen-python",
  "inkgen-rust",
  "inkgen-typescript",
  "predicates",
@@ -1170,6 +1171,19 @@ dependencies = [
  "serde",
  "tempfile",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "inkgen-python"
+version = "0.1.0"
+dependencies = [
+ "indexmap",
+ "inkgen-core",
+ "insta",
+ "serde",
+ "serde_json",
+ "tera",
  "tracing",
 ]
 

@@ -10,6 +10,7 @@ fn main() {
 
     check_backend(&inkgen_rust::RustGenerator::default(), &ir);
     check_backend(&inkgen_gleam::GleamGenerator::default(), &ir);
+    check_backend(&inkgen_python::PythonGenerator::default(), &ir);
 
     for library in [ValidationLibrary::Zod, ValidationLibrary::Valibot] {
         let mut config =

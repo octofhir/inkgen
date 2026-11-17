@@ -139,6 +139,41 @@ jobs:
         working-directory: gen-valibot
         run: npx tsc --noEmit
 
+  typecheck-generated-python:
+    name: Typecheck generated Python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate Python SDK twice (hl7.fhir.r4.core)
+        run: |
+          cargo run --release -p inkgen-cli -- generate python --output gen-py-a
+          cargo run --release -p inkgen-cli -- generate python --output gen-py-b
+
+      - name: Assert deterministic output (byte-identical runs)
+        run: diff -rq gen-py-a gen-py-b
+
+      - name: Install validation dependencies
+        run: python -m pip install "pydantic>=2.11,<3" pyright
+
+      - name: Typecheck generated output
+        run: pyright --pythonpath "$(python -c 'import sys; print(sys.executable)')" gen-py-a
+
+      - name: Runtime smoke tests
+        run: python .github/ci/python_smoke.py gen-py-a
+
   build:
     name: Build
     runs-on: ${{ matrix.os }}
@@ -171,7 +206,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: tests/backend-consumer
-      - name: Generate through all three pure backends
+      - name: Generate through all four pure backends
         run: cargo run --manifest-path tests/backend-consumer/Cargo.toml > minimal-output.txt
       - name: Guard backend dependency boundary
         run: |

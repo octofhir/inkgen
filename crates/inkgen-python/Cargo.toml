@@ -1,0 +1,21 @@
+[package]
+name = "inkgen-python"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "FHIR code generator backend for Python — emits Pydantic v2 models from a resolved PackageIr"
+
+[dependencies]
+tracing = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+tera = { workspace = true }
+indexmap = { workspace = true }
+
+inkgen-core = { path = "../inkgen-core", default-features = false }
+
+[dev-dependencies]
+insta = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

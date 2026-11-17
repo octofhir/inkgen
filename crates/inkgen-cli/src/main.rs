@@ -96,6 +96,8 @@ enum GenerateSubcommand {
     Rust(GenerateRustArgs),
     /// Generate Gleam SDK artifacts (types on the PackageIr contract).
     Gleam(GenerateGleamArgs),
+    /// Generate Python SDK artifacts (Pydantic v2 models on the PackageIr contract).
+    Python(GeneratePythonArgs),
 }
 
 #[derive(Args, Debug)]
@@ -112,6 +114,15 @@ struct GenerateGleamArgs {
     #[command(flatten)]
     shared: SharedCacheArgs,
     /// Output directory (defaults to `generated/gleam`).
+    #[arg(long)]
+    output: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+struct GeneratePythonArgs {
+    #[command(flatten)]
+    shared: SharedCacheArgs,
+    /// Output directory (defaults to `generated/python`).
     #[arg(long)]
     output: Option<PathBuf>,
 }
@@ -255,6 +266,7 @@ async fn main() -> Result<()> {
             GenerateSubcommand::Typescript(ts_args) => generate_typescript(ts_args).await,
             GenerateSubcommand::Rust(rust_args) => generate_rust(rust_args).await,
             GenerateSubcommand::Gleam(gleam_args) => generate_gleam(gleam_args).await,
+            GenerateSubcommand::Python(python_args) => generate_python(python_args).await,
         },
         Commands::Inspect(args) => match args.command {
             InspectSubcommand::Ir(ir_args) => inspect_ir(ir_args).await,
@@ -782,6 +794,79 @@ async fn generate_gleam(args: GenerateGleamArgs) -> Result<()> {
     Ok(())
 }
 
+async fn generate_python(args: GeneratePythonArgs) -> Result<()> {
+    use inkgen_core::{Backend, build_package_ir};
+    use inkgen_python::{PythonGenerator, PythonGeneratorConfig};
+
+    let context = ProjectContext::load(args.shared.config.clone())?;
+    context.validate()?;
+    let cache_config = context.build_cache_config(
+        args.shared.packages_dir.clone(),
+        args.shared.cache_dir.clone(),
+        args.shared.registry_url.clone(),
+    )?;
+
+    let packages = select_requests(&context.package_requests(), &args.shared.packages);
+    if packages.is_empty() {
+        warn!("No packages matched the provided filters.");
+        return Ok(());
+    }
+    if args.shared.dry_run {
+        info!("dry run: would generate Python for packages:");
+        for request in &packages {
+            info!("  - {}", request.id);
+        }
+        return Ok(());
+    }
+
+    let cache = Arc::new(build_cache(cache_config).await?);
+    let resolver = inkgen_core::PackageResolver::new(cache.clone());
+    let mode = if args.shared.offline {
+        InstallMode::OfflineOnly
+    } else {
+        InstallMode::OnlinePreferred
+    };
+    let descriptors = resolver.ensure_packages(&packages, mode).await?;
+    let service = BaseStructureService::from_project_config(cache.clone(), context.manifest());
+    let provider_config = context.manifest().structure_config();
+
+    let output_dir = args
+        .output
+        .clone()
+        .unwrap_or_else(|| context.default_output_dir().join("python"));
+
+    let backend = PythonGenerator::new(PythonGeneratorConfig::new(output_dir.clone()));
+
+    for descriptor in &descriptors {
+        // Build the IR once, in core. The backend never touches the provider.
+        let ir = build_package_ir(
+            &service,
+            cache.as_ref(),
+            descriptor,
+            &provider_config,
+            Some(descriptor.id.version.clone()),
+            Vec::new(),
+        )
+        .await
+        .with_context(|| format!("failed to build PackageIr for {}", descriptor.id))?;
+
+        let output = backend
+            .generate(&ir)
+            .map_err(|err| anyhow::anyhow!("python backend failed: {err}"))?;
+
+        // Core owns writing.
+        write_generation_output(&output_dir, &output)?;
+        info!(
+            "Python backend: wrote {} file(s) for {} to {}",
+            output.len(),
+            descriptor.id,
+            output_dir.display()
+        );
+    }
+
+    Ok(())
+}
+
 /// Write a backend's `GenerationOutput` to disk under `base`, creating parent
 /// directories. Core owns file writing — backends only declare paths + contents.
 fn write_generation_output(
@@ -1230,6 +1315,11 @@ fn list_backends_command() -> Result<()> {
             "gleam",
             "Gleam record types on the PackageIr contract",
             "gleam",
+        ),
+        (
+            "python",
+            "Python Pydantic v2 models on the PackageIr contract",
+            "py",
         ),
     ];
     for (id, description, ext) in backends {

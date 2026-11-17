@@ -10,5 +10,6 @@ resolver = ["inkgen-core/resolver", "inkgen-typescript/resolver"]
 inkgen-core = { path = "../../crates/inkgen-core", default-features = false }
 inkgen-rust = { path = "../../crates/inkgen-rust" }
 inkgen-gleam = { path = "../../crates/inkgen-gleam" }
+inkgen-python = { path = "../../crates/inkgen-python" }
 inkgen-typescript = { path = "../../crates/inkgen-typescript", default-features = false }
 serde_json = "1"
