@@ -186,6 +186,15 @@ The generated code requires **Python >= 3.11** and **`pydantic >= 2.11, < 3`** â
 dependencies of the output, not of the generator. CI typechecks the generated R4
 package with `pyright` and runs runtime smoke tests.
 
+Configure the backend in `inkgen.toml`. `package_name` sets the importable
+package directory (default `fhir`); it must be a valid Python identifier:
+
+```toml
+[languages.python]
+package_name = "fhir_r4"           # import as `from fhir_r4 import Patient`
+# output_dir = "generated/python"  # default: ./generated/python
+```
+
 ```
 inkgen generate python [--output <dir>] [--offline] [--dry-run] [--config <path>] [--package <name>]
 ```

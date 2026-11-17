@@ -17,8 +17,8 @@ use tera::{Context, Tera};
 
 use crate::invariants::{self, FieldIndex, InvariantCheck};
 use crate::naming::{
-    class_name, doc_line, pascal_case, py_string_escape, safe_attr, safe_module, snake_case,
-    upper_first,
+    class_name, doc_line, is_valid_package_name, pascal_case, py_string_escape, safe_attr,
+    safe_module, snake_case, upper_first,
 };
 use crate::primitives;
 
@@ -26,8 +26,17 @@ const MODULE_TEMPLATE: &str = include_str!("templates/module.py.tera");
 const INIT_TEMPLATE: &str = include_str!("templates/init.py.tera");
 const ENUMS_TEMPLATE: &str = include_str!("templates/enums.py.tera");
 
-/// Generate the Python package for the whole IR.
-pub(crate) fn generate(ir: &PackageIr) -> Result<GenerationOutput, BackendError> {
+/// Generate the Python package for the whole IR, under `package_name`.
+pub(crate) fn generate(
+    ir: &PackageIr,
+    package_name: &str,
+) -> Result<GenerationOutput, BackendError> {
+    if !is_valid_package_name(package_name) {
+        return Err(BackendError::Message(format!(
+            "invalid Python package name {package_name:?}: must be a Python identifier \
+             (letters, digits, underscores; not starting with a digit or a keyword)"
+        )));
+    }
     let mut generator = Generator::new(ir);
     generator.collect_types();
     generator.collect_backbones();
@@ -42,7 +51,10 @@ pub(crate) fn generate(ir: &PackageIr) -> Result<GenerationOutput, BackendError>
     .map_err(|e| BackendError::Message(format!("template registration failed: {e}")))?;
 
     let mut out = GenerationOutput::new();
-    out.add_file("fhir/_runtime.py", primitives::RUNTIME_PY);
+    out.add_file(
+        format!("{package_name}/_runtime.py"),
+        primitives::RUNTIME_PY,
+    );
 
     let mut module_imports: Vec<ModuleImport> = Vec::new();
     let mut all_classes: Vec<String> = Vec::new();
@@ -52,7 +64,7 @@ pub(crate) fn generate(ir: &PackageIr) -> Result<GenerationOutput, BackendError>
         }
         let info = generator.type_info(def);
         let module = generator.render_module(def, &info.class, &info.module, &tera)?;
-        out.add_file(format!("fhir/{}.py", info.module), module);
+        out.add_file(format!("{package_name}/{}.py", info.module), module);
         let mut classes = generator.module_classes(&info.class);
         classes.sort();
         all_classes.extend(classes.iter().cloned());
@@ -85,7 +97,7 @@ pub(crate) fn generate(ir: &PackageIr) -> Result<GenerationOutput, BackendError>
                 &Context::from_serialize(&enums_ctx).unwrap(),
             )
             .map_err(|e| BackendError::Message(format!("enums template failed: {e}")))?;
-        out.add_file("fhir/enums.py", rendered);
+        out.add_file(format!("{package_name}/enums.py"), rendered);
     }
 
     let mut all_names = all_classes.clone();
@@ -102,7 +114,7 @@ pub(crate) fn generate(ir: &PackageIr) -> Result<GenerationOutput, BackendError>
     let rendered = tera
         .render("init.py.tera", &Context::from_serialize(&init_ctx).unwrap())
         .map_err(|e| BackendError::Message(format!("init template failed: {e}")))?;
-    out.add_file("fhir/__init__.py", rendered);
+    out.add_file(format!("{package_name}/__init__.py"), rendered);
 
     Ok(out)
 }

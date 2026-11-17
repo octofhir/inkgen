@@ -25,7 +25,9 @@ An importable `fhir` package of Pydantic v2 models:
 
 Generated code requires Python >= 3.11 and `pydantic >= 2.11, < 3`. CI typechecks
 the generated R4 package with `pyright` and runs runtime smoke tests. Run
-`inkgen generate python` (default output `generated/python`).
+`inkgen generate python` (default output `generated/python`). The importable
+package name is configurable via `[languages.python] package_name` (default
+`fhir`); it must be a valid Python identifier.
 
 ### Rust (Reference)
 

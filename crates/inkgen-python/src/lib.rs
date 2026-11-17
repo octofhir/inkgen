@@ -48,7 +48,7 @@ impl Backend for PythonGenerator {
             ir.id,
             ir.types().count()
         );
-        generation::generate(ir)
+        generation::generate(ir, &self.config.package_name)
     }
 }
 

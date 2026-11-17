@@ -130,6 +130,24 @@ pub struct LanguagesSection {
     /// TypeScript backend settings; absent means TypeScript generation is unconfigured.
     #[serde(default)]
     pub typescript: Option<TypescriptLanguageConfig>,
+
+    /// Python backend settings; absent means Python generation is unconfigured.
+    #[serde(default)]
+    pub python: Option<PythonLanguageConfig>,
+}
+
+/// Settings controlling Python (Pydantic v2) code generation.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PythonLanguageConfig {
+    /// Output directory override; `None` uses the backend default.
+    #[serde(default)]
+    pub output_dir: Option<String>,
+
+    /// Name of the generated Python package (the importable directory).
+    /// `None` uses the backend default (`fhir`). Must be a valid Python
+    /// identifier, e.g. `fhir_r4` or `my_fhir`.
+    #[serde(default)]
+    pub package_name: Option<String>,
 }
 
 /// Settings controlling TypeScript code generation.
@@ -462,6 +480,11 @@ impl InkgenConfig {
     /// TypeScript settings, if a `[languages.typescript]` section is present.
     pub fn typescript_config(&self) -> Option<&TypescriptLanguageConfig> {
         self.languages.typescript.as_ref()
+    }
+
+    /// Python settings, if a `[languages.python]` section is present.
+    pub fn python_config(&self) -> Option<&PythonLanguageConfig> {
+        self.languages.python.as_ref()
     }
 }
 

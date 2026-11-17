@@ -7,7 +7,7 @@
 //! deserialization, so every test runs the full generation pipeline.
 
 use inkgen_core::{Backend, GenerationOutput, PackageIr};
-use inkgen_python::PythonGenerator;
+use inkgen_python::{PythonGenerator, PythonGeneratorConfig};
 use insta::assert_snapshot;
 use serde_json::{Value, json};
 
@@ -402,4 +402,34 @@ fn builtin_shadowing_module_rename() {
     let out = generate(ir);
     assert_snapshot!(file(&out, "list_.py"));
     assert_snapshot!(file(&out, "__init__.py"));
+}
+
+/// The generated package directory is configurable; relative imports inside
+/// the package are name-independent, so only the file paths change.
+#[test]
+fn custom_package_name() {
+    let ir: PackageIr = serde_json::from_value(fixture()).expect("fixture deserializes");
+    let backend = PythonGenerator::new(
+        PythonGeneratorConfig::new("generated".into()).with_package_name("fhir_r4"),
+    );
+    let out = backend.generate(&ir).expect("generation succeeds");
+    assert!(out.files.keys().all(|p| p.starts_with("fhir_r4/")));
+    assert!(out.files.contains_key("fhir_r4/__init__.py"));
+    assert!(out.files.contains_key("fhir_r4/_runtime.py"));
+    assert!(out.files.contains_key("fhir_r4/patient.py"));
+    assert!(!out.files.contains_key("fhir/__init__.py"));
+}
+
+#[test]
+fn invalid_package_name_is_rejected() {
+    let ir: PackageIr = serde_json::from_value(fixture()).expect("fixture deserializes");
+    for bad in ["bad-name", "4fhir", "class", ""] {
+        let backend = PythonGenerator::new(
+            PythonGeneratorConfig::new("generated".into()).with_package_name(bad),
+        );
+        assert!(
+            backend.generate(&ir).is_err(),
+            "expected rejection of package name {bad:?}"
+        );
+    }
 }

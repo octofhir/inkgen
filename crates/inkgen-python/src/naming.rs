@@ -129,6 +129,17 @@ pub(crate) fn safe_module(stem: &str) -> String {
     }
 }
 
+/// Whether `name` is usable as a top-level Python package identifier: a
+/// non-empty ASCII identifier (`[A-Za-z_][A-Za-z0-9_]*`) that is not a keyword.
+pub(crate) fn is_valid_package_name(name: &str) -> bool {
+    !name.is_empty()
+        && !KEYWORDS.contains(&name)
+        && name
+            .chars()
+            .enumerate()
+            .all(|(i, c)| c == '_' || c.is_ascii_alphabetic() || (i > 0 && c.is_ascii_digit()))
+}
+
 /// Sanitize a FHIR type name into a valid Python class identifier.
 pub(crate) fn class_name(name: &str) -> String {
     let mut out: String = name
@@ -199,6 +210,18 @@ mod tests {
         assert_eq!(safe_module("str"), "str_");
         assert_eq!(safe_module("class"), "class_");
         assert_eq!(safe_module("patient"), "patient");
+    }
+
+    #[test]
+    fn package_name_validation() {
+        assert!(is_valid_package_name("fhir"));
+        assert!(is_valid_package_name("fhir_r4"));
+        assert!(is_valid_package_name("_private"));
+        assert!(!is_valid_package_name(""));
+        assert!(!is_valid_package_name("fhir-r4"));
+        assert!(!is_valid_package_name("4fhir"));
+        assert!(!is_valid_package_name("class"));
+        assert!(!is_valid_package_name("a.b"));
     }
 
     #[test]

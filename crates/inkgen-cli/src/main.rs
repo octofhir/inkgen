@@ -830,12 +830,13 @@ async fn generate_python(args: GeneratePythonArgs) -> Result<()> {
     let service = BaseStructureService::from_project_config(cache.clone(), context.manifest());
     let provider_config = context.manifest().structure_config();
 
-    let output_dir = args
-        .output
-        .clone()
-        .unwrap_or_else(|| context.default_output_dir().join("python"));
-
-    let backend = PythonGenerator::new(PythonGeneratorConfig::new(output_dir.clone()));
+    let config = PythonGeneratorConfig::from_manifest(
+        context.python_section(),
+        context.default_output_dir(),
+        args.output.clone(),
+    );
+    let output_dir = config.output_dir.clone();
+    let backend = PythonGenerator::new(config);
 
     for descriptor in &descriptors {
         // Build the IR once, in core. The backend never touches the provider.
