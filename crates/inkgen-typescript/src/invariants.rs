@@ -8,6 +8,103 @@
 
 use inkgen_core::ir::{InvariantDefinition, ResourceDefinition};
 
+/// A runtime check lowered from a FHIRPath invariant, emitted inside the
+/// generated parse function's refinement block.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct InvariantCheck {
+    /// Invariant key (e.g. `ext-1`).
+    pub key: String,
+    /// Violation message, already escaped for a JS double-quoted string.
+    pub message: String,
+    /// JS boolean expression that is true when the invariant is VIOLATED.
+    /// `__OBJ__` stands for the parsed value; the template substitutes the
+    /// dialect's variable name.
+    pub condition: String,
+}
+
+/// Lower error-severity invariants of the form `a.exists() != b.exists()`
+/// (exclusive presence, e.g. Extension's `ext-1`: either `extension` or
+/// `value[x]`, not both and not neither).
+///
+/// `choices` maps choice base names (`value`) to their emitted member fields;
+/// `field_names`/`array_fields` describe the emitted scalar/collection fields.
+/// Invariants referencing anything else, or any other expression shape, are
+/// skipped — full FHIRPath evaluation is out of scope.
+pub fn lower_xor_exists_checks(
+    invariants: &[InvariantDefinition],
+    choices: &indexmap::IndexMap<String, Vec<String>>,
+    field_names: &std::collections::HashSet<String>,
+    array_fields: &std::collections::HashSet<String>,
+) -> Vec<InvariantCheck> {
+    let mut checks = Vec::new();
+    for inv in invariants {
+        if inv.severity.as_deref() != Some("error") {
+            continue;
+        }
+        let Some(expr) = &inv.expression else {
+            continue;
+        };
+        let Some((lhs, rhs)) = expr.split_once("!=") else {
+            continue;
+        };
+        let Some(lhs) = exists_target(lhs.trim(), choices, field_names, array_fields) else {
+            continue;
+        };
+        let Some(rhs) = exists_target(rhs.trim(), choices, field_names, array_fields) else {
+            continue;
+        };
+        let human = inv.human.as_deref().unwrap_or(expr);
+        checks.push(InvariantCheck {
+            key: inv.key.clone(),
+            message: js_string_escape(&format!("{}: {}", inv.key, human)),
+            // XOR is violated when both sides exist or neither does.
+            condition: format!("({lhs}) === ({rhs})"),
+        });
+    }
+    checks
+}
+
+/// Render one side of an `!=` invariant as a JS `exists()` expression, or
+/// `None` when the side is not a plain `<name>.exists()` over a known field.
+fn exists_target(
+    side: &str,
+    choices: &indexmap::IndexMap<String, Vec<String>>,
+    field_names: &std::collections::HashSet<String>,
+    array_fields: &std::collections::HashSet<String>,
+) -> Option<String> {
+    let name = side.strip_suffix(".exists()")?;
+    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return None;
+    }
+    if let Some(members) = choices.get(name) {
+        let listed = members
+            .iter()
+            .map(|m| format!("__OBJ__.{m}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Some(format!("[{listed}].some((x) => x !== undefined)"));
+    }
+    if !field_names.contains(name) {
+        return None;
+    }
+    if array_fields.contains(name) {
+        Some(format!(
+            "Array.isArray(__OBJ__.{name}) && __OBJ__.{name}.length > 0"
+        ))
+    } else {
+        Some(format!(
+            "__OBJ__.{name} !== undefined && __OBJ__.{name} !== null"
+        ))
+    }
+}
+
+/// Escape a message for embedding in a JS double-quoted string literal.
+fn js_string_escape(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace(['\n', '\r'], " ")
+}
+
 /// Complexity classification for a FHIRPath expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExpressionComplexity {
@@ -374,5 +471,105 @@ mod tests {
         let cond = condition.unwrap();
         assert!(cond.contains("name"));
         assert!(cond.contains("undefined"));
+    }
+
+    fn invariant(key: &str, severity: &str, expression: &str) -> InvariantDefinition {
+        InvariantDefinition {
+            key: key.to_string(),
+            severity: Some(severity.to_string()),
+            human: Some("Must have either extensions or value[x], not both".to_string()),
+            expression: Some(expression.to_string()),
+            xpath: None,
+            fhirpath: None,
+            additional: indexmap::IndexMap::new(),
+        }
+    }
+
+    fn xor_inputs() -> (
+        indexmap::IndexMap<String, Vec<String>>,
+        std::collections::HashSet<String>,
+        std::collections::HashSet<String>,
+    ) {
+        let mut choices = indexmap::IndexMap::new();
+        choices.insert(
+            "value".to_string(),
+            vec!["valueBoolean".to_string(), "valueString".to_string()],
+        );
+        let fields: std::collections::HashSet<String> =
+            ["extension".to_string()].into_iter().collect();
+        let arrays = fields.clone();
+        (choices, fields, arrays)
+    }
+
+    #[test]
+    fn xor_exists_lowers_ext1() {
+        let (choices, fields, arrays) = xor_inputs();
+        let checks = lower_xor_exists_checks(
+            &[invariant(
+                "ext-1",
+                "error",
+                "extension.exists() != value.exists()",
+            )],
+            &choices,
+            &fields,
+            &arrays,
+        );
+        assert_eq!(checks.len(), 1);
+        assert_eq!(checks[0].key, "ext-1");
+        assert_eq!(
+            checks[0].condition,
+            "(Array.isArray(__OBJ__.extension) && __OBJ__.extension.length > 0) === \
+             ([__OBJ__.valueBoolean, __OBJ__.valueString].some((x) => x !== undefined))"
+        );
+        assert!(checks[0].message.starts_with("ext-1: "));
+    }
+
+    #[test]
+    fn xor_exists_skips_unsupported() {
+        let (choices, fields, arrays) = xor_inputs();
+        let checks = lower_xor_exists_checks(
+            &[
+                // Not an `!=` expression.
+                invariant(
+                    "ele-1",
+                    "error",
+                    "hasValue() or (children().count() > id.count())",
+                ),
+                // Advisory severity is not enforced.
+                invariant("ext-w", "warning", "extension.exists() != value.exists()"),
+                // Unknown field name.
+                invariant("x-1", "error", "nope.exists() != value.exists()"),
+                // Not a plain exists() side.
+                invariant("x-2", "error", "extension.empty() != value.exists()"),
+            ],
+            &choices,
+            &fields,
+            &arrays,
+        );
+        assert!(checks.is_empty());
+    }
+
+    #[test]
+    fn xor_exists_scalar_field() {
+        let choices = indexmap::IndexMap::new();
+        let fields: std::collections::HashSet<String> =
+            ["a".to_string(), "b".to_string()].into_iter().collect();
+        let arrays = std::collections::HashSet::new();
+        let checks = lower_xor_exists_checks(
+            &[invariant("t-1", "error", "a.exists() != b.exists()")],
+            &choices,
+            &fields,
+            &arrays,
+        );
+        assert_eq!(
+            checks[0].condition,
+            "(__OBJ__.a !== undefined && __OBJ__.a !== null) === \
+             (__OBJ__.b !== undefined && __OBJ__.b !== null)"
+        );
+    }
+
+    #[test]
+    fn js_string_escape_quotes_and_backslashes() {
+        assert_eq!(js_string_escape("a\"b\\c\nd"), "a\\\"b\\\\c d");
     }
 }

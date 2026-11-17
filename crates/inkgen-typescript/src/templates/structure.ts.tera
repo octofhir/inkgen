@@ -127,12 +127,15 @@ export type {{ structure.type_name }}Validated = {{ structure.infer_type }}<type
  * @returns The parsed {{ structure.type_name }} if valid, or false if invalid
  */
 export function parse{{ structure.type_name }}(input: unknown): {{ structure.type_name }}Validated | false {
+{%- if (structure.choice_groups is defined and structure.choice_groups | length > 0) or (structure.invariant_checks is defined and structure.invariant_checks | length > 0) %}
 {%- if structure.choice_groups is defined and structure.choice_groups | length > 0 %}
   // FHIR choice (`value[x]`) elements carry at most one typed member
   // (exactly one when the choice is required).
+{%- endif %}
 {%- if structure.validation_library == "zod" %}
   const result = {{ structure.type_name }}Schema.superRefine((val, ctx) => {
     const v = val as Record<string, unknown>;
+{%- if structure.choice_groups is defined %}
 {%- for group in structure.choice_groups %}
 {%- if group.required %}
     if ([{% for m in group.members %}v.{{ m }}{% if not loop.last %}, {% endif %}{% endfor %}].filter((x) => x !== undefined).length !== 1) {
@@ -144,6 +147,14 @@ export function parse{{ structure.type_name }}(input: unknown): {{ structure.typ
     }
 {%- endif %}
 {%- endfor %}
+{%- endif %}
+{%- if structure.invariant_checks is defined %}
+{%- for check in structure.invariant_checks %}
+    if ({{ check.condition | replace(from="__OBJ__", to="v") }}) {
+      ctx.addIssue({ code: "custom", message: "{{ check.message }}", path: [] });
+    }
+{%- endfor %}
+{%- endif %}
   }).safeParse(input);
 {%- else %}
   const schema = v.pipe({{ structure.type_name }}Schema, v.rawCheck(({ dataset, addIssue }) => {
@@ -151,6 +162,7 @@ export function parse{{ structure.type_name }}(input: unknown): {{ structure.typ
       return;
     }
     const obj = dataset.value as Record<string, unknown>;
+{%- if structure.choice_groups is defined %}
 {%- for group in structure.choice_groups %}
 {%- if group.required %}
     if ([{% for m in group.members %}obj.{{ m }}{% if not loop.last %}, {% endif %}{% endfor %}].filter((x) => x !== undefined).length !== 1) {
@@ -162,6 +174,14 @@ export function parse{{ structure.type_name }}(input: unknown): {{ structure.typ
     }
 {%- endif %}
 {%- endfor %}
+{%- endif %}
+{%- if structure.invariant_checks is defined %}
+{%- for check in structure.invariant_checks %}
+    if ({{ check.condition | replace(from="__OBJ__", to="obj") }}) {
+      addIssue({ message: "{{ check.message }}" });
+    }
+{%- endfor %}
+{%- endif %}
   }));
   const result = v.safeParse(schema, input);
 {%- endif %}

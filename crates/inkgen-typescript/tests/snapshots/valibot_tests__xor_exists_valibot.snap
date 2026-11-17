@@ -1,0 +1,79 @@
+---
+source: crates/inkgen-typescript/tests/valibot_tests.rs
+expression: "file(&output, \"patient.ts\")"
+---
+
+import * as v from 'valibot';
+import type { FhirBoolean, FhirString } from "./primitives";
+
+
+import type { Element } from "./element";
+
+import { ElementSchema } from "./element";
+
+export interface Patient {
+  /** Resource type identifier */
+  resourceType: "Patient";
+  extension?: Array<Element>;
+  valueBoolean?: FhirBoolean;
+  /** Primitive extensions for `valueBoolean` */
+  _valueBoolean?: Element;
+  valueString?: FhirString;
+  /** Primitive extensions for `valueString` */
+  _valueString?: Element;
+}
+/**
+ * Type guard to check if input is a valid Patient
+ */
+export function isPatient(input: unknown): input is Patient {
+  if (typeof input !== "object" || input === null) {
+    return false;
+  }
+  const obj = input as Record<string, unknown>;
+  if (obj.resourceType !== undefined && obj.resourceType !== "Patient") {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Valibot schema for Patient
+ */
+export const PatientSchema: v.GenericSchema<Record<string, unknown>> = v.object({
+  resourceType: v.literal("Patient"),
+  extension: v.optional(v.array(v.lazy(() => ElementSchema))),
+  valueBoolean: v.optional(v.boolean()),
+  _valueBoolean: v.optional(v.lazy(() => ElementSchema)),
+  valueString: v.optional(v.string()),
+  _valueString: v.optional(v.lazy(() => ElementSchema)),
+});
+
+/**
+ * Type inferred from Valibot schema
+ */
+export type PatientValidated = v.InferOutput<typeof PatientSchema>;
+
+/**
+ * Safely parse and validate input as Patient using Valibot schema
+ * @param input - The input to parse
+ * @returns The parsed Patient if valid, or false if invalid
+ */
+export function parsePatient(input: unknown): PatientValidated | false {
+  // FHIR choice (`value[x]`) elements carry at most one typed member
+  // (exactly one when the choice is required).
+  const schema = v.pipe(PatientSchema, v.rawCheck(({ dataset, addIssue }) => {
+    if (!dataset.typed) {
+      return;
+    }
+    const obj = dataset.value as Record<string, unknown>;
+    if ([obj.valueBoolean, obj.valueString].filter((x) => x !== undefined).length > 1) {
+      addIssue({ message: "At most one of valueBoolean, valueString may be present" });
+    }
+    if ((Array.isArray(obj.extension) && obj.extension.length > 0) === ([obj.valueBoolean, obj.valueString].some((x) => x !== undefined))) {
+      addIssue({ message: "ext-1: Must have either extensions or value[x], not both" });
+    }
+  }));
+  const result = v.safeParse(schema, input);
+  return result.success ? result.output : false;
+}

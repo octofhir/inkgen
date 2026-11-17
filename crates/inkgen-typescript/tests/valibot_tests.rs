@@ -266,6 +266,53 @@ fn nested_valueset_picklist_both_dialects() {
 }
 
 #[test]
+fn xor_exists_invariant_both_dialects() {
+    let mut ir = fixture();
+    add_companion_support(&mut ir);
+
+    // Root element carries the invariant keys; the full definitions live at
+    // definition level. ele-1 is unsupported FHIRPath and must NOT produce a
+    // check, ext-1 (`extension` XOR `value[x]`) must.
+    let mut root = element("Patient", 0, finite(1), &[]);
+    root["invariants"] = json!(["ele-1", "ext-1"]);
+    ir["types"][PATIENT_URL]["invariants"] = json!([
+        {
+            "key": "ele-1",
+            "severity": "error",
+            "human": "All FHIR elements must have a @value or children",
+            "expression": "hasValue() or (children().count() > id.count())",
+            "xpath": null,
+            "additional": {},
+        },
+        {
+            "key": "ext-1",
+            "severity": "error",
+            "human": "Must have either extensions or value[x], not both",
+            "expression": "extension.exists() != value.exists()",
+            "xpath": null,
+            "additional": {},
+        },
+    ]);
+
+    set_elements(
+        &mut ir,
+        vec![
+            root,
+            element("Patient.extension", 0, json!("unbounded"), &["Element"]),
+            element("Patient.value[x]", 0, finite(1), &["string", "boolean"]),
+        ],
+    );
+
+    for (library, name) in [
+        (ValidationLibrary::Zod, "xor_exists_zod"),
+        (ValidationLibrary::Valibot, "xor_exists_valibot"),
+    ] {
+        let output = generate_with(ir.clone(), library);
+        assert_snapshot!(name, file(&output, "patient.ts"));
+    }
+}
+
+#[test]
 fn valibot_nested_backbone() {
     let mut ir = fixture();
     let mut detail = element("Patient.contact.detail", 0, finite(1), &["BackboneElement"]);

@@ -1085,6 +1085,9 @@ struct RenderStructure {
     /// `value[x]` choice groups for the at-most-one parse refinement
     #[serde(skip_serializing_if = "Vec::is_empty")]
     choice_groups: Vec<RenderChoiceGroup>,
+    /// Runtime checks lowered from FHIRPath invariants (e.g. ext-1)
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    invariant_checks: Vec<invariants::InvariantCheck>,
     /// Whether the Zod schema has self-referential fields (needs explicit type annotation)
     is_recursive_schema: bool,
     /// Whether branded primitives are enabled (affects recursive schema type annotations)
@@ -2991,372 +2994,408 @@ fn build_render_structure(
 
     // Generate Zod schema fields if enabled, collecting schema imports
     let generate_zod_schema = config.validation_schemas;
-    let (zod_fields, schema_imports, valueset_value_imports, choice_groups) = if generate_zod_schema
-    {
-        let mut fields = Vec::new();
+    let (zod_fields, schema_imports, valueset_value_imports, choice_groups, invariant_checks) =
+        if generate_zod_schema {
+            let mut fields = Vec::new();
 
-        // Add resourceType to Zod schema for Resource and Logical types
-        use inkgen_core::ir::ResourceKind;
-        if matches!(
-            definition.kind,
-            ResourceKind::Resource | ResourceKind::Logical
-        ) {
-            // For abstract base types (Resource, DomainResource), use a plain string
-            // For concrete resources, use literal type for validation
-            let zod_type = if is_abstract_base {
-                SchemaExpr::Primitive(schema::FhirPrimitive::String)
-            } else {
-                SchemaExpr::Literal(type_name.to_string())
-            }
-            .render(config.validation_library);
-            fields.push(ZodSchemaField {
-                name: "resourceType".to_string(),
-                zod_type,
-            });
-        }
-
-        let mut schema_type_refs: std::collections::HashMap<String, Vec<String>> =
-            std::collections::HashMap::new();
-
-        let nested_type_names: Vec<String> = nested_types
-            .iter()
-            .map(|nested| nested.type_name.clone())
-            .collect();
-
-        let add_schema_type_ref =
-            |schema_type_refs: &mut std::collections::HashMap<String, Vec<String>>,
-             type_ref: &str| {
-                if type_ref.is_empty() {
-                    return;
-                }
-
-                if type_ref == type_name {
-                    return;
-                }
-
-                if nested_type_names
-                    .iter()
-                    .any(|nested_name| nested_name == type_ref)
-                {
-                    return;
-                }
-
-                if type_ref.starts_with("Fhir") {
-                    // Primitive schemas come from primitives.ts
-                    schema_type_refs
-                        .entry("./primitives".to_string())
-                        .or_default()
-                        .push(type_ref.to_string());
-                    return;
-                }
-
-                let import_path = if let Some(import) = imports
-                    .iter()
-                    .find(|imp| imp.types.contains(&type_ref.to_string()))
-                {
-                    import.path.clone()
+            // Add resourceType to Zod schema for Resource and Logical types
+            use inkgen_core::ir::ResourceKind;
+            if matches!(
+                definition.kind,
+                ResourceKind::Resource | ResourceKind::Logical
+            ) {
+                // For abstract base types (Resource, DomainResource), use a plain string
+                // For concrete resources, use literal type for validation
+                let zod_type = if is_abstract_base {
+                    SchemaExpr::Primitive(schema::FhirPrimitive::String)
                 } else {
-                    let file_name = naming::snake_case(type_ref)
-                        .replace('_', "-")
-                        .to_ascii_lowercase();
-                    format!("./{}", file_name)
-                };
+                    SchemaExpr::Literal(type_name.to_string())
+                }
+                .render(config.validation_library);
+                fields.push(ZodSchemaField {
+                    name: "resourceType".to_string(),
+                    zod_type,
+                });
+            }
 
-                schema_type_refs
-                    .entry(import_path)
-                    .or_default()
-                    .push(type_ref.to_string());
-            };
+            let mut schema_type_refs: std::collections::HashMap<String, Vec<String>> =
+                std::collections::HashMap::new();
 
-        for type_ref in &nested_schema_type_refs {
-            add_schema_type_ref(&mut schema_type_refs, type_ref);
-        }
-
-        // Choice (`value[x]`) ids whose pre-expansion cardinality is required
-        // (min >= 1). `expand_choice_elements` lowers every variant to min 0
-        // (each member is individually optional on the wire), so the
-        // required-ness of the choice as a whole must be read here, before
-        // expansion, to drive the exactly-one refinement.
-        let required_choice_ids: std::collections::HashSet<String> =
-            top_level_element_refs(definition)
+            let nested_type_names: Vec<String> = nested_types
                 .iter()
-                .filter(|element| element.path.ends_with("[x]") && element.cardinality.min >= 1)
-                .map(|element| element.id.clone())
+                .map(|nested| nested.type_name.clone())
                 .collect();
 
-        // Group emitted choice (`value[x]`) variant members by their shared
-        // origin element id. `expand_choice_elements` clones the `value[x]`
-        // element per type and only rewrites path/types, so every variant keeps
-        // the original id ending in `[x]` (e.g. `Patient.deceased[x]`). Members
-        // accumulate in field-emission order, which is deterministic.
-        let mut choice_members: IndexMap<String, Vec<String>> = IndexMap::new();
+            let add_schema_type_ref =
+                |schema_type_refs: &mut std::collections::HashMap<String, Vec<String>>,
+                 type_ref: &str| {
+                    if type_ref.is_empty() {
+                        return;
+                    }
 
-        for element in top_level_elements(definition)
-            .iter()
-            // Filter out choice type placeholders (e.g., "deceased[x]")
-            // Keep only the specific variants (e.g., "deceasedBoolean", "deceasedDateTime")
-            .filter(|element| !element.path.contains("[x]"))
-        {
-            let field_name = schema::element_to_field_name(element);
+                    if type_ref == type_name {
+                        return;
+                    }
 
-            // Check if this element has a ValueSet binding that lowers to a
-            // closed/enumerated type (required/extensible). The decision is
-            // FHIR-neutral and lives in inkgen-core (`PackageIr::lower_binding`).
-            let mut used_valueset_schema = false;
-            if let Some(binding) = &element.binding
-                && let Some(vs_type_name) =
-                    enumerated_valueset_type(config, binding, valueset_url_to_type)
-            {
-                let vs_type_name = &vs_type_name;
-                // Use an enum/picklist over the ValueSet values array
-                let values_name = format!("{}Values", vs_type_name);
-                let base_info = SchemaInfo {
-                    expr: SchemaExpr::Enum(values_name.clone()),
-                    type_refs: Vec::new(),
+                    if nested_type_names
+                        .iter()
+                        .any(|nested_name| nested_name == type_ref)
+                    {
+                        return;
+                    }
+
+                    if type_ref.starts_with("Fhir") {
+                        // Primitive schemas come from primitives.ts
+                        schema_type_refs
+                            .entry("./primitives".to_string())
+                            .or_default()
+                            .push(type_ref.to_string());
+                        return;
+                    }
+
+                    let import_path = if let Some(import) = imports
+                        .iter()
+                        .find(|imp| imp.types.contains(&type_ref.to_string()))
+                    {
+                        import.path.clone()
+                    } else {
+                        let file_name = naming::snake_case(type_ref)
+                            .replace('_', "-")
+                            .to_ascii_lowercase();
+                        format!("./{}", file_name)
+                    };
+
+                    schema_type_refs
+                        .entry(import_path)
+                        .or_default()
+                        .push(type_ref.to_string());
                 };
-                let schema_info = schema::apply_cardinality(base_info, &element.cardinality);
 
-                fields.push(ZodSchemaField {
-                    name: field_name.clone(),
-                    zod_type: schema_info.render(config.validation_library),
-                });
-
-                // Add import for the ValueSet Values array
-                // Note: ValueSet Values arrays don't need the Schema suffix,
-                // so we track them separately from schema_type_refs
-                let file_name = naming::snake_case(vs_type_name)
-                    .replace('_', "-")
-                    .to_ascii_lowercase();
-                let valueset_import_path = format!("./valuesets/{}", file_name);
-                valueset_value_imports
-                    .entry(valueset_import_path)
-                    .or_default()
-                    .push(values_name);
-
-                used_valueset_schema = true;
+            for type_ref in &nested_schema_type_refs {
+                add_schema_type_ref(&mut schema_type_refs, type_ref);
             }
 
-            if !used_valueset_schema {
-                // Check if this element has a nested type (backbone element)
-                if let Some(nested_type_name) = element_to_nested_type.get(&element.path) {
-                    // Use the specific nested type schema (defined in same file, no import needed)
+            // Choice (`value[x]`) ids whose pre-expansion cardinality is required
+            // (min >= 1). `expand_choice_elements` lowers every variant to min 0
+            // (each member is individually optional on the wire), so the
+            // required-ness of the choice as a whole must be read here, before
+            // expansion, to drive the exactly-one refinement.
+            let required_choice_ids: std::collections::HashSet<String> =
+                top_level_element_refs(definition)
+                    .iter()
+                    .filter(|element| element.path.ends_with("[x]") && element.cardinality.min >= 1)
+                    .map(|element| element.id.clone())
+                    .collect();
+
+            // Group emitted choice (`value[x]`) variant members by their shared
+            // origin element id. `expand_choice_elements` clones the `value[x]`
+            // element per type and only rewrites path/types, so every variant keeps
+            // the original id ending in `[x]` (e.g. `Patient.deceased[x]`). Members
+            // accumulate in field-emission order, which is deterministic.
+            let mut choice_members: IndexMap<String, Vec<String>> = IndexMap::new();
+
+            for element in top_level_elements(definition)
+                .iter()
+                // Filter out choice type placeholders (e.g., "deceased[x]")
+                // Keep only the specific variants (e.g., "deceasedBoolean", "deceasedDateTime")
+                .filter(|element| !element.path.contains("[x]"))
+            {
+                let field_name = schema::element_to_field_name(element);
+
+                // Check if this element has a ValueSet binding that lowers to a
+                // closed/enumerated type (required/extensible). The decision is
+                // FHIR-neutral and lives in inkgen-core (`PackageIr::lower_binding`).
+                let mut used_valueset_schema = false;
+                if let Some(binding) = &element.binding
+                    && let Some(vs_type_name) =
+                        enumerated_valueset_type(config, binding, valueset_url_to_type)
+                {
+                    let vs_type_name = &vs_type_name;
+                    // Use an enum/picklist over the ValueSet values array
+                    let values_name = format!("{}Values", vs_type_name);
                     let base_info = SchemaInfo {
-                        expr: SchemaExpr::Ref(nested_type_name.clone()),
-                        type_refs: Vec::new(), // Nested types are in the same file
+                        expr: SchemaExpr::Enum(values_name.clone()),
+                        type_refs: Vec::new(),
                     };
                     let schema_info = schema::apply_cardinality(base_info, &element.cardinality);
 
                     fields.push(ZodSchemaField {
-                        name: field_name,
+                        name: field_name.clone(),
                         zod_type: schema_info.render(config.validation_library),
                     });
-                } else if let Some(schema_info) = schema::element_to_schema_info(element) {
-                    // Check if this is a self-referential field (element type == current type)
-                    let is_self_reference = element.types.iter().any(|t| {
-                        let type_code = naming::pascal_case(&t.code);
-                        type_code == type_name
-                    });
 
-                    let final_schema = if is_self_reference {
-                        // Defer the reference to handle the forward reference
+                    // Add import for the ValueSet Values array
+                    // Note: ValueSet Values arrays don't need the Schema suffix,
+                    // so we track them separately from schema_type_refs
+                    let file_name = naming::snake_case(vs_type_name)
+                        .replace('_', "-")
+                        .to_ascii_lowercase();
+                    let valueset_import_path = format!("./valuesets/{}", file_name);
+                    valueset_value_imports
+                        .entry(valueset_import_path)
+                        .or_default()
+                        .push(values_name);
+
+                    used_valueset_schema = true;
+                }
+
+                if !used_valueset_schema {
+                    // Check if this element has a nested type (backbone element)
+                    if let Some(nested_type_name) = element_to_nested_type.get(&element.path) {
+                        // Use the specific nested type schema (defined in same file, no import needed)
                         let base_info = SchemaInfo {
-                            expr: SchemaExpr::Lazy(type_name.to_string()),
-                            type_refs: Vec::new(),
+                            expr: SchemaExpr::Ref(nested_type_name.clone()),
+                            type_refs: Vec::new(), // Nested types are in the same file
                         };
-                        schema::apply_cardinality(base_info, &element.cardinality)
-                            .render(config.validation_library)
-                    } else {
-                        // Collect type references for schema imports (not for self-references)
-                        for type_ref in &schema_info.type_refs {
-                            add_schema_type_ref(&mut schema_type_refs, type_ref);
+                        let schema_info =
+                            schema::apply_cardinality(base_info, &element.cardinality);
+
+                        fields.push(ZodSchemaField {
+                            name: field_name,
+                            zod_type: schema_info.render(config.validation_library),
+                        });
+                    } else if let Some(schema_info) = schema::element_to_schema_info(element) {
+                        // Check if this is a self-referential field (element type == current type)
+                        let is_self_reference = element.types.iter().any(|t| {
+                            let type_code = naming::pascal_case(&t.code);
+                            type_code == type_name
+                        });
+
+                        let final_schema = if is_self_reference {
+                            // Defer the reference to handle the forward reference
+                            let base_info = SchemaInfo {
+                                expr: SchemaExpr::Lazy(type_name.to_string()),
+                                type_refs: Vec::new(),
+                            };
+                            schema::apply_cardinality(base_info, &element.cardinality)
+                                .render(config.validation_library)
+                        } else {
+                            // Collect type references for schema imports (not for self-references)
+                            for type_ref in &schema_info.type_refs {
+                                add_schema_type_ref(&mut schema_type_refs, type_ref);
+                            }
+                            schema_info.render(config.validation_library)
+                        };
+
+                        // Record choice-variant membership for the choice refinement
+                        // (only emitted fields are referenced).
+                        if element.id.ends_with("[x]") {
+                            choice_members
+                                .entry(element.id.clone())
+                                .or_default()
+                                .push(field_name.clone());
                         }
-                        schema_info.render(config.validation_library)
-                    };
 
-                    // Record choice-variant membership for the choice refinement
-                    // (only emitted fields are referenced).
-                    if element.id.ends_with("[x]") {
-                        choice_members
-                            .entry(element.id.clone())
-                            .or_default()
-                            .push(field_name.clone());
+                        fields.push(ZodSchemaField {
+                            name: field_name,
+                            zod_type: final_schema,
+                        });
                     }
-
-                    fields.push(ZodSchemaField {
-                        name: field_name,
-                        zod_type: final_schema,
-                    });
                 }
             }
-        }
 
-        // A choice group only needs a runtime guard when it has ≥2 variants.
-        let choice_groups: Vec<RenderChoiceGroup> = choice_members
-            .into_iter()
-            .filter(|(_, members)| members.len() >= 2)
-            .map(|(id, members)| RenderChoiceGroup {
-                members,
-                required: required_choice_ids.contains(&id),
-            })
-            .collect();
-
-        // ============================================================
-        // CRITICAL FIX: Ensure all schema type refs are also in imports_map
-        // ============================================================
-        // The schema_type_refs HashMap tracks types needed for schemas (CodeableConceptSchema)
-        // but we ALSO need to import the base types (CodeableConcept) for the interface definitions.
-        //
-        // Extract all unique type names from schema_type_refs
-        let all_schema_types: std::collections::HashSet<String> = schema_type_refs
-            .values()
-            .flat_map(|types| types.iter())
-            .cloned()
-            .collect();
-
-        debug!(
-            "Processing {} schema types for {} (name_to_stem has {} entries)",
-            all_schema_types.len(),
-            type_name,
-            name_to_stem.len()
-        );
-
-        for schema_type in all_schema_types {
-            // Extract base type name (remove "Schema" or "Values" suffix)
-            let base_type = if let Some(base) = schema_type.strip_suffix("Schema") {
-                base.to_string()
-            } else if let Some(_base) = schema_type.strip_suffix("Values") {
-                // ValueSet Values array, skip (no base type to import)
-                continue;
-            } else {
-                // Not a schema type, use as-is
-                schema_type.clone()
-            };
-
-            // Skip if already in imports_map
-            if imports_map.contains_key(&base_type) {
-                debug!(
-                    "Type {} already in imports_map for {}",
-                    base_type, type_name
-                );
-                continue;
-            }
-
-            // Skip if it's the current type (self-reference)
-            if base_type == type_name {
-                debug!("Skipping self-reference {} in {}", base_type, type_name);
-                continue;
-            }
-
-            // Skip if it's a primitive type
-            if base_type.starts_with("Fhir") {
-                debug!("Skipping primitive type {} in {}", base_type, type_name);
-                continue;
-            }
-
-            // Try to find this type's location and add to imports_map
-            // CRITICAL: Check type_registry FIRST for correct cross-package imports
-            if let Some(type_registry) = &config.type_registry
-                && let Some((pkg_folder, stem)) = type_registry.get(&base_type)
-            {
-                // Use type_registry for authoritative package info
-                debug!(
-                    "Adding {} to imports_map for {} via type_registry (pkg: {}, stem: {})",
-                    base_type, type_name, pkg_folder, stem
-                );
-                imports_map.insert(
-                    base_type.clone(),
-                    (pkg_folder.to_string(), stem.to_string()),
-                );
-            } else if let Some(stem) = name_to_stem.get(&base_type) {
-                // Fallback for types not in registry (local nested types)
-                debug!(
-                    "Adding {} to imports_map for {} (stem: {})",
-                    base_type, type_name, stem
-                );
-                imports_map.insert(
-                    base_type.clone(),
-                    (package_folder.to_string(), stem.clone()),
-                );
-            } else {
-                // Check if it exists with different casing
-                let similar_keys: Vec<_> = name_to_stem
-                    .keys()
-                    .filter(|k| k.to_lowercase() == base_type.to_lowercase())
-                    .collect();
-
-                warn!(
-                    "Could not find location for type '{}' needed by {} (from schema type {}) - similar keys: {:?}, name_to_stem has {} total entries",
-                    base_type,
-                    type_name,
-                    schema_type,
-                    similar_keys,
-                    name_to_stem.len()
-                );
-            }
-        }
-
-        // Debug: log all schema_type_refs
-        debug!(
-            "schema_type_refs for {}: {:?}",
-            type_name,
-            schema_type_refs
+            // Lower exclusive-presence invariants (`a.exists() != b.exists()`,
+            // e.g. Extension's ext-1) into runtime checks. Choice bases resolve to
+            // their emitted members; other names must be emitted fields.
+            let choice_base_members: IndexMap<String, Vec<String>> = choice_members
                 .iter()
-                .map(|(path, types)| (path.as_str(), types.as_slice()))
-                .collect::<Vec<_>>()
-        );
-
-        // Primitive-extension companions (`_field`) reference `ElementSchema`;
-        // ensure it is imported when any primitive field (top-level or nested)
-        // emitted a companion.
-        let needs_element_schema = !primitive_fields.is_empty()
-            || nested_types
-                .iter()
-                .any(|n| n.fields.iter().any(|f| f.name.starts_with('_')));
-        if needs_element_schema {
-            add_schema_type_ref(&mut schema_type_refs, "Element");
-        }
-
-        // Convert schema_type_refs HashMap to Vec<RenderImport>
-        let mut schema_imports: Vec<RenderImport> = schema_type_refs
-            .into_iter()
-            .map(|(path, types)| {
-                // Deduplicate types
-                let mut unique_types: Vec<String> = types
-                    .into_iter()
-                    .collect::<std::collections::HashSet<_>>()
-                    .into_iter()
-                    .collect();
-                unique_types.sort();
-
-                RenderImport {
-                    types: unique_types,
-                    path,
-                    is_type_only: false,
-                    source_package_folder: package_folder.to_string(),
+                .map(|(id, members)| {
+                    let base = id.split('.').next_back().unwrap_or(id).replace("[x]", "");
+                    (naming::camel_case(&base), members.clone())
+                })
+                .collect();
+            let mut invariant_field_names = std::collections::HashSet::new();
+            let mut invariant_array_fields = std::collections::HashSet::new();
+            for element in top_level_elements(definition) {
+                let name = schema::element_to_field_name(&element);
+                if !matches!(
+                    element.cardinality.max,
+                    inkgen_core::ir::ElementMax::Finite(1)
+                ) {
+                    invariant_array_fields.insert(name.clone());
                 }
-            })
-            .collect();
+                invariant_field_names.insert(name);
+            }
+            let invariant_checks = invariants::lower_xor_exists_checks(
+                &definition.invariants,
+                &choice_base_members,
+                &invariant_field_names,
+                &invariant_array_fields,
+            );
 
-        // Sort imports for consistent output
-        schema_imports.sort_by(|a, b| a.path.cmp(&b.path));
+            // A choice group only needs a runtime guard when it has ≥2 variants.
+            let choice_groups: Vec<RenderChoiceGroup> = choice_members
+                .into_iter()
+                .filter(|(_, members)| members.len() >= 2)
+                .map(|(id, members)| RenderChoiceGroup {
+                    members,
+                    required: required_choice_ids.contains(&id),
+                })
+                .collect();
 
-        // Mirror the interface's `_field` companions in the Zod schema.
-        inject_primitive_companions_zod(&mut fields, &primitive_fields, config.validation_library);
+            // ============================================================
+            // CRITICAL FIX: Ensure all schema type refs are also in imports_map
+            // ============================================================
+            // The schema_type_refs HashMap tracks types needed for schemas (CodeableConceptSchema)
+            // but we ALSO need to import the base types (CodeableConcept) for the interface definitions.
+            //
+            // Extract all unique type names from schema_type_refs
+            let all_schema_types: std::collections::HashSet<String> = schema_type_refs
+                .values()
+                .flat_map(|types| types.iter())
+                .cloned()
+                .collect();
 
-        (
-            fields,
-            schema_imports,
-            valueset_value_imports,
-            choice_groups,
-        )
-    } else {
-        (
-            Vec::new(),
-            Vec::new(),
-            std::collections::HashMap::new(),
-            Vec::new(),
-        )
-    };
+            debug!(
+                "Processing {} schema types for {} (name_to_stem has {} entries)",
+                all_schema_types.len(),
+                type_name,
+                name_to_stem.len()
+            );
+
+            for schema_type in all_schema_types {
+                // Extract base type name (remove "Schema" or "Values" suffix)
+                let base_type = if let Some(base) = schema_type.strip_suffix("Schema") {
+                    base.to_string()
+                } else if let Some(_base) = schema_type.strip_suffix("Values") {
+                    // ValueSet Values array, skip (no base type to import)
+                    continue;
+                } else {
+                    // Not a schema type, use as-is
+                    schema_type.clone()
+                };
+
+                // Skip if already in imports_map
+                if imports_map.contains_key(&base_type) {
+                    debug!(
+                        "Type {} already in imports_map for {}",
+                        base_type, type_name
+                    );
+                    continue;
+                }
+
+                // Skip if it's the current type (self-reference)
+                if base_type == type_name {
+                    debug!("Skipping self-reference {} in {}", base_type, type_name);
+                    continue;
+                }
+
+                // Skip if it's a primitive type
+                if base_type.starts_with("Fhir") {
+                    debug!("Skipping primitive type {} in {}", base_type, type_name);
+                    continue;
+                }
+
+                // Try to find this type's location and add to imports_map
+                // CRITICAL: Check type_registry FIRST for correct cross-package imports
+                if let Some(type_registry) = &config.type_registry
+                    && let Some((pkg_folder, stem)) = type_registry.get(&base_type)
+                {
+                    // Use type_registry for authoritative package info
+                    debug!(
+                        "Adding {} to imports_map for {} via type_registry (pkg: {}, stem: {})",
+                        base_type, type_name, pkg_folder, stem
+                    );
+                    imports_map.insert(
+                        base_type.clone(),
+                        (pkg_folder.to_string(), stem.to_string()),
+                    );
+                } else if let Some(stem) = name_to_stem.get(&base_type) {
+                    // Fallback for types not in registry (local nested types)
+                    debug!(
+                        "Adding {} to imports_map for {} (stem: {})",
+                        base_type, type_name, stem
+                    );
+                    imports_map.insert(
+                        base_type.clone(),
+                        (package_folder.to_string(), stem.clone()),
+                    );
+                } else {
+                    // Check if it exists with different casing
+                    let similar_keys: Vec<_> = name_to_stem
+                        .keys()
+                        .filter(|k| k.to_lowercase() == base_type.to_lowercase())
+                        .collect();
+
+                    warn!(
+                        "Could not find location for type '{}' needed by {} (from schema type {}) - similar keys: {:?}, name_to_stem has {} total entries",
+                        base_type,
+                        type_name,
+                        schema_type,
+                        similar_keys,
+                        name_to_stem.len()
+                    );
+                }
+            }
+
+            // Debug: log all schema_type_refs
+            debug!(
+                "schema_type_refs for {}: {:?}",
+                type_name,
+                schema_type_refs
+                    .iter()
+                    .map(|(path, types)| (path.as_str(), types.as_slice()))
+                    .collect::<Vec<_>>()
+            );
+
+            // Primitive-extension companions (`_field`) reference `ElementSchema`;
+            // ensure it is imported when any primitive field (top-level or nested)
+            // emitted a companion.
+            let needs_element_schema = !primitive_fields.is_empty()
+                || nested_types
+                    .iter()
+                    .any(|n| n.fields.iter().any(|f| f.name.starts_with('_')));
+            if needs_element_schema {
+                add_schema_type_ref(&mut schema_type_refs, "Element");
+            }
+
+            // Convert schema_type_refs HashMap to Vec<RenderImport>
+            let mut schema_imports: Vec<RenderImport> = schema_type_refs
+                .into_iter()
+                .map(|(path, types)| {
+                    // Deduplicate types
+                    let mut unique_types: Vec<String> = types
+                        .into_iter()
+                        .collect::<std::collections::HashSet<_>>()
+                        .into_iter()
+                        .collect();
+                    unique_types.sort();
+
+                    RenderImport {
+                        types: unique_types,
+                        path,
+                        is_type_only: false,
+                        source_package_folder: package_folder.to_string(),
+                    }
+                })
+                .collect();
+
+            // Sort imports for consistent output
+            schema_imports.sort_by(|a, b| a.path.cmp(&b.path));
+
+            // Mirror the interface's `_field` companions in the Zod schema.
+            inject_primitive_companions_zod(
+                &mut fields,
+                &primitive_fields,
+                config.validation_library,
+            );
+
+            (
+                fields,
+                schema_imports,
+                valueset_value_imports,
+                choice_groups,
+                invariant_checks,
+            )
+        } else {
+            (
+                Vec::new(),
+                Vec::new(),
+                std::collections::HashMap::new(),
+                Vec::new(),
+                Vec::new(),
+            )
+        };
 
     // IMPORTANT: Regroup imports after Zod schema processing
     // The Zod schema block may have added new types to imports_map,
@@ -3523,6 +3562,7 @@ fn build_render_structure(
         recursive_annotation: config.validation_library.recursive_annotation(),
         zod_fields,
         choice_groups,
+        invariant_checks,
         is_recursive_schema,
         branded_primitives: config.branded_primitives,
         slices,
