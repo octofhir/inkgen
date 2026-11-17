@@ -591,7 +591,7 @@ mod tests {
     #[test]
     fn test_nullable_companion_shape() {
         let expr = SchemaExpr::Optional(Box::new(SchemaExpr::Array {
-            item: Box::new(SchemaExpr::Nullable(Box::new(SchemaExpr::Ref(
+            item: Box::new(SchemaExpr::Nullable(Box::new(SchemaExpr::Lazy(
                 "Element".to_string(),
             )))),
             min: None,
@@ -599,11 +599,11 @@ mod tests {
         }));
         assert_eq!(
             expr.render(ValidationLibrary::Zod),
-            "z.array(ElementSchema.nullable()).optional()"
+            "z.array(z.lazy(() => ElementSchema).nullable()).optional()"
         );
         assert_eq!(
             expr.render(ValidationLibrary::Valibot),
-            "v.optional(v.array(v.nullable(ElementSchema)))"
+            "v.optional(v.array(v.nullable(v.lazy(() => ElementSchema))))"
         );
     }
 }

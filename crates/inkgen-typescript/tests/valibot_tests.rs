@@ -84,14 +84,14 @@ fn set_elements(ir: &mut Value, elements: Vec<Value>) {
     def["flat_elements"] = Value::Array(flat);
 }
 
-/// Run the full Valibot pipeline over a fixture-derived IR.
-fn generate(ir: Value) -> GenerationOutput {
+/// Run the full pipeline over a fixture-derived IR with the given dialect.
+fn generate_with(ir: Value, library: ValidationLibrary) -> GenerationOutput {
     let ir: PackageIr = serde_json::from_value(ir).expect("fixture deserializes to PackageIr");
     let ir = Arc::new(ir);
     let mut config =
         TypescriptGeneratorConfig::from_package_ir(ir.clone(), None, "generated".into())
             .expect("typescript config");
-    config.validation_library = ValidationLibrary::Valibot;
+    config.validation_library = library;
     let backend = TypescriptGenerator::new(config);
     let output = backend.generate(&ir).expect("generation succeeds");
     assert_eq!(
@@ -100,6 +100,11 @@ fn generate(ir: Value) -> GenerationOutput {
         "generation must be deterministic"
     );
     output
+}
+
+/// Run the full Valibot pipeline over a fixture-derived IR.
+fn generate(ir: Value) -> GenerationOutput {
+    generate_with(ir, ValidationLibrary::Valibot)
 }
 
 /// Fetch the unique generated file whose path ends with `suffix`.
@@ -330,4 +335,105 @@ fn valibot_profile_legacy_schema() {
         None,
     );
     assert_snapshot!("profile_legacy", generated);
+}
+
+/// Register FHIR primitives and a minimal `Element` complex type in the
+/// fixture so primitive-extension companions (`_field`) are generated and
+/// their `ElementSchema` references resolve to a real file.
+fn add_companion_support(ir: &mut Value) {
+    let package = json!({ "name": "audit.fhir", "version": "1.0.0" });
+    for (code, name, stem) in [
+        ("boolean", "Boolean", "boolean"),
+        ("string", "String", "string"),
+        ("date", "Date", "date"),
+        ("base64Binary", "Base64Binary", "base64-binary"),
+        ("code", "Code", "code"),
+        ("positiveInt", "PositiveInt", "positive-int"),
+    ] {
+        let url = format!("http://example.org/fhir/StructureDefinition/{code}");
+        ir["type_map"]["by_url"][&url] = json!({
+            "canonical_url": url,
+            "type_name": name,
+            "file_stem": stem,
+            "kind": "primitive_type",
+            "package": package,
+            "base_type": null,
+            "type_code": code,
+        });
+        ir["type_map"]["by_name"][name] = json!(url);
+        ir["type_map"]["by_stem"][stem] = json!(url);
+    }
+
+    let element_url = "http://example.org/fhir/StructureDefinition/Element";
+    ir["types"][element_url] = json!({
+        "id": "Element",
+        "url": element_url,
+        "name": "Element",
+        "title": "Element",
+        "description": "Base definition for all elements",
+        "version": "1.0.0",
+        "status": "active",
+        "kind": "complex_type",
+        "fhir_type": "Element",
+        "date": null,
+        "lineage": { "base_definition": null, "base_id": null, "derivation": null, "type_name": null },
+        "elements": [element("Element.id", 0, finite(1), &["string"])],
+        "extensions": [],
+        "invariants": [],
+    });
+    ir["structures"].as_array_mut().unwrap().push(json!({
+        "canonical_url": element_url,
+        "name": "Element",
+        "type_code": "Element",
+        "title": "Element",
+        "version": "1.0.0",
+        "status": "active",
+        "package": package,
+        "kind": "complex_type",
+    }));
+    ir["canonical_index"]["Element"] = json!(element_url);
+    ir["type_map"]["by_url"][element_url] = json!({
+        "canonical_url": element_url,
+        "type_name": "Element",
+        "file_stem": "element",
+        "kind": "complex_type",
+        "package": package,
+        "base_type": null,
+        "type_code": "Element",
+    });
+    ir["type_map"]["by_name"]["Element"] = json!(element_url);
+    ir["type_map"]["by_stem"]["element"] = json!(element_url);
+    ir["package_descriptor"]["inventory"]["structures"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({
+            "canonical_url": element_url,
+            "name": "Element",
+            "type_code": "Element",
+            "title": "Element",
+            "version": "1.0.0",
+            "status": "active",
+            "package": package,
+            "kind": "complex_type",
+        }));
+}
+
+#[test]
+fn primitive_companions_are_lazy_in_both_dialects() {
+    let mut ir = fixture();
+    add_companion_support(&mut ir);
+    for (library, label) in [
+        (ValidationLibrary::Zod, "zod"),
+        (ValidationLibrary::Valibot, "valibot"),
+    ] {
+        let output = generate_with(ir.clone(), library);
+        assert_snapshot!(
+            format!("companions_{label}_patient"),
+            file(&output, "patient.ts")
+        );
+        assert_snapshot!(
+            format!("companions_{label}_element"),
+            file(&output, "element.ts")
+        );
+    }
 }

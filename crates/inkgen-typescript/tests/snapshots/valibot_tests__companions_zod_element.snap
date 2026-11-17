@@ -1,0 +1,46 @@
+---
+source: crates/inkgen-typescript/tests/valibot_tests.rs
+expression: "file(&output, \"element.ts\")"
+---
+
+import { z } from 'zod';
+import type { FhirString } from "./primitives";
+
+export interface Element {
+  id?: FhirString;
+  /** Primitive extensions for `id` */
+  _id?: Element;
+}
+/**
+ * Type guard to check if input is a valid Element
+ */
+export function isElement(input: unknown): input is Element {
+  if (typeof input !== "object" || input === null) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Zod schema for Element
+ */
+export const ElementSchema: z.ZodType<object> = z.object({
+  id: z.string().optional(),
+  _id: z.lazy(() => ElementSchema).optional(),
+});
+
+/**
+ * Type inferred from Zod schema
+ */
+export type ElementValidated = z.infer<typeof ElementSchema>;
+
+/**
+ * Safely parse and validate input as Element using Zod schema
+ * @param input - The input to parse
+ * @returns The parsed Element if valid, or false if invalid
+ */
+export function parseElement(input: unknown): ElementValidated | false {
+  const result = ElementSchema.safeParse(input);
+  return result.success ? result.data : false;
+}

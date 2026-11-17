@@ -1,0 +1,84 @@
+---
+source: crates/inkgen-typescript/tests/valibot_tests.rs
+expression: "file(&output, \"patient.ts\")"
+---
+
+import { z } from 'zod';
+import type { FhirBoolean, FhirString } from "./primitives";
+
+
+import type { Element } from "./element";
+
+import { ElementSchema } from "./element";
+
+export interface Patient {
+  /** Resource type identifier */
+  resourceType: "Patient";
+  /** Пациент — 日本語 Patient.active */
+  active?: FhirBoolean;
+  /** Primitive extensions for `active` */
+  _active?: Element;
+  /** Пациент — 日本語 Patient.alias */
+  alias?: Array<FhirString>;
+  /** Primitive extensions for `alias` */
+  _alias?: Array<Element | null>;
+  /** Пациент — 日本語 Patient.value[x] */
+  valueBoolean?: FhirBoolean;
+  /** Primitive extensions for `valueBoolean` */
+  _valueBoolean?: Element;
+  /** Пациент — 日本語 Patient.value[x] */
+  valueString?: FhirString;
+  /** Primitive extensions for `valueString` */
+  _valueString?: Element;
+}
+/**
+ * Type guard to check if input is a valid Patient
+ */
+export function isPatient(input: unknown): input is Patient {
+  if (typeof input !== "object" || input === null) {
+    return false;
+  }
+  const obj = input as Record<string, unknown>;
+  if (obj.resourceType !== undefined && obj.resourceType !== "Patient") {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Zod schema for Patient
+ */
+export const PatientSchema: z.ZodType<object> = z.object({
+  resourceType: z.literal("Patient"),
+  active: z.boolean().optional(),
+  _active: z.lazy(() => ElementSchema).optional(),
+  alias: z.array(z.string()).optional(),
+  _alias: z.array(z.lazy(() => ElementSchema).nullable()).optional(),
+  valueBoolean: z.boolean().optional(),
+  _valueBoolean: z.lazy(() => ElementSchema).optional(),
+  valueString: z.string().optional(),
+  _valueString: z.lazy(() => ElementSchema).optional(),
+});
+
+/**
+ * Type inferred from Zod schema
+ */
+export type PatientValidated = z.infer<typeof PatientSchema>;
+
+/**
+ * Safely parse and validate input as Patient using Zod schema
+ * @param input - The input to parse
+ * @returns The parsed Patient if valid, or false if invalid
+ */
+export function parsePatient(input: unknown): PatientValidated | false {
+  // FHIR choice (`value[x]`) elements carry at most one typed member
+  // (exactly one when the choice is required).
+  const result = PatientSchema.superRefine((val, ctx) => {
+    const v = val as Record<string, unknown>;
+    if ([v.valueBoolean, v.valueString].filter((x) => x !== undefined).length > 1) {
+      ctx.addIssue({ code: "custom", message: "At most one of valueBoolean, valueString may be present", path: [] });
+    }
+  }).safeParse(input);
+  return result.success ? result.data : false;
+}

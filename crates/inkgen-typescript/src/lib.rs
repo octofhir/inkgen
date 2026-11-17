@@ -2729,7 +2729,7 @@ fn build_render_structure(
         // Emit FHIR primitive-extension companions (`_field`) for primitive
         // fields. The companion carries both its type and Zod schema, so it
         // renders in the nested interface and the nested Zod schema.
-        inject_primitive_companions(&mut nested_fields, type_name, config.validation_library);
+        inject_primitive_companions(&mut nested_fields, config.validation_library);
 
         // Detect if this nested type uses lazy schemas (needs type annotation for TypeScript)
         let is_recursive = nested_fields
@@ -2801,7 +2801,7 @@ fn build_render_structure(
         .collect();
 
     // Emit FHIR primitive-extension companions (`_field`) on the interface/class.
-    inject_primitive_companions(&mut fields, type_name, config.validation_library);
+    inject_primitive_companions(&mut fields, config.validation_library);
 
     ensure_field_dependencies(
         &fields,
@@ -3320,12 +3320,7 @@ fn build_render_structure(
         schema_imports.sort_by(|a, b| a.path.cmp(&b.path));
 
         // Mirror the interface's `_field` companions in the Zod schema.
-        inject_primitive_companions_zod(
-            &mut fields,
-            &primitive_fields,
-            type_name,
-            config.validation_library,
-        );
+        inject_primitive_companions_zod(&mut fields, &primitive_fields, config.validation_library);
 
         (
             fields,
@@ -3781,12 +3776,9 @@ fn map_field_with_nested_context(
 /// Build the FHIR primitive-extension companion (`_field`) for a primitive
 /// field. In FHIR JSON every primitive `x` may carry a sibling `_x` of type
 /// `Element` (`{ id?, extension? }`); arrays use a parallel `(Element | null)[]`.
-/// Returns `None` for non-primitive fields. `current_type` is the type being
-/// generated — when it is `Element` itself the schema is self-referential and
-/// must be deferred.
+/// Returns `None` for non-primitive fields.
 fn primitive_extension_companion(
     field: &RenderField,
-    current_type: &str,
     library: ValidationLibrary,
 ) -> Option<RenderField> {
     if !field.is_primitive {
@@ -3798,7 +3790,7 @@ fn primitive_extension_companion(
     } else {
         "Element".to_string()
     };
-    let zod_type = companion_schema_expr(current_type, is_array, library).render(library);
+    let zod_type = companion_schema_expr(is_array).render(library);
     Some(RenderField {
         name: format!("_{}", field.name),
         type_expr,
@@ -3814,19 +3806,11 @@ fn primitive_extension_companion(
 
 /// Schema expression for a primitive-extension companion: an optional
 /// `Element`, or an optional array of nullable `Element` for array fields.
-/// Valibot always defers the reference: `Element` participates in import
+/// The reference is always deferred: `Element` participates in import
 /// cycles (Element ↔ Extension) and eager evaluation would see an
 /// uninitialized binding.
-fn companion_schema_expr(
-    current_type: &str,
-    is_array: bool,
-    library: ValidationLibrary,
-) -> SchemaExpr {
-    let element_schema = if current_type == "Element" || library == ValidationLibrary::Valibot {
-        SchemaExpr::Lazy("Element".to_string())
-    } else {
-        SchemaExpr::Ref("Element".to_string())
-    };
+fn companion_schema_expr(is_array: bool) -> SchemaExpr {
+    let element_schema = SchemaExpr::Lazy("Element".to_string());
     let inner = if is_array {
         SchemaExpr::Array {
             item: Box::new(SchemaExpr::Nullable(Box::new(element_schema))),
@@ -3841,14 +3825,10 @@ fn companion_schema_expr(
 
 /// Insert a primitive-extension companion immediately after each primitive
 /// field, in place.
-fn inject_primitive_companions(
-    fields: &mut Vec<RenderField>,
-    current_type: &str,
-    library: ValidationLibrary,
-) {
+fn inject_primitive_companions(fields: &mut Vec<RenderField>, library: ValidationLibrary) {
     let mut out = Vec::with_capacity(fields.len());
     for field in std::mem::take(fields) {
-        let companion = primitive_extension_companion(&field, current_type, library);
+        let companion = primitive_extension_companion(&field, library);
         out.push(field);
         if let Some(companion) = companion {
             out.push(companion);
@@ -3863,14 +3843,13 @@ fn inject_primitive_companions(
 fn inject_primitive_companions_zod(
     zod_fields: &mut Vec<ZodSchemaField>,
     primitives: &IndexMap<String, bool>,
-    current_type: &str,
     library: ValidationLibrary,
 ) {
     let mut out = Vec::with_capacity(zod_fields.len());
     for field in std::mem::take(zod_fields) {
         let companion = primitives.get(&field.name).map(|is_array| ZodSchemaField {
             name: format!("_{}", field.name),
-            zod_type: companion_schema_expr(current_type, *is_array, library).render(library),
+            zod_type: companion_schema_expr(*is_array).render(library),
         });
         out.push(field);
         if let Some(companion) = companion {

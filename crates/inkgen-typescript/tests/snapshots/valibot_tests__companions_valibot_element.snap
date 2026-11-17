@@ -1,0 +1,46 @@
+---
+source: crates/inkgen-typescript/tests/valibot_tests.rs
+expression: "file(&output, \"element.ts\")"
+---
+
+import * as v from 'valibot';
+import type { FhirString } from "./primitives";
+
+export interface Element {
+  id?: FhirString;
+  /** Primitive extensions for `id` */
+  _id?: Element;
+}
+/**
+ * Type guard to check if input is a valid Element
+ */
+export function isElement(input: unknown): input is Element {
+  if (typeof input !== "object" || input === null) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Valibot schema for Element
+ */
+export const ElementSchema: v.GenericSchema<Record<string, unknown>> = v.object({
+  id: v.optional(v.string()),
+  _id: v.optional(v.lazy(() => ElementSchema)),
+});
+
+/**
+ * Type inferred from Valibot schema
+ */
+export type ElementValidated = v.InferOutput<typeof ElementSchema>;
+
+/**
+ * Safely parse and validate input as Element using Valibot schema
+ * @param input - The input to parse
+ * @returns The parsed Element if valid, or false if invalid
+ */
+export function parseElement(input: unknown): ElementValidated | false {
+  const result = v.safeParse(ElementSchema, input);
+  return result.success ? result.output : false;
+}
