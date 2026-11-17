@@ -31,13 +31,18 @@ pub enum InstallMode {
 /// Configuration options for the package cache.
 #[derive(Debug, Clone)]
 pub struct PackageCacheConfig {
+    /// Directory where installed package contents are stored.
     pub packages_dir: PathBuf,
+    /// Directory for download/metadata caching (sibling `cache` of `packages_dir` by default).
     pub cache_dir: PathBuf,
+    /// Primary FHIR package registry URL (default: `https://packages.fhir.org/`).
     pub registry_url: String,
+    /// Storage connection pool size (default: 4).
     pub connection_pool_size: usize,
 }
 
 impl PackageCacheConfig {
+    /// Build a config rooted at `packages_dir`, placing the cache in a sibling `cache` directory.
     pub fn new(packages_dir: impl AsRef<Path>) -> CoreResult<Self> {
         let packages_dir = packages_dir.as_ref().to_path_buf();
         let cache_dir = packages_dir
@@ -53,16 +58,19 @@ impl PackageCacheConfig {
         })
     }
 
+    /// Override the primary registry URL.
     pub fn with_registry_url(mut self, url: impl Into<String>) -> Self {
         self.registry_url = url.into();
         self
     }
 
+    /// Override the storage connection pool size.
     pub fn with_connection_pool_size(mut self, size: usize) -> Self {
         self.connection_pool_size = size;
         self
     }
 
+    /// Translate into the canonical manager's storage settings.
     pub fn storage_config(&self) -> StorageConfig {
         StorageConfig {
             cache_dir: self.cache_dir.clone(),
@@ -74,6 +82,7 @@ impl PackageCacheConfig {
         }
     }
 
+    /// Translate into the canonical manager's registry settings (timeouts, retries, fallbacks).
     pub fn registry_config(&self) -> RegistryConfig {
         RegistryConfig {
             url: self.registry_url.clone(),
@@ -104,6 +113,7 @@ fn default_registry_url() -> String {
 }
 
 /// Wrapper around the canonical manager providing InkGen-specific semantics.
+#[derive(Debug)]
 pub struct PackageCache {
     config: PackageCacheConfig,
     manager: Arc<Mutex<Option<Arc<CanonicalManager>>>>,
@@ -112,14 +122,17 @@ pub struct PackageCache {
 }
 
 impl PackageCache {
+    /// Start configuring a cache with default settings.
     pub fn builder() -> PackageCacheBuilder {
         PackageCacheBuilder::default()
     }
 
+    /// Borrow the cache configuration.
     pub fn config(&self) -> &PackageCacheConfig {
         &self.config
     }
 
+    /// Get the shared canonical manager, lazily initializing it on first use.
     pub async fn manager(&self) -> CoreResult<Arc<CanonicalManager>> {
         if let Some(existing) = self.current_manager().await {
             return Ok(existing);
@@ -168,11 +181,16 @@ impl PackageCache {
         Ok(config)
     }
 
+    /// Register local package overrides consulted when describing installed packages.
     pub fn with_local_packages(mut self, packages: Vec<PackageRequest>) -> Self {
         self.local_packages = packages;
         self
     }
 
+    /// Install or load each requested package per `mode` and return their descriptors.
+    ///
+    /// Registry packages missing from the cache fail in [`InstallMode::OfflineOnly`];
+    /// local packages are always loaded from their source directory.
     pub async fn ensure_packages(
         &self,
         requests: &[PackageRequest],
@@ -239,12 +257,14 @@ impl PackageCache {
         Ok(descriptors)
     }
 
+    /// List installed package specs (`name@version`) known to the canonical manager.
     pub async fn list_installed(&self) -> CoreResult<Vec<String>> {
         let manager = self.manager().await?;
         let packages = manager.list_packages().await?;
         Ok(packages)
     }
 
+    /// Describe all installed packages, caching descriptors and sorting by package ID.
     pub async fn descriptors(&self) -> CoreResult<Vec<PackageDescriptor>> {
         let manager = self.manager().await?;
         let installed_specs = manager.list_packages().await?;
@@ -563,7 +583,8 @@ fn parse_package_spec(spec: &str) -> CoreResult<PackageId> {
     PackageId::from_str(spec).map_err(|detail| CoreError::InvalidPackage { detail })
 }
 
-#[derive(Default)]
+/// Builder for [`PackageCache`] with custom config and local package overrides.
+#[derive(Debug, Default)]
 pub struct PackageCacheBuilder {
     config: PackageCacheConfig,
     local_packages: Vec<PackageRequest>,

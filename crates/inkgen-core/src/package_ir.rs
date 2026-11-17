@@ -140,12 +140,16 @@ fn value_set_type_name(value_set: &Value) -> String {
 /// A construct that could not be lowered, recorded for transparency (`explain`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagnostic {
+    /// How severe the skipped construct is.
     pub severity: DiagnosticSeverity,
     /// Stable machine code (e.g. `resolve_failed`, `intensional_valueset`).
     pub code: String,
+    /// Human-readable explanation of what was skipped and why.
     pub message: String,
+    /// Canonical URL of the affected structure, when applicable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub canonical_url: Option<String>,
+    /// FHIR element path within the structure, when applicable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub element_path: Option<String>,
 }
@@ -154,8 +158,11 @@ pub struct Diagnostic {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DiagnosticSeverity {
+    /// A construct failed to lower; output may be incomplete.
     Error,
+    /// A construct was approximated or partially lowered.
     Warning,
+    /// Informational note about lowering decisions.
     Info,
 }
 
@@ -168,6 +175,7 @@ pub struct GenerationOutput {
 }
 
 impl GenerationOutput {
+    /// Create an empty output with no files.
     pub fn new() -> Self {
         Self::default()
     }
@@ -177,10 +185,12 @@ impl GenerationOutput {
         self.files.insert(path.into(), content.into());
     }
 
+    /// Number of generated files.
     pub fn len(&self) -> usize {
         self.files.len()
     }
 
+    /// Whether no files were generated.
     pub fn is_empty(&self) -> bool {
         self.files.is_empty()
     }
@@ -202,8 +212,10 @@ pub trait Backend {
 /// Error returned by a [`Backend`].
 #[derive(Debug, thiserror::Error)]
 pub enum BackendError {
+    /// A backend-defined failure message.
     #[error("{0}")]
     Message(String),
+    /// Any other error propagated from backend internals.
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }

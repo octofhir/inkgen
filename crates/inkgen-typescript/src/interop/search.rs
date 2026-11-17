@@ -57,31 +57,46 @@ pub struct SearchHelpers {
 /// Template context for rendering search helpers
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchTemplateContext {
+    /// FHIR version driving the supported modifier set.
     pub fhir_version: FhirVersion,
+    /// Whether search parameter interfaces are rendered.
     pub has_interfaces: bool,
+    /// Whether URL builder functions are rendered.
     pub has_url_builders: bool,
+    /// Whether advanced search features are rendered.
     pub has_advanced_search: bool,
+    /// Per-resource search parameter data.
     pub resources: Vec<SearchResourceContext>,
 }
 
 /// Per-resource context for template rendering
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchResourceContext {
+    /// Resource type the parameters belong to (e.g., "Patient").
     pub resource_type: String,
+    /// Search parameters defined for this resource.
     pub parameters: Vec<SearchParameterContext>,
 }
 
 /// Individual search parameter context
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchParameterContext {
+    /// Search parameter code as it appears in the query URL.
     pub code: String,
+    /// FHIR search parameter type (string, token, date, ...).
     pub param_type: String,
+    /// Cleaned documentation shown on the interface field.
     pub description: String,
+    /// TypeScript modifier type for the parameter (`never` if unsupported).
     pub modifier_type: String,
+    /// TypeScript comparator type for the parameter (`never` if unsupported).
     pub comparator_type: String,
+    /// Full TypeScript type expression for the parameter's value.
     pub type_expr: String,
+    /// Whether the parameter is optional (always true for search params).
     pub optional: bool,
-    pub needs_quotes: bool, // True if code contains special characters (e.g., dash)
+    /// True if code contains special characters (e.g., dash)
+    pub needs_quotes: bool,
 }
 
 impl SearchHelpers {

@@ -14,7 +14,6 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, features = ["sync"], optional = true }
 octofhir-canonical-manager = { workspace = true, optional = true }
-async-trait = { workspace = true }
 url = { workspace = true, optional = true }
 toml = { workspace = true, optional = true }
 
@@ -32,3 +31,6 @@ templates = ["dep:tera"]
 
 # Parse project files; DTOs remain available to IR consumers without this parser.
 config-toml = ["dep:toml"]
+
+[lints]
+workspace = true

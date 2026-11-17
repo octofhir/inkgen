@@ -33,6 +33,7 @@ use tera::{Error as TeraError, Function, Result as TeraResult, Value};
 /// # Returns
 ///
 /// Boolean indicating whether the type is a FHIR primitive.
+#[derive(Debug)]
 pub struct IsPrimitiveFunction;
 
 impl Function for IsPrimitiveFunction {
@@ -63,6 +64,7 @@ impl Function for IsPrimitiveFunction {
 /// # Returns
 ///
 /// String containing the TypeScript type name.
+#[derive(Debug)]
 pub struct TypeScriptTypeFunction;
 
 impl Function for TypeScriptTypeFunction {

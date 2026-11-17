@@ -1,3 +1,5 @@
+//! End-to-end integration tests exercising the `inkgen` CLI binary.
+
 use assert_cmd::Command;
 use std::fs;
 use std::path::Path;

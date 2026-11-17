@@ -1,3 +1,6 @@
+//! Integration tests for base StructureDefinition loading and offline package
+//! caching against the FHIR core package, verified with JSON snapshots.
+
 use inkgen_core::ir::{BindingStrength, ElementMax};
 use inkgen_core::{InstallMode, PackageRequest, StructureDefinitionProvider};
 use inkgen_testing::{CORE_PACKAGE, CORE_VERSION, CoreTestContext};

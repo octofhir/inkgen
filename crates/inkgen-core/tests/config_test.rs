@@ -1,3 +1,6 @@
+//! Integration tests for project config parsing, package-name sanitization,
+//! and per-package filter defaults.
+
 use inkgen_core::{FilterMode, InkgenConfig, PackageEntry};
 
 #[test]

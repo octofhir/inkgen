@@ -1,3 +1,6 @@
+//! Language-neutral intermediate representation of FHIR StructureDefinitions,
+//! shared by all code-generation backends.
+
 pub mod profile;
 pub mod slicing;
 pub mod terminology;
@@ -15,13 +18,18 @@ pub use terminology::{infer_codesystem_url_from_valueset, url_segment_to_pascal_
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ResourceKind {
+    /// A FHIR primitive datatype (e.g. `string`, `boolean`).
     PrimitiveType,
+    /// A FHIR complex datatype (e.g. `HumanName`, `Extension`).
     ComplexType,
+    /// A FHIR resource (e.g. `Patient`).
     Resource,
+    /// A logical model, outside the resource/datatype hierarchy.
     Logical,
 }
 
 impl ResourceKind {
+    /// Parses a FHIR `StructureDefinition.kind` code; `None` for unknown values.
     pub fn from_fhir(kind: &str) -> Option<Self> {
         match kind {
             "primitive-type" => Some(Self::PrimitiveType),
@@ -37,11 +45,14 @@ impl ResourceKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Derivation {
+    /// A profile constraining an existing definition.
     Constraint,
+    /// A new definition specializing a base type.
     Specialization,
 }
 
 impl Derivation {
+    /// Parses a FHIR `StructureDefinition.derivation` code; `None` for unknown values.
     pub fn from_fhir(value: &str) -> Option<Self> {
         match value {
             "constraint" => Some(Self::Constraint),
@@ -54,35 +65,55 @@ impl Derivation {
 /// Metadata describing lineage for a profile.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProfileLineage {
+    /// Canonical URL of the definition this profile derives from.
     pub base_definition: Option<String>,
+    /// Id of the base StructureDefinition, if known.
     pub base_id: Option<String>,
+    /// How this definition derives from its base (constraint or specialization).
     pub derivation: Option<Derivation>,
+    /// FHIR type the definition constrains or specializes (`StructureDefinition.type`).
     pub type_name: Option<String>,
 }
 
 /// Intermediate representation of a StructureDefinition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceDefinition {
+    /// StructureDefinition id (resource identifier within the package).
     pub id: String,
+    /// Canonical URL of the StructureDefinition.
     pub url: String,
+    /// Computer-friendly name (`StructureDefinition.name`).
     pub name: Option<String>,
+    /// Human-friendly title.
     pub title: Option<String>,
+    /// Human-readable description of the definition.
     pub description: Option<String>,
+    /// Business version of the StructureDefinition.
     pub version: Option<String>,
+    /// Publication status (e.g. `draft`, `active`, `retired`).
     pub status: Option<String>,
+    /// Whether this is a primitive type, complex type, resource or logical model.
     pub kind: ResourceKind,
+    /// FHIR type code the definition describes (`StructureDefinition.type`).
     pub fhir_type: Option<String>,
+    /// Publication or last-revision date as recorded in the definition.
     pub date: Option<String>,
+    /// Base definition and derivation metadata.
     pub lineage: ProfileLineage,
+    /// Element tree built from the snapshot elements.
     pub elements: Vec<ElementDefinition>,
     /// Flat list of elements before tree building (preserves slice information)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub flat_elements: Vec<ElementDefinition>,
+    /// Extension definitions declared by this StructureDefinition.
     pub extensions: Vec<ExtensionDefinition>,
+    /// Constraints (FHIRPath invariants) declared on the definition.
     pub invariants: Vec<InvariantDefinition>,
 }
 
 impl ResourceDefinition {
+    /// Sorts elements, extensions and invariants (recursively) for deterministic
+    /// output.
     pub fn sort(&mut self) {
         self.elements
             .sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.path.cmp(&b.path)));
@@ -132,26 +163,47 @@ impl ResourceDefinition {
 /// Representation of a StructureDefinition element.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ElementDefinition {
+    /// Element id, unique within the StructureDefinition (e.g. `Patient.name`).
     pub id: String,
+    /// Dot-separated FHIR path of the element (e.g. `Patient.birthDate`).
     pub path: String,
+    /// Slice name when this element defines a slice of a repeating element.
     pub slice_name: Option<String>,
+    /// Concise human-readable summary shown in specifications.
     pub short: Option<String>,
+    /// Full human-readable definition of the element.
     pub definition: Option<String>,
+    /// Additional explanatory notes about the element.
     pub comment: Option<String>,
+    /// Why the element exists / implementation guidance.
     pub requirements: Option<String>,
+    /// Minimum and maximum occurrence constraints.
     pub cardinality: ElementCardinality,
+    /// Allowed datatypes; multiple entries form a choice (`[x]`) element.
     pub types: Vec<ElementType>,
+    /// `#`-prefixed element id whose content definition this element reuses.
     pub content_reference: Option<String>,
+    /// Value set binding for coded elements.
     pub binding: Option<BindingDefinition>,
+    /// Keys of invariants that apply to this element.
     pub invariants: Vec<String>,
+    /// Exact value the element must have (`fixed[x]`), as raw JSON.
     pub fixed: Option<serde_json::Value>,
+    /// Value pattern the element must match (`pattern[x]`), as raw JSON.
     pub pattern: Option<serde_json::Value>,
+    /// Default value when the element is absent, as raw JSON.
     pub default_value: Option<serde_json::Value>,
+    /// Example values illustrating the element, as raw JSON.
     pub example_values: Vec<serde_json::Value>,
+    /// Whether implementations must support the element (`mustSupport`).
     pub must_support: bool,
+    /// Whether the element is part of the resource summary set (`isSummary`).
     pub is_summary: bool,
+    /// Slicing rules when this element introduces slices.
     pub slicing: Option<SlicingInfo>,
+    /// Extension instances declared on the element itself.
     pub extension: Vec<ExtensionInstance>,
+    /// Unrecognized element properties preserved verbatim, in insertion order.
     pub additional_fields: IndexMap<String, serde_json::Value>,
 
     // Hierarchical structure fields
@@ -170,6 +222,8 @@ pub struct ElementDefinition {
 }
 
 impl ElementDefinition {
+    /// Sorts types, invariants, extensions and child elements (recursively) for
+    /// deterministic output.
     pub fn sort(&mut self) {
         self.types.sort_by(|a, b| a.code.cmp(&b.code));
         self.invariants.sort();
@@ -281,7 +335,9 @@ pub fn expand_choice_elements(elements: Vec<ElementDefinition>) -> Vec<ElementDe
 /// Element cardinality constraints.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ElementCardinality {
+    /// Minimum number of occurrences (0 means optional).
     pub min: u32,
+    /// Maximum number of occurrences, finite or unbounded (`*`).
     pub max: ElementMax,
 }
 
@@ -289,26 +345,37 @@ pub struct ElementCardinality {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ElementMax {
+    /// A fixed upper bound on occurrences.
     Finite(u32),
+    /// No upper bound (FHIR `*`).
     Unbounded,
 }
 
 /// Type reference for an element.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ElementType {
+    /// FHIR datatype or resource code (e.g. `string`, `Reference`).
     pub code: String,
+    /// Canonical URLs of profiles the type must conform to.
     pub profiles: Vec<String>,
+    /// Canonical URLs allowed as `Reference` targets.
     pub target_profiles: Vec<String>,
+    /// Allowed reference aggregation modes (`contained`, `referenced`, `bundled`).
     pub aggregation: Vec<String>,
+    /// Reference versioning policy (`either`, `independent` or `specific`).
     pub versioning: Option<String>,
 }
 
 /// Binding information for coded elements.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BindingDefinition {
+    /// How strictly the bound value set must be followed.
     pub strength: BindingStrength,
+    /// Canonical URL of the bound ValueSet.
     pub value_set: Option<String>,
+    /// Human-readable explanation of the binding.
     pub description: Option<String>,
+    /// Unrecognized binding properties preserved verbatim, in insertion order.
     pub additional: IndexMap<String, serde_json::Value>,
 }
 
@@ -351,7 +418,10 @@ pub enum BindingLowering {
     },
     /// The element keeps its base primitive type. `reason` is provenance for the
     /// `explain` surface.
-    Open { reason: OpenReason },
+    Open {
+        /// Why the binding stayed open.
+        reason: OpenReason,
+    },
 }
 
 /// Why a binding did not lower to an enumerated type (provenance for `explain`).
@@ -370,13 +440,18 @@ pub enum OpenReason {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BindingStrength {
+    /// Only codes from the bound value set are allowed.
     Required,
+    /// Bound codes should be used, but other codes are permitted when none fit.
     Extensible,
+    /// Bound codes are recommended for interoperability but not enforced.
     Preferred,
+    /// Bound codes are merely examples of the intended concept.
     Example,
 }
 
 impl BindingStrength {
+    /// Parses a FHIR binding strength code; `None` for unknown values.
     pub fn from_fhir(value: &str) -> Option<Self> {
         match value {
             "required" => Some(Self::Required),
@@ -391,8 +466,11 @@ impl BindingStrength {
 /// Slicing metadata for a repeating element.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlicingInfo {
+    /// Paths and types used to tell slices apart.
     pub discriminators: Vec<SliceDiscriminator>,
+    /// Whether the order of slices is significant.
     pub ordered: bool,
+    /// Slicing rules (`closed`, `open` or `openAtEnd`) as recorded in the definition.
     pub rules: String,
 }
 
@@ -414,6 +492,7 @@ pub enum DiscriminatorType {
 }
 
 impl DiscriminatorType {
+    /// Parses a FHIR discriminator type code; `None` for unknown values.
     pub fn from_fhir(value: &str) -> Option<Self> {
         match value {
             "type" => Some(Self::Type),
@@ -429,7 +508,9 @@ impl DiscriminatorType {
 /// Discriminator used in slicing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SliceDiscriminator {
+    /// Raw discriminator type code as written in the definition.
     pub discriminator_type: String,
+    /// Element path, relative to the sliced element, used for discrimination.
     pub path: String,
     /// Parsed discriminator type for type-safe operations
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -439,18 +520,26 @@ pub struct SliceDiscriminator {
 /// Extension instance attached to an element definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtensionInstance {
+    /// Canonical URL identifying the extension.
     pub url: String,
+    /// Extension value as raw JSON, if present.
     pub value: Option<serde_json::Value>,
 }
 
 /// IR representation of an extension definition (StructureDefinition kind = "complex-type").
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtensionDefinition {
+    /// StructureDefinition id of the extension.
     pub id: String,
+    /// Canonical URL identifying the extension.
     pub url: String,
+    /// Computer-friendly extension name.
     pub name: Option<String>,
+    /// Human-readable description of the extension.
     pub description: Option<String>,
+    /// Contexts in which the extension is allowed to appear.
     pub context: Vec<ExtensionContext>,
+    /// Elements describing the extension's structure.
     pub elements: Vec<ElementDefinition>,
     /// Cardinality constraints for the extension value
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -464,6 +553,7 @@ pub struct ExtensionDefinition {
 }
 
 impl ExtensionDefinition {
+    /// Sorts contexts and elements (recursively) for deterministic output.
     pub fn sort(&mut self) {
         self.context.sort_by(|a, b| a.context.cmp(&b.context));
         self.elements
@@ -477,7 +567,9 @@ impl ExtensionDefinition {
 /// Context in which an extension may appear.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtensionContext {
+    /// Context expression (element path, type or FHIRPath) where the extension applies.
     pub context: String,
+    /// Kind of context (`element`, `datatype`, `fhirpath` or `resource`).
     pub context_type: String,
     /// Whether this context is invariant (required for all versions)
     #[serde(default)]
@@ -500,14 +592,20 @@ pub struct FHIRPathExpression {
 /// Invariant definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InvariantDefinition {
+    /// Unique invariant key within the definition (e.g. `ele-1`).
     pub key: String,
+    /// Severity of a violation (`error` or `warning`).
     pub severity: Option<String>,
+    /// Human-readable description of the constraint.
     pub human: Option<String>,
+    /// FHIRPath expression that must evaluate to true for valid instances.
     pub expression: Option<String>,
+    /// XPath equivalent of the constraint, if provided.
     pub xpath: Option<String>,
     /// Parsed FHIRPath expression metadata
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fhirpath: Option<FHIRPathExpression>,
+    /// Unrecognized invariant properties preserved verbatim, in insertion order.
     pub additional: IndexMap<String, serde_json::Value>,
 }
 

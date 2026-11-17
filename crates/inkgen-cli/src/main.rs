@@ -1,3 +1,6 @@
+//! Entry point for the `inkgen` CLI binary, which generates FHIR SDKs
+//! from installed FHIR packages.
+
 mod diff;
 mod project;
 

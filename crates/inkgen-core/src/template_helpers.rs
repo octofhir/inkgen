@@ -28,6 +28,7 @@ use crate::sanitize_package_name;
 /// # Returns
 ///
 /// String containing the relative import path (without extension).
+#[derive(Debug)]
 pub struct ImportPathFunction;
 
 impl Function for ImportPathFunction {
@@ -66,6 +67,7 @@ impl Function for ImportPathFunction {
 /// # Returns
 ///
 /// String containing the sanitized folder name.
+#[derive(Debug)]
 pub struct PackageFolderFunction;
 
 impl Function for PackageFolderFunction {

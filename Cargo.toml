@@ -33,7 +33,7 @@ edition = "2024"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tera = "1.19"
+tera = { version = "1.19", default-features = false }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio = { version = "1.0", default-features = false }
@@ -42,11 +42,8 @@ anyhow = "1"
 thiserror = "2"
 insta = "1.44"
 tempfile = "3.8"
-indicatif = "0.18"
-regex = "1.10"
 indexmap = { version = "2", features = ["serde"] }
-octofhir-canonical-manager = { version = "0.2.11", default-features = false, features = ["sqlite"] }
-async-trait = "0.1"
+octofhir-canonical-manager = { version = "0.2.14", default-features = false, features = ["sqlite", "http"] }
 url = "2.5"
 criterion = { version = "0.8", features = ["async_tokio"] }
 similar = "3.2"

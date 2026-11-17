@@ -24,7 +24,7 @@ inkgen-rust = { path = "../inkgen-rust" }
 inkgen-gleam = { path = "../inkgen-gleam" }
 serde_json = { workspace = true }
 clap_complete = "4"
-similar = "3.2"
+similar = { workspace = true }
 dirs = "7.0"
 tempfile = { workspace = true }
 
@@ -38,3 +38,6 @@ indexmap = { workspace = true }
 [[bench]]
 name = "codegen"
 harness = false
+
+[lints]
+workspace = true

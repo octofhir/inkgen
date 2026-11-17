@@ -22,6 +22,7 @@ pub enum ExpressionComplexity {
 }
 
 impl ExpressionComplexity {
+    /// Lowercase label used in generated comments and metadata.
     pub fn to_string(&self) -> &'static str {
         match self {
             ExpressionComplexity::Simple => "simple",
@@ -42,6 +43,7 @@ pub enum InvariantSeverity {
 }
 
 impl InvariantSeverity {
+    /// Map a FHIR `constraint.severity` code, defaulting to `Error`.
     pub fn from_fhir(severity: &str) -> Self {
         match severity.to_lowercase().as_str() {
             "warning" => InvariantSeverity::Warning,
@@ -49,6 +51,7 @@ impl InvariantSeverity {
         }
     }
 
+    /// Lowercase label used in generated validation output.
     pub fn to_string(&self) -> &'static str {
         match self {
             InvariantSeverity::Error => "error",

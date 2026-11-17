@@ -1387,8 +1387,11 @@ type LeafMatch = (String, String);
 
 /// One resolved discriminator: its path segments (with array flags) and the
 /// fixed value the matching element must carry.
+#[derive(Debug)]
 pub struct DiscTerm {
+    /// Discriminator path segments with per-segment array flags.
     pub segments: PathSegments,
+    /// Fixed value the leaf element must carry for the slice to match.
     pub value: String,
 }
 

@@ -33,8 +33,11 @@ pub struct InteropConfig {
     pub search_helpers: bool,
     /// Specific configurations for each module
     pub reference_config: ReferenceConfig,
+    /// Options for date/time helper generation.
     pub date_config: DateConfig,
+    /// Options for Bundle traversal helper generation.
     pub bundle_config: BundleConfig,
+    /// Options for search helper generation.
     pub search_config: SearchConfig,
 }
 

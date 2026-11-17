@@ -1,3 +1,8 @@
+//! TypeScript/Zod code-generation backend for inkgen.
+//!
+//! Renders resolved FHIR package IR into TypeScript interfaces or classes,
+//! Zod schemas, ValueSets, profiles and interop helpers via Tera templates.
+
 use std::collections::{HashMap, HashSet};
 // Only tests touch the filesystem now — the backend returns files in memory and
 // core does the writing.
@@ -81,6 +86,7 @@ fn enumerated_valueset_type(
 pub use imports::TypeRegistry;
 
 pub mod extensions;
+/// Import path resolution and usage tracking for cross-package imports.
 pub mod imports;
 pub mod interop;
 pub mod invariants;
@@ -90,6 +96,7 @@ pub mod profile_helpers;
 pub mod profiles;
 pub mod slices;
 pub mod template_functions;
+/// Pluggable runtime-validation code generation (currently Zod schemas).
 pub mod validation;
 pub mod valuesets;
 pub mod zod;
@@ -97,14 +104,19 @@ pub mod zod;
 mod config {
     use super::*;
 
+    /// Shape of the generated resource types.
     #[derive(Debug, Clone, Copy)]
     pub enum GenerationMode {
+        /// Plain TypeScript interfaces (no runtime code).
         Interface,
+        /// Classes with typed fields and constructors.
         Class,
+        /// Classes plus fluent builder helpers.
         ClassWithBuilder,
     }
 
     impl GenerationMode {
+        /// Parse a manifest/config string, defaulting to `Interface`.
         #[allow(clippy::should_implement_trait)]
         pub fn from_str(value: &str) -> Self {
             match value.to_lowercase().as_str() {
@@ -115,14 +127,19 @@ mod config {
         }
     }
 
+    /// Casing convention applied to generated identifiers.
     #[derive(Debug, Clone, Copy)]
     pub enum NamingConvention {
+        /// `PascalCase` (default for type names).
         PascalCase,
+        /// `camelCase`.
         CamelCase,
+        /// `snake_case`.
         SnakeCase,
     }
 
     impl NamingConvention {
+        /// Parse a manifest/config string, defaulting to `PascalCase`.
         #[allow(clippy::should_implement_trait)]
         pub fn from_str(value: &str) -> Self {
             match value.to_lowercase().as_str() {
@@ -133,13 +150,17 @@ mod config {
         }
     }
 
+    /// Layout of the emitted files on disk.
     #[derive(Debug, Clone, Copy)]
     pub enum OutputStructure {
+        /// All files in a single directory.
         Flat,
+        /// Files grouped into per-package subdirectories.
         ByPackage,
     }
 
     impl OutputStructure {
+        /// Parse a manifest/config string, defaulting to `Flat`.
         #[allow(clippy::should_implement_trait)]
         pub fn from_str(value: &str) -> Self {
             match value.to_lowercase().as_str() {
@@ -181,18 +202,31 @@ mod config {
         }
     }
 
+    /// Configuration controlling what the TypeScript backend emits and how.
     #[derive(Clone)]
     pub struct TypescriptGeneratorConfig {
+        /// Shape of generated resource types (interfaces vs classes).
         pub mode: GenerationMode,
+        /// Emit `is<Type>` structural type-guard functions per resource.
         pub structural_guards: bool,
+        /// Casing convention for generated identifiers.
         pub naming: NamingConvention,
+        /// Flat vs per-package directory layout.
         pub output_structure: OutputStructure,
+        /// Root directory of the generated TypeScript project.
         pub output_dir: PathBuf,
+        /// Emit types for profiles (constrained StructureDefinitions).
         pub generate_profiles: bool,
+        /// Emit ValueSet code unions and constants.
         pub generate_valuesets: bool,
+        /// Concept-count limit for enumerating a ValueSet; larger sets keep
+        /// their base primitive type instead of a code union.
         pub max_valueset_size: usize,
+        /// Emit a metadata block (canonical URL, code system) per ValueSet.
         pub valueset_metadata: bool,
+        /// Emit Coding/CodeableConcept factory and validation helpers per ValueSet.
         pub valueset_helpers: bool,
+        /// Link each ValueSet to its source code system's generated module.
         pub valueset_codesystem_link: bool,
         /// Mapping of package IDs to their folder names (for by_package output structure)
         pub package_folders: HashMap<PackageId, String>,
@@ -220,11 +254,17 @@ mod config {
         /// Generate branded primitive types for type-level safety
         pub branded_primitives: bool,
         // Interop utilities
+        /// Emit the interop utility module (references, dates, bundles, search).
         pub generate_interop: bool,
+        /// Include typed `Reference<T>` helpers with compile-time target checks.
         pub interop_typed_references: bool,
+        /// Include FHIR date/dateTime parsing and formatting helpers.
         pub interop_date_helpers: bool,
+        /// Include Bundle traversal and reference-resolution utilities.
         pub interop_bundle_traversal: bool,
+        /// Include search parameter interfaces and URL builders.
         pub interop_search_helpers: bool,
+        /// Include advanced search features (_include types, _has, chaining).
         pub interop_search_advanced: bool,
         /// Tree-shaking level for TypeScript generation
         pub tree_shaking: TreeShakingLevel,
@@ -233,6 +273,7 @@ mod config {
         /// Lazy load validation schemas
         pub lazy_schemas: bool,
         // Project files configuration
+        /// Settings for project scaffolding files (package.json, tsconfig, ...).
         pub config: ProjectFilesConfig,
     }
 
@@ -289,6 +330,8 @@ mod config {
             config
         }
 
+        /// Build a config from the manifest's TypeScript section, applying CLI
+        /// overrides and cross-package context (folders, filters, registries).
         #[allow(clippy::too_many_arguments)]
         pub fn from_manifest(
             section: Option<&TypescriptLanguageConfig>,
@@ -455,7 +498,9 @@ mod config {
     }
 }
 
+/// Identifier casing helpers producing valid TypeScript names from FHIR names.
 pub mod naming {
+    /// Convert a name to a sanitized `PascalCase` TypeScript identifier.
     pub fn pascal_case(value: &str) -> String {
         let result: String = split_tokens(value)
             .into_iter()
@@ -492,6 +537,7 @@ pub mod naming {
         result
     }
 
+    /// Convert a name to a `camelCase` identifier (fields, methods).
     pub fn camel_case(value: &str) -> String {
         let mut tokens = split_tokens(value);
         if let Some(first) = tokens.first_mut() {
@@ -514,6 +560,7 @@ pub mod naming {
             .collect::<String>()
     }
 
+    /// Convert a name to `snake_case`; also the basis for kebab-case file names.
     pub fn snake_case(value: &str) -> String {
         split_tokens(value)
             .into_iter()
@@ -987,16 +1034,19 @@ struct PackageOutput {
     project_config: ProjectFilesConfig,
 }
 
+/// Backend that renders a FHIR package IR into TypeScript/Zod source files.
 #[derive(Debug, Clone)]
 pub struct TypescriptGenerator {
     config: TypescriptGeneratorConfig,
 }
 
 impl TypescriptGenerator {
+    /// Create a generator from the given configuration.
     pub fn new(config: TypescriptGeneratorConfig) -> Self {
         Self { config }
     }
 
+    /// Access the generator's configuration.
     pub fn config(&self) -> &TypescriptGeneratorConfig {
         &self.config
     }

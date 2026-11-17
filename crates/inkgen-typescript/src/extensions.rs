@@ -43,6 +43,7 @@ pub struct RenderExtension {
     pub nested_types: Vec<NestedTypeInfo>,
     /// Extension cardinality (min/max)
     pub cardinality_min: u32,
+    /// Maximum occurrences; `None` means unbounded (`*`).
     pub cardinality_max: Option<u32>,
     /// Documentation/description
     pub description: Option<String>,

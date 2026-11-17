@@ -29,6 +29,7 @@ pub struct NestedTypeInfo {
 }
 
 /// Collector for nested types within a resource definition.
+#[derive(Debug)]
 pub struct NestedTypeCollector<'a> {
     resource_name: String,
     definition: &'a ResourceDefinition,

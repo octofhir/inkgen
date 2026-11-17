@@ -11,7 +11,6 @@ tera = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-async-trait = { workspace = true }
 
 inkgen-core = { path = "../inkgen-core", default-features = false, features = ["templates"] }
 
@@ -25,3 +24,6 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 # Preserve the legacy cache configuration field and constructor argument.
 default = ["resolver"]
 resolver = ["inkgen-core/resolver"]
+
+[lints]
+workspace = true

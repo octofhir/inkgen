@@ -9,10 +9,12 @@
 #[cfg(feature = "resolver")]
 mod cache;
 pub mod canonical_map;
+/// Project configuration (`inkgen.toml`) types and per-package filtering.
 pub mod config;
 pub mod dependencies;
 pub mod dependency_graph;
 mod error;
+/// Intermediate representation types consumed by language backends.
 pub mod ir;
 mod lineage;
 mod package;

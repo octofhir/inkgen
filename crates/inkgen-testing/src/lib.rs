@@ -11,7 +11,9 @@ use inkgen_core::{
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 
+/// FHIR core package name used by test fixtures.
 pub const CORE_PACKAGE: &str = "hl7.fhir.r4.core";
+/// FHIR core package version used by test fixtures.
 pub const CORE_VERSION: &str = "4.0.1";
 
 /// Utility to create a temporary directory for generator tests.
@@ -67,14 +69,18 @@ impl CoreTestWorkspace {
         })
     }
 
+    /// Directory where test packages are installed.
     pub fn packages_dir(&self) -> &Path {
         &self.packages_dir
     }
 
+    /// Directory used for the shared package cache.
     pub fn cache_dir(&self) -> &Path {
         &self.cache_dir
     }
 
+    /// Builds a package cache config for this workspace, honoring the
+    /// `INKGEN_TEST_REGISTRY_URL` override and a small connection pool.
     pub fn package_cache_config(&self) -> CoreResult<PackageCacheConfig> {
         let mut config = PackageCacheConfig::new(&self.packages_dir)?;
         if let Ok(url) = std::env::var("INKGEN_TEST_REGISTRY_URL") {
@@ -83,6 +89,7 @@ impl CoreTestWorkspace {
         Ok(config.with_connection_pool_size(2))
     }
 
+    /// Builds a manifest installing the full `hl7.fhir.r4.core` package.
     pub fn default_manifest(&self) -> InkgenConfig {
         InkgenConfig {
             packages: vec![PackageEntry {
@@ -100,6 +107,7 @@ impl CoreTestWorkspace {
         }
     }
 
+    /// Builds a core-package manifest restricted to the given resource types.
     pub fn manifest_with_resources<I, S>(&self, resources: I) -> InkgenConfig
     where
         I: IntoIterator<Item = S>,
@@ -128,6 +136,15 @@ pub struct CoreTestContext {
     workspace: CoreTestWorkspace,
     config: InkgenConfig,
     cache: Arc<PackageCache>,
+}
+
+impl std::fmt::Debug for CoreTestContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CoreTestContext")
+            .field("workspace", &self.workspace)
+            .field("config", &self.config)
+            .finish_non_exhaustive()
+    }
 }
 
 impl CoreTestContext {
@@ -166,18 +183,22 @@ impl CoreTestContext {
         })
     }
 
+    /// Returns the shared workspace backing this context.
     pub fn workspace(&self) -> &CoreTestWorkspace {
         &self.workspace
     }
 
+    /// Returns the manifest used to install packages for this context.
     pub fn config(&self) -> &InkgenConfig {
         &self.config
     }
 
+    /// Returns a clone of the shared package cache handle.
     pub fn cache(&self) -> Arc<PackageCache> {
         Arc::clone(&self.cache)
     }
 
+    /// Builds a structure service from this context's cache and manifest.
     pub fn structure_service(&self) -> BaseStructureService {
         BaseStructureService::new(self.cache(), self.config.structure_config())
     }

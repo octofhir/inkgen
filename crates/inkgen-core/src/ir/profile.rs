@@ -1,3 +1,6 @@
+//! Profile-level IR: constraints, fixed values, extensions and must-support
+//! elements layered onto base resource definitions.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

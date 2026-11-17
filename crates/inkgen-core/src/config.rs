@@ -11,18 +11,24 @@ use crate::error::{CoreError, CoreResult};
 use crate::package::PackageRequest;
 use crate::services::StructureProviderConfig;
 
+/// Top-level project configuration, typically loaded from `inkgen.toml`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct InkgenConfig {
+    /// FHIR packages to acquire and generate from (default: empty).
     #[serde(default)]
     pub packages: Vec<PackageEntry>,
 
+    /// Per-language generation settings (default: none configured).
     #[serde(default)]
     pub languages: LanguagesSection,
 }
 
+/// A single FHIR package entry in the project configuration.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PackageEntry {
+    /// Package name (e.g. `hl7.fhir.r4.core`).
     pub name: String,
+    /// Package version (e.g. `4.0.1`).
     pub version: String,
 
     /// Optional custom folder name (defaults to sanitized package name)
@@ -54,6 +60,7 @@ pub struct PackageEntry {
     pub exclude_urls: Vec<String>,
 }
 
+/// Selects which resources of a package are generated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FilterMode {
@@ -117,26 +124,34 @@ impl Default for ProfileMethodConfig {
 // REMOVED: Global tree_shaking section
 // Per-package filtering is now the standard approach
 
+/// Per-language configuration sections.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct LanguagesSection {
+    /// TypeScript backend settings; absent means TypeScript generation is unconfigured.
     #[serde(default)]
     pub typescript: Option<TypescriptLanguageConfig>,
 }
 
+/// Settings controlling TypeScript code generation.
 #[derive(Debug, Clone, Deserialize)]
 pub struct TypescriptLanguageConfig {
+    /// Shape of generated resource types, e.g. `interface` (default: `"interface"`).
     #[serde(default = "default_mode")]
     pub mode: String,
 
+    /// Emit structural type-guard helpers (default: true).
     #[serde(default = "default_true")]
     pub structural_guards: bool,
 
+    /// Identifier casing for generated types (default: `"pascal"`).
     #[serde(default = "default_naming")]
     pub naming_convention: String,
 
+    /// Layout of generated files, e.g. `flat` (default: `"flat"`).
     #[serde(default = "default_output_structure")]
     pub output_structure: String,
 
+    /// Output directory override; `None` uses the backend default.
     #[serde(default)]
     pub output_dir: Option<String>,
 
@@ -412,12 +427,14 @@ pub fn sanitize_package_name(name: &str) -> String {
 }
 
 impl InkgenConfig {
+    /// Read and parse a TOML config file from disk.
     #[cfg(feature = "config-toml")]
     pub fn load_from_path(path: impl AsRef<Path>) -> CoreResult<Self> {
         let contents = fs::read_to_string(path)?;
         Self::load_from_str(&contents)
     }
 
+    /// Parse config from a TOML string, mapping parse failures to [`CoreError::Validation`].
     #[cfg(feature = "config-toml")]
     pub fn load_from_str(contents: &str) -> CoreResult<Self> {
         toml::from_str(contents).map_err(|err| CoreError::Validation {
@@ -425,6 +442,7 @@ impl InkgenConfig {
         })
     }
 
+    /// Convert package entries into cache requests (local source path wins over registry).
     pub fn package_requests(&self) -> Vec<PackageRequest> {
         self.packages
             .iter()
@@ -454,6 +472,7 @@ impl InkgenConfig {
         }
     }
 
+    /// TypeScript settings, if a `[languages.typescript]` section is present.
     pub fn typescript_config(&self) -> Option<&TypescriptLanguageConfig> {
         self.languages.typescript.as_ref()
     }
