@@ -43,7 +43,7 @@ thiserror = "2"
 insta = "1.44"
 tempfile = "3.8"
 indexmap = { version = "2", features = ["serde"] }
-octofhir-canonical-manager = { version = "0.2.14", default-features = false, features = ["sqlite", "http"] }
+octofhir-canonical-manager = { version = "0.2.15", default-features = false, features = ["sqlite", "http"] }
 url = "2.5"
 criterion = { version = "0.8", features = ["async_tokio"] }
 similar = "3.2"
